@@ -1,42 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
-// Rotas que nao exigem autenticacao
-const PUBLIC_PATHS = ['/api/webhook/', '/api/health'];
+// Rotas publicas que nao exigem autenticacao
+const PUBLIC_PATHS = [
+  '/api/webhook/',
+  '/api/health',
+  '/api/auth/',
+  '/login',
+  '/_next/',
+  '/favicon',
+];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Libera webhooks e health check sem auth
+  // Libera rotas publicas
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Basic Auth para demais rotas
-  const authHeader = request.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Basic ')) {
-    return new NextResponse('Autenticacao necessaria', {
-      status: 401,
-      headers: { 'WWW-Authenticate': 'Basic realm="Connect Schappo"' },
-    });
+  // Libera arquivos estaticos
+  if (pathname.includes('.') && !pathname.startsWith('/api/')) {
+    return NextResponse.next();
   }
 
-  const base64 = authHeader.slice(6);
-  const decoded = atob(base64);
-  const [user, pass] = decoded.split(':');
+  // Verificar sessao JWT do NextAuth
+  const token = await getToken({ req: request });
 
-  const validUser = process.env.PANEL_USER || 'admin';
-  const validPass = process.env.PANEL_PASS || 'admin123';
-
-  if (user !== validUser || pass !== validPass) {
-    return new NextResponse('Credenciais invalidas', {
-      status: 401,
-      headers: { 'WWW-Authenticate': 'Basic realm="Connect Schappo"' },
-    });
+  if (!token) {
+    // Redirecionar para login se nao autenticado
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('callbackUrl', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
@@ -45,6 +44,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Aplica middleware em todas as rotas exceto _next, arquivos estaticos
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|favicon.svg).*)',
   ],
 };
