@@ -49,13 +49,13 @@ export default function MessageView({
     <div className="flex-1 flex flex-col bg-gray-50">
       {/* Header da conversa */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0">
-        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs font-medium text-white">
-          {isGroup ? '\uD83D\uDC65' : displayName.charAt(0).toUpperCase()}
+        <div className="w-8 h-8 rounded-full bg-schappo-500 flex items-center justify-center text-xs font-medium text-white">
+          {isGroup ? 'G' : displayName.charAt(0).toUpperCase()}
         </div>
         <div>
           <div className="text-sm font-medium text-gray-900">{displayName}</div>
           <div className="text-[11px] text-gray-400">
-            {conversa.categoria.toUpperCase()} &middot; {conversa.provider}
+            <span className="text-schappo-600 font-medium">{conversa.categoria.toUpperCase()}</span> &middot; {conversa.provider}
             {conversa.telefone && ` &middot; ${conversa.telefone}`}
           </div>
         </div>
@@ -67,7 +67,7 @@ export default function MessageView({
           <div className="text-center mb-3">
             <button
               onClick={onLoadMore}
-              className="text-xs text-blue-600 hover:underline"
+              className="text-xs text-schappo-600 hover:underline"
             >
               Carregar mensagens anteriores
             </button>

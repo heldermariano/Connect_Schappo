@@ -5,6 +5,22 @@
   --color-foreground: #171717;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Paleta Schappo — laranja #F58220 como cor principal */
+  --color-schappo-50:  #FFF7ED;
+  --color-schappo-100: #FFEDD5;
+  --color-schappo-200: #FED7AA;
+  --color-schappo-300: #FDBA74;
+  --color-schappo-400: #FFA64D;
+  --color-schappo-500: #F58220;
+  --color-schappo-600: #D96E0A;
+  --color-schappo-700: #C2610A;
+  --color-schappo-800: #9A3412;
+  --color-schappo-900: #7C2D12;
+
+  /* Cores auxiliares da identidade */
+  --color-schappo-black: #1A1A1A;
+  --color-schappo-gray:  #6B6B6B;
 }
 
 html, body {

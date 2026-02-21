@@ -20,7 +20,7 @@ function StatusIcon({ status }: { status: string }) {
     case 'delivered':
       return <span className="text-gray-400" title="Entregue">&#10003;&#10003;</span>;
     case 'read':
-      return <span className="text-blue-500" title="Lida">&#10003;&#10003;</span>;
+      return <span className="text-schappo-500" title="Lida">&#10003;&#10003;</span>;
     case 'failed':
       return <span className="text-red-500" title="Falha">!</span>;
     default:
@@ -41,7 +41,7 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
       >
         {/* Nome do remetente em grupos */}
         {showSender && !isMe && mensagem.sender_name && (
-          <div className="text-xs font-semibold text-blue-600 mb-0.5">
+          <div className="text-xs font-semibold text-schappo-600 mb-0.5">
             {mensagem.sender_name}
           </div>
         )}

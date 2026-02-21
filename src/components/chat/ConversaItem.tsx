@@ -35,27 +35,57 @@ function getDisplayName(conversa: Conversa): string {
   return conversa.nome_contato || conversa.telefone || 'Desconhecido';
 }
 
-function getTypeIcon(conversa: Conversa): string {
-  if (conversa.tipo === 'grupo') return '\uD83D\uDC65';
-  return '';
+// Cor do avatar baseada no hash do nome (consistente)
+const AVATAR_COLORS = [
+  'bg-schappo-500',
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-teal-500',
+];
+
+function getAvatarColor(name: string): string {
+  const code = name.charCodeAt(0) || 0;
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
+function getInitials(conversa: Conversa): string {
+  if (conversa.tipo === 'grupo') return 'G';
+  const name = conversa.nome_contato || conversa.telefone || '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.charAt(0).toUpperCase();
 }
 
 export default function ConversaItem({ conversa, active, onClick }: ConversaItemProps) {
   const badge = getCategoryBadge(conversa);
   const name = getDisplayName(conversa);
-  const icon = getTypeIcon(conversa);
+  const initials = getInitials(conversa);
+  const avatarColor = getAvatarColor(name);
+  const hasAvatar = conversa.avatar_url && conversa.avatar_url.startsWith('http');
 
   return (
     <button
       onClick={onClick}
       className={`w-full text-left px-3 py-3 border-b border-gray-100 flex gap-3 transition-colors ${
-        active ? 'bg-blue-50' : 'hover:bg-gray-50'
+        active ? 'bg-schappo-50 border-l-2 border-l-schappo-500' : 'hover:bg-gray-50'
       }`}
     >
       {/* Avatar */}
-      <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium text-white shrink-0">
-        {icon || name.charAt(0).toUpperCase()}
-      </div>
+      {hasAvatar ? (
+        <img
+          src={conversa.avatar_url!}
+          alt={name}
+          className="w-10 h-10 rounded-full object-cover shrink-0"
+        />
+      ) : (
+        <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center text-sm font-medium text-white shrink-0`}>
+          {initials}
+        </div>
+      )}
 
       {/* Info */}
       <div className="flex-1 min-w-0">
@@ -63,12 +93,12 @@ export default function ConversaItem({ conversa, active, onClick }: ConversaItem
           <span className="text-sm font-medium text-gray-900 truncate">
             {name}
             {badge && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-100 text-blue-700">
+              <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-schappo-100 text-schappo-700">
                 {badge}
               </span>
             )}
           </span>
-          <span className="text-[11px] text-gray-400 shrink-0 ml-2">
+          <span className={`text-[11px] shrink-0 ml-2 ${conversa.nao_lida > 0 ? 'text-schappo-600 font-medium' : 'text-gray-400'}`}>
             {formatTime(conversa.ultima_msg_at)}
           </span>
         </div>
@@ -77,7 +107,7 @@ export default function ConversaItem({ conversa, active, onClick }: ConversaItem
             {conversa.ultima_mensagem || 'Sem mensagens'}
           </span>
           {conversa.nao_lida > 0 && (
-            <span className="ml-2 shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-green-500 text-white text-[10px] font-bold">
+            <span className="ml-2 shrink-0 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-schappo-500 text-white text-[10px] font-bold">
               {conversa.nao_lida > 99 ? '99+' : conversa.nao_lida}
             </span>
           )}

@@ -9,7 +9,7 @@ const NAV_ITEMS = [
 ];
 
 function NavIcon({ icon, active }: { icon: string; active: boolean }) {
-  const color = active ? 'text-blue-600' : 'text-gray-500';
+  const color = active ? 'text-schappo-500' : 'text-gray-500';
   if (icon === 'chat') {
     return (
       <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -24,12 +24,33 @@ function NavIcon({ icon, active }: { icon: string; active: boolean }) {
   );
 }
 
+function SidebarLogo() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="6" fill="#F58220" />
+      <text
+        x="16"
+        y="22"
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+        fontSize="16"
+        fontWeight="700"
+        fill="white"
+      >
+        CS
+      </text>
+    </svg>
+  );
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-16 bg-gray-900 flex flex-col items-center py-4 gap-2 shrink-0">
-      <div className="mb-4 text-white font-bold text-xs">CS</div>
+    <aside className="w-16 bg-schappo-black flex flex-col items-center py-4 gap-2 shrink-0">
+      <div className="mb-4">
+        <SidebarLogo />
+      </div>
       {NAV_ITEMS.map((item) => {
         const active = pathname.startsWith(item.href);
         return (
@@ -38,7 +59,9 @@ export default function Sidebar() {
             href={item.href}
             title={item.label}
             className={`w-12 h-12 flex items-center justify-center rounded-xl transition-colors ${
-              active ? 'bg-gray-700' : 'hover:bg-gray-800'
+              active
+                ? 'bg-schappo-500/15'
+                : 'hover:bg-white/5'
             }`}
           >
             <NavIcon icon={item.icon} active={active} />

@@ -78,7 +78,7 @@ export default function CallItem({ chamada }: CallItemProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
           ) : (
-            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-schappo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
             </svg>
           )}
@@ -105,7 +105,7 @@ export default function CallItem({ chamada }: CallItemProps) {
             </span>
           )}
           {chamada.atendente_nome && (
-            <span className="text-[11px] text-blue-500">
+            <span className="text-[11px] text-schappo-500">
               {chamada.atendente_nome}
             </span>
           )}

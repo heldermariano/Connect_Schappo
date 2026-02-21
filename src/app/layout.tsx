@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Connect Schappo',
   description: 'Plataforma de atendimento unificada - Clinica Schappo',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
