@@ -122,6 +122,7 @@ export interface WebhookPayloadUAZAPI {
     sender_lid?: string;
     senderName?: string;
     senderPhone?: string;
+    pushName?: string;
     isGroup?: boolean;
     groupName?: string;
     from?: string;

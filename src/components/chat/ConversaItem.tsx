@@ -1,6 +1,7 @@
 'use client';
 
 import { Conversa } from '@/lib/types';
+import Avatar from '@/components/ui/Avatar';
 
 interface ConversaItemProps {
   conversa: Conversa;
@@ -35,37 +36,10 @@ function getDisplayName(conversa: Conversa): string {
   return conversa.nome_contato || conversa.telefone || 'Desconhecido';
 }
 
-// Cor do avatar baseada no hash do nome (consistente)
-const AVATAR_COLORS = [
-  'bg-schappo-500',
-  'bg-blue-500',
-  'bg-green-500',
-  'bg-purple-500',
-  'bg-pink-500',
-  'bg-teal-500',
-];
-
-function getAvatarColor(name: string): string {
-  const code = name.charCodeAt(0) || 0;
-  return AVATAR_COLORS[code % AVATAR_COLORS.length];
-}
-
-function getInitials(conversa: Conversa): string {
-  if (conversa.tipo === 'grupo') return 'G';
-  const name = conversa.nome_contato || conversa.telefone || '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return name.charAt(0).toUpperCase();
-}
-
 export default function ConversaItem({ conversa, active, onClick }: ConversaItemProps) {
   const badge = getCategoryBadge(conversa);
   const name = getDisplayName(conversa);
-  const initials = getInitials(conversa);
-  const avatarColor = getAvatarColor(name);
-  const hasAvatar = conversa.avatar_url && conversa.avatar_url.startsWith('http');
+  const isGroup = conversa.tipo === 'grupo';
 
   return (
     <button
@@ -74,18 +48,7 @@ export default function ConversaItem({ conversa, active, onClick }: ConversaItem
         active ? 'bg-schappo-50 border-l-2 border-l-schappo-500' : 'hover:bg-gray-50'
       }`}
     >
-      {/* Avatar */}
-      {hasAvatar ? (
-        <img
-          src={conversa.avatar_url!}
-          alt={name}
-          className="w-10 h-10 rounded-full object-cover shrink-0"
-        />
-      ) : (
-        <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center text-sm font-medium text-white shrink-0`}>
-          {initials}
-        </div>
-      )}
+      <Avatar nome={name} avatarUrl={conversa.avatar_url} size="md" isGroup={isGroup} />
 
       {/* Info */}
       <div className="flex-1 min-w-0">

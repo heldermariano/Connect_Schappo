@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
 import MessageBubble from './MessageBubble';
+import Avatar from '@/components/ui/Avatar';
 
 interface MessageViewProps {
   conversa: Conversa | null;
@@ -49,12 +50,10 @@ export default function MessageView({
     <div className="flex-1 flex flex-col bg-gray-50">
       {/* Header da conversa */}
       <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shrink-0">
-        <div className="w-8 h-8 rounded-full bg-schappo-500 flex items-center justify-center text-xs font-medium text-white">
-          {isGroup ? 'G' : displayName.charAt(0).toUpperCase()}
-        </div>
-        <div>
-          <div className="text-sm font-medium text-gray-900">{displayName}</div>
-          <div className="text-[11px] text-gray-400">
+        <Avatar nome={displayName} avatarUrl={conversa.avatar_url} size="sm" isGroup={isGroup} />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-gray-900 truncate">{displayName}</div>
+          <div className="text-[11px] text-gray-400 truncate">
             <span className="text-schappo-600 font-medium">{conversa.categoria.toUpperCase()}</span> &middot; {conversa.provider}
             {conversa.telefone && ` &middot; ${conversa.telefone}`}
           </div>

@@ -8,6 +8,7 @@ import {
   isCallEvent,
   validateWebhookToken,
 } from '@/lib/webhook-parser-uazapi';
+import { upsertParticipant } from '@/lib/participant-cache';
 
 export async function POST(request: NextRequest) {
   // Responder rapido — processar async
@@ -103,6 +104,13 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
 
   // Se mensagem duplicada (id=0), nao emitir SSE
   if (msgId === 0) return;
+
+  // Cache de participante de grupo (nao bloqueia o fluxo)
+  if (parsed.tipo === 'grupo' && parsed.sender_phone && parsed.sender_name) {
+    upsertParticipant(parsed.sender_phone, parsed.wa_chatid, parsed.sender_name).catch((err) =>
+      console.error('[webhook/uazapi] Erro ao cachear participante:', err),
+    );
+  }
 
   // 3. Buscar mensagem completa para o SSE
   const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);

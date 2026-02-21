@@ -2,6 +2,7 @@
 
 import { Mensagem } from '@/lib/types';
 import MediaPreview from './MediaPreview';
+import { getSenderColor } from '@/components/ui/Avatar';
 
 interface MessageBubbleProps {
   mensagem: Mensagem;
@@ -28,9 +29,25 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
+/**
+ * Formata um telefone para exibicao curta.
+ */
+function formatPhoneShort(phone: string | null): string {
+  if (!phone) return '';
+  const num = phone.replace(/\D/g, '');
+  if (num.length >= 12 && num.startsWith('55')) {
+    return `(${num.slice(2, 4)}) ${num.slice(4)}`;
+  }
+  return phone;
+}
+
 export default function MessageBubble({ mensagem, showSender }: MessageBubbleProps) {
   const isMe = mensagem.from_me;
   const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem);
+
+  // Nome a exibir: sender_name ou telefone formatado
+  const senderDisplay = mensagem.sender_name || formatPhoneShort(mensagem.sender_phone);
+  const senderColor = senderDisplay ? getSenderColor(senderDisplay) : 'text-schappo-600';
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
@@ -39,10 +56,10 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
           isMe ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900 shadow-sm'
         }`}
       >
-        {/* Nome do remetente em grupos */}
-        {showSender && !isMe && mensagem.sender_name && (
-          <div className="text-xs font-semibold text-schappo-600 mb-0.5">
-            {mensagem.sender_name}
+        {/* Nome do remetente em grupos (com cor unica por pessoa) */}
+        {showSender && !isMe && senderDisplay && (
+          <div className={`text-xs font-semibold mb-0.5 ${senderColor}`}>
+            {senderDisplay}
           </div>
         )}
 

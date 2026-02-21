@@ -72,6 +72,14 @@ function extractSenderPhone(message: WebhookPayloadUAZAPI['message']): string {
 }
 
 /**
+ * Extrai o nome do remetente em grupos.
+ * Prioridade: pushName > senderName
+ */
+function extractSenderName(message: WebhookPayloadUAZAPI['message']): string {
+  return message.pushName || message.senderName || '';
+}
+
+/**
  * Extrai o nome do contato/remetente.
  * chat.wa_contactName geralmente esta vazio!
  * Usar chat.name ou chat.wa_name como fallback
@@ -79,7 +87,7 @@ function extractSenderPhone(message: WebhookPayloadUAZAPI['message']): string {
 function extractContactName(chat: WebhookPayloadUAZAPI['chat'], message: WebhookPayloadUAZAPI['message']): string {
   if (chat.wa_isGroup) {
     // Em grupos, o nome do contato eh o remetente
-    return message.senderName || '';
+    return extractSenderName(message);
   }
   // Para individuais: chat.name > chat.wa_name > chat.wa_contactName
   return chat.name || chat.wa_name || chat.wa_contactName || '';
@@ -155,7 +163,7 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
     wa_message_id,
     from_me: message.fromMe === true,
     sender_phone: extractSenderPhone(message) || null,
-    sender_name: message.senderName || extractContactName(chat, message) || null,
+    sender_name: extractSenderName(message) || extractContactName(chat, message) || null,
     tipo_mensagem: normalizeMessageType(message),
     conteudo: extractMessageText(message) || null,
     media_url: null, // TODO: extrair para mensagens de midia
