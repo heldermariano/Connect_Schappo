@@ -1,0 +1,125 @@
+import { NextRequest, NextResponse } from 'next/server';
+import pool from '@/lib/db';
+import { sseManager } from '@/lib/sse-manager';
+import { WebhookPayloadUAZAPI } from '@/lib/types';
+import { parseUAZAPIMessage, parseUAZAPICall, isCallEvent } from '@/lib/webhook-parser-uazapi';
+
+export async function POST(request: NextRequest) {
+  // Responder rapido — processar async
+  try {
+    const payload: WebhookPayloadUAZAPI = await request.json();
+
+    // Validar token do webhook
+    const token = request.headers.get('token');
+    const expectedToken = process.env.WEBHOOK_SECRET;
+    if (expectedToken && token !== expectedToken) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+
+    // Processar em background (nao bloquear resposta)
+    processUAZAPIWebhook(payload).catch((err) =>
+      console.error('[webhook/uazapi] Erro ao processar:', err),
+    );
+
+    return NextResponse.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[webhook/uazapi] Erro ao receber:', err);
+    return NextResponse.json({ status: 'ok' });
+  }
+}
+
+async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
+  // Evento de chamada — registrar tentativa
+  if (isCallEvent(payload)) {
+    const call = parseUAZAPICall(payload);
+    if (!call) return;
+
+    // Upsert conversa para ter referencia
+    const conversaResult = await pool.query(
+      `SELECT atd.upsert_conversa($1, $2, $3, $4, NULL, NULL, $5) AS id`,
+      [call.wa_chatid, 'individual', call.categoria, 'uazapi', call.caller_phone],
+    );
+    const conversaId = conversaResult.rows[0].id;
+
+    // Registrar chamada como tentativa
+    const chamadaResult = await pool.query(
+      `INSERT INTO atd.chamadas (conversa_id, wa_chatid, origem, direcao, caller_number, called_number, status)
+       VALUES ($1, $2, 'whatsapp-tentativa', 'recebida', $3, $4, 'missed')
+       RETURNING *`,
+      [conversaId, call.wa_chatid, call.caller_phone, call.owner],
+    );
+
+    sseManager.broadcast({
+      type: 'chamada_nova',
+      data: { chamada: chamadaResult.rows[0] },
+    });
+    return;
+  }
+
+  // Evento de mensagem
+  const parsed = parseUAZAPIMessage(payload);
+  if (!parsed) return;
+
+  // 1. Upsert conversa
+  const conversaResult = await pool.query(
+    `SELECT atd.upsert_conversa($1, $2, $3, $4, $5, $6, $7, $8) AS id`,
+    [
+      parsed.wa_chatid,
+      parsed.tipo,
+      parsed.categoria,
+      parsed.provider,
+      parsed.nome_contato,
+      parsed.nome_grupo,
+      parsed.telefone,
+      parsed.avatar_url,
+    ],
+  );
+  const conversaId = conversaResult.rows[0].id;
+
+  // 2. Registrar mensagem
+  const msgResult = await pool.query(
+    `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) AS id`,
+    [
+      conversaId,
+      parsed.wa_message_id,
+      parsed.from_me,
+      parsed.sender_phone,
+      parsed.sender_name,
+      parsed.tipo_mensagem,
+      parsed.conteudo,
+      parsed.media_url,
+      parsed.media_mimetype,
+      parsed.media_filename,
+      JSON.stringify({}),
+    ],
+  );
+  const msgId = msgResult.rows[0].id;
+
+  // Se mensagem duplicada (id=0), nao emitir SSE
+  if (msgId === 0) return;
+
+  // 3. Buscar mensagem completa para o SSE
+  const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);
+
+  // 4. Broadcast via SSE
+  sseManager.broadcast({
+    type: 'nova_mensagem',
+    data: { conversa_id: conversaId, mensagem: fullMsg.rows[0] },
+  });
+
+  // 5. Broadcast conversa atualizada
+  const convData = await pool.query(
+    `SELECT ultima_mensagem, nao_lida FROM atd.conversas WHERE id = $1`,
+    [conversaId],
+  );
+  if (convData.rows[0]) {
+    sseManager.broadcast({
+      type: 'conversa_atualizada',
+      data: {
+        conversa_id: conversaId,
+        ultima_msg: convData.rows[0].ultima_mensagem || '',
+        nao_lida: convData.rows[0].nao_lida,
+      },
+    });
+  }
+}
