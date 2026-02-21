@@ -7,6 +7,7 @@ interface ConversaItemProps {
   conversa: Conversa;
   active: boolean;
   onClick: () => void;
+  mencionado?: boolean; // Se o atendente logado foi mencionado nesta conversa
 }
 
 function formatTime(dateStr: string | null): string {
@@ -36,7 +37,7 @@ function getDisplayName(conversa: Conversa): string {
   return conversa.nome_contato || conversa.telefone || 'Desconhecido';
 }
 
-export default function ConversaItem({ conversa, active, onClick }: ConversaItemProps) {
+export default function ConversaItem({ conversa, active, onClick, mencionado }: ConversaItemProps) {
   const badge = getCategoryBadge(conversa);
   const name = getDisplayName(conversa);
   const isGroup = conversa.tipo === 'grupo';
@@ -69,11 +70,18 @@ export default function ConversaItem({ conversa, active, onClick }: ConversaItem
           <span className="text-xs text-gray-500 truncate">
             {conversa.ultima_mensagem || 'Sem mensagens'}
           </span>
-          {conversa.nao_lida > 0 && (
-            <span className="ml-2 shrink-0 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-schappo-500 text-white text-[10px] font-bold">
-              {conversa.nao_lida > 99 ? '99+' : conversa.nao_lida}
-            </span>
-          )}
+          <div className="flex items-center gap-1 shrink-0 ml-2">
+            {mencionado && (
+              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-schappo-100 text-schappo-600">
+                @ Mencionado
+              </span>
+            )}
+            {conversa.nao_lida > 0 && (
+              <span className="min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-schappo-500 text-white text-[10px] font-bold">
+                {conversa.nao_lida > 99 ? '99+' : conversa.nao_lida}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </button>

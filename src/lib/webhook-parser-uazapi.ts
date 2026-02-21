@@ -20,6 +20,7 @@ export interface ParsedUAZAPIMessage {
   nome_grupo: string | null;
   telefone: string | null;
   avatar_url: string | null;
+  mencoes: string[];
   metadata: Record<string, unknown>;
 }
 
@@ -127,6 +128,32 @@ function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string 
   return rawType.toLowerCase();
 }
 
+/**
+ * Extrai telefones mencionados do payload.
+ * UAZAPI envia mentionedJid como array de JIDs (@s.whatsapp.net)
+ * Tambem tenta extrair do contextInfo dentro de content (objeto)
+ */
+function extractMentions(message: WebhookPayloadUAZAPI['message']): string[] {
+  const jids: string[] = [];
+
+  // Prioridade 1: campo mentionedJid direto
+  if (Array.isArray(message.mentionedJid)) {
+    jids.push(...message.mentionedJid);
+  }
+
+  // Prioridade 2: contextInfo.mentionedJid dentro de content objeto
+  if (message.content && typeof message.content === 'object' && 'contextInfo' in message.content) {
+    const ctx = message.content.contextInfo;
+    if (ctx && typeof ctx === 'object' && 'mentionedJid' in ctx && Array.isArray(ctx.mentionedJid)) {
+      jids.push(...(ctx.mentionedJid as string[]));
+    }
+  }
+
+  // Normalizar: remover @s.whatsapp.net, deduplicar
+  const phones = [...new Set(jids.map((j) => j.replace('@s.whatsapp.net', '')))];
+  return phones;
+}
+
 export function isMessageEvent(payload: WebhookPayloadUAZAPI): boolean {
   return payload.EventType === 'messages';
 }
@@ -176,6 +203,7 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
     nome_grupo: extractGroupName(chat, message),
     telefone: extractConversationPhone(chat) || null,
     avatar_url: chat.imagePreview || null, // Eh URL, nao base64!
+    mencoes: extractMentions(message),
     metadata: {
       instance_name: payload.instanceName,
       message_type_raw: message.messageType,

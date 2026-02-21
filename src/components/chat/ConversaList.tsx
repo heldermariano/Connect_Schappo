@@ -8,9 +8,10 @@ interface ConversaListProps {
   activeId: number | null;
   onSelect: (conversa: Conversa) => void;
   loading: boolean;
+  mencionadoEm?: Set<number>;
 }
 
-export default function ConversaList({ conversas, activeId, onSelect, loading }: ConversaListProps) {
+export default function ConversaList({ conversas, activeId, onSelect, loading, mencionadoEm }: ConversaListProps) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
@@ -35,6 +36,7 @@ export default function ConversaList({ conversas, activeId, onSelect, loading }:
           conversa={conversa}
           active={conversa.id === activeId}
           onClick={() => onSelect(conversa)}
+          mencionado={mencionadoEm?.has(conversa.id)}
         />
       ))}
     </div>

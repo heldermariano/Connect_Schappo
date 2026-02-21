@@ -83,9 +83,9 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
   );
   const conversaId = conversaResult.rows[0].id;
 
-  // 2. Registrar mensagem (com metadata)
+  // 2. Registrar mensagem (com metadata e mencoes)
   const msgResult = await pool.query(
-    `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) AS id`,
+    `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) AS id`,
     [
       conversaId,
       parsed.wa_message_id,
@@ -98,6 +98,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
       parsed.media_mimetype,
       parsed.media_filename,
       JSON.stringify(parsed.metadata),
+      parsed.mencoes,
     ],
   );
   const msgId = msgResult.rows[0].id;

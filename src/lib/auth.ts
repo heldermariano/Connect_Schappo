@@ -11,6 +11,7 @@ export interface AuthUser {
   grupo: string;
   role: string;
   ramal: string | null;
+  telefone: string | null;
 }
 
 // Estende os tipos do NextAuth
@@ -39,7 +40,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const result = await pool.query(
-          `SELECT id, nome, username, password_hash, grupo_atendimento, role, ramal
+          `SELECT id, nome, username, password_hash, grupo_atendimento, role, ramal, telefone
            FROM atd.atendentes
            WHERE username = $1 AND ativo = true`,
           [credentials.username],
@@ -68,6 +69,7 @@ export const authOptions: NextAuthOptions = {
           grupo: user.grupo_atendimento,
           role: user.role,
           ramal: user.ramal || null,
+          telefone: user.telefone || null,
         };
       },
     }),
@@ -81,6 +83,7 @@ export const authOptions: NextAuthOptions = {
         token.grupo = user.grupo;
         token.role = user.role;
         token.ramal = user.ramal;
+        token.telefone = user.telefone;
       }
       return token;
     },
@@ -92,6 +95,7 @@ export const authOptions: NextAuthOptions = {
         grupo: token.grupo as string,
         role: token.role as string,
         ramal: (token.ramal as string) || null,
+        telefone: (token.telefone as string) || null,
       };
       return session;
     },

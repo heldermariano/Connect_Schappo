@@ -1,5 +1,6 @@
 'use client';
 
+import { ReactNode } from 'react';
 import { Mensagem } from '@/lib/types';
 import MediaPreview from './MediaPreview';
 import { getSenderColor } from '@/components/ui/Avatar';
@@ -41,6 +42,62 @@ function formatPhoneShort(phone: string | null): string {
   return phone;
 }
 
+/**
+ * Renderiza texto com mencoes destacadas em negrito laranja.
+ * Detecta padroes @NUMERO e @NOME no texto.
+ */
+function renderTextWithMentions(text: string, mencoes: string[]): ReactNode[] {
+  if (!mencoes || mencoes.length === 0) {
+    return [text];
+  }
+
+  // Regex para encontrar mencoes: @seguido de numero ou nome (ate espaco/pontuacao)
+  const mentionRegex = /@([\d+]+|[\w\u00C0-\u017F]+(?:\s[\w\u00C0-\u017F]+)?)/g;
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mentionRegex.exec(text)) !== null) {
+    // Texto antes da mencao
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const mentionText = match[0];
+    const mentionValue = match[1];
+
+    // Verificar se este valor corresponde a uma mencao real
+    const isMention = mencoes.some((phone) => {
+      return mentionValue === phone || phone.endsWith(mentionValue) || mentionValue.includes(phone.slice(-4));
+    });
+
+    if (isMention) {
+      parts.push(
+        <span key={match.index} className="text-schappo-500 font-semibold">
+          {mentionText}
+        </span>,
+      );
+    } else {
+      // @ encontrado mas nao bate com mencoes reais — destacar mesmo assim
+      // pois o WhatsApp envia o texto com @ para mencoes
+      parts.push(
+        <span key={match.index} className="text-schappo-500 font-semibold">
+          {mentionText}
+        </span>,
+      );
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Texto restante
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
 export default function MessageBubble({ mensagem, showSender }: MessageBubbleProps) {
   const isMe = mensagem.from_me;
   const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem);
@@ -48,6 +105,8 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
   // Nome a exibir: sender_name ou telefone formatado
   const senderDisplay = mensagem.sender_name || formatPhoneShort(mensagem.sender_phone);
   const senderColor = senderDisplay ? getSenderColor(senderDisplay) : 'text-schappo-600';
+
+  const mencoes = mensagem.mencoes || [];
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
@@ -73,9 +132,13 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
           />
         )}
 
-        {/* Conteudo de texto */}
+        {/* Conteudo de texto com mencoes destacadas */}
         {mensagem.conteudo && (
-          <p className="text-sm whitespace-pre-wrap break-words">{mensagem.conteudo}</p>
+          <p className="text-sm whitespace-pre-wrap break-words">
+            {mencoes.length > 0
+              ? renderTextWithMentions(mensagem.conteudo, mencoes)
+              : mensagem.conteudo}
+          </p>
         )}
 
         {/* Hora + status */}

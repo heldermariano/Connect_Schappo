@@ -53,6 +53,7 @@ export interface Mensagem {
   is_forwarded: boolean;
   quoted_msg_id: string | null;
   status: 'received' | 'sent' | 'delivered' | 'read' | 'failed';
+  mencoes: string[];
   metadata: Record<string, unknown>;
   created_at: string;
 }
@@ -114,6 +115,7 @@ export interface WebhookPayloadUAZAPI {
     fromMe?: boolean;
     content?: string | { text: string; contextInfo?: Record<string, unknown> };
     text?: string;
+    mentionedJid?: string[];
     type?: string;
     messageType?: string;
     chatid?: string;

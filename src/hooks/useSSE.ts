@@ -24,6 +24,7 @@ export function useSSE(onEvent: SSEHandler) {
       'chamada_nova',
       'chamada_atualizada',
       'ramal_status',
+      'atendente_status',
     ];
 
     for (const type of eventTypes) {
