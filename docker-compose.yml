@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  connect-schappo:
+    build: .
+    container_name: connect-schappo
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.connect.rule=Host(`connect.clinicaschappo.com`)"
+      - "traefik.http.routers.connect.entrypoints=websecure"
+      - "traefik.http.routers.connect.tls=true"
+      - "traefik.http.routers.connect.tls.certresolver=letsencrypt"
+      - "traefik.http.services.connect.loadbalancer.server.port=3000"
+      # SSE: desabilitar buffering para eventos em tempo real
+      - "traefik.http.middlewares.connect-sse.headers.customresponseheaders.Cache-Control=no-cache"
+      - "traefik.http.middlewares.connect-sse.headers.customresponseheaders.X-Accel-Buffering=no"
+      - "traefik.http.routers.connect.middlewares=connect-sse"
+    networks:
+      - traefik-public
+      - internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  traefik-public:
+    external: true
+  internal:
+    external: true
