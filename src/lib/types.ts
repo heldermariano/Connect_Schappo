@@ -85,7 +85,8 @@ export type SSEEvent =
   | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number } }
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
-  | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } };
+  | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }
+  | { type: 'atendente_status'; data: { atendente_id: number; nome: string; status: string } };
 
 // --- Webhook Payloads ---
 

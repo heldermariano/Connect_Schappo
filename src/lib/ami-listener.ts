@@ -19,6 +19,8 @@ const activeCalls = new Map<string, ActiveCall>();
 
 let amiConnected = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let amiInstance: any = null;
 
 // Determina origem baseado no contexto do Asterisk
 function getOrigem(context: string, accountcode?: string): 'whatsapp' | 'telefone' {
@@ -282,6 +284,7 @@ function connectAMI(host: string, port: number, user: string, password: string):
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AsteriskManager = require('asterisk-manager');
     const ami = new AsteriskManager(port, host, user, password, true);
+    amiInstance = ami;
 
     ami.keepConnected();
 
@@ -329,4 +332,36 @@ export function isAMIConnected(): boolean {
 
 export function getActiveCallsCount(): number {
   return activeCalls.size;
+}
+
+/**
+ * Envia QueuePause ao Asterisk para pausar/despausar um ramal em todas as filas.
+ * Fallback gracioso se AMI nao estiver conectado.
+ */
+export function pauseQueue(ramal: string, paused: boolean, reason?: string): void {
+  if (!amiConnected || !amiInstance) {
+    console.warn(`[AMI] QueuePause ignorado (AMI offline) — ramal=${ramal} paused=${paused}`);
+    return;
+  }
+
+  try {
+    const action: Record<string, string> = {
+      action: 'QueuePause',
+      interface: `SIP/${ramal}`,
+      paused: paused ? 'true' : 'false',
+    };
+    if (reason) {
+      action.reason = reason;
+    }
+
+    amiInstance.action(action, (err: Error | null) => {
+      if (err) {
+        console.error(`[AMI] Erro ao executar QueuePause ramal=${ramal}:`, err.message);
+      } else {
+        console.log(`[AMI] QueuePause ramal=${ramal} paused=${paused} reason=${reason || 'none'}`);
+      }
+    });
+  } catch (err) {
+    console.error(`[AMI] Excecao ao enviar QueuePause ramal=${ramal}:`, err);
+  }
 }

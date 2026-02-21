@@ -32,7 +32,11 @@ export async function middleware(request: NextRequest) {
   const token = await getToken({ req: request });
 
   if (!token) {
-    // Redirecionar para login se nao autenticado
+    // Para rotas de API, retornar 401 JSON
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
+    }
+    // Para paginas, redirecionar para login
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);
