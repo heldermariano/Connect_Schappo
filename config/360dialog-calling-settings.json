@@ -1,0 +1,31 @@
+{
+  "_doc": "Payload para habilitar Calling API no 360Dialog — enviar via API ou painel",
+  "_url": "POST https://waba-v2.360dialog.io/configs/calling",
+  "_header": "D360-API-KEY: {{DIALOG360_API_KEY}}",
+
+  "calling": {
+    "enabled": true,
+    "sip": {
+      "uri": "sip:556133455701@IP_SERVIDOR_PRODUCAO:5061;transport=tls",
+      "username": "556133455701",
+      "password": "SUBSTITUIR_PELA_SENHA_360DIALOG"
+    },
+    "business_hours": {
+      "timezone": "America/Sao_Paulo",
+      "schedule": [
+        {
+          "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+          "start_time": "07:00",
+          "end_time": "19:00"
+        },
+        {
+          "days": ["saturday"],
+          "start_time": "08:00",
+          "end_time": "12:00"
+        }
+      ]
+    },
+    "codecs": ["opus", "PCMA", "PCMU"],
+    "dtmf": "rfc4733"
+  }
+}
