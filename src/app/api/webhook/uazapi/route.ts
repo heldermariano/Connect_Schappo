@@ -9,13 +9,6 @@ export async function POST(request: NextRequest) {
   try {
     const payload: WebhookPayloadUAZAPI = await request.json();
 
-    // Validar token do webhook
-    const token = request.headers.get('token');
-    const expectedToken = process.env.WEBHOOK_SECRET;
-    if (expectedToken && token !== expectedToken) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
-
     // Processar em background (nao bloquear resposta)
     processUAZAPIWebhook(payload).catch((err) =>
       console.error('[webhook/uazapi] Erro ao processar:', err),
