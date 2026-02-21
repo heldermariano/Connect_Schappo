@@ -20,13 +20,10 @@ services:
       - "traefik.http.middlewares.connect-sse.headers.customresponseheaders.X-Accel-Buffering=no"
       - "traefik.http.routers.connect.middlewares=connect-sse"
     networks:
-      - traefik-public
-      - internal
+      - traefik_default
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 networks:
-  traefik-public:
-    external: true
-  internal:
+  traefik_default:
     external: true
