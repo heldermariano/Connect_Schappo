@@ -1,19 +1,103 @@
 'use client';
 
+import { useState, useCallback } from 'react';
+import { Chamada } from '@/lib/types';
 import Sidebar from '@/components/layout/Sidebar';
+import CallLog from '@/components/calls/CallLog';
+import CallAlert from '@/components/calls/CallAlert';
+import RamalStatus from '@/components/calls/RamalStatus';
+import { useSSE } from '@/hooks/useSSE';
+import { useChamadas } from '@/hooks/useChamadas';
+
+interface RamalInfo {
+  ramal: string;
+  status: 'online' | 'offline' | 'busy';
+}
 
 export default function ChamadasPage() {
+  const [filtroOrigem, setFiltroOrigem] = useState('');
+  const [ramais, setRamais] = useState<RamalInfo[]>([
+    { ramal: '201', status: 'offline' },
+    { ramal: '202', status: 'offline' },
+    { ramal: '203', status: 'offline' },
+    { ramal: '204', status: 'offline' },
+  ]);
+
+  const { chamadas, loading, addChamada, updateChamada, refresh } = useChamadas({
+    origem: filtroOrigem || undefined,
+  });
+
+  const handleSSE = useCallback(
+    (event: string, data: unknown) => {
+      if (event === 'chamada_nova') {
+        const d = data as { chamada: Chamada };
+        addChamada(d.chamada);
+      }
+      if (event === 'chamada_atualizada') {
+        const d = data as { chamada_id: number; status: string; duracao?: number };
+        updateChamada(d.chamada_id, {
+          status: d.status as Chamada['status'],
+          ...(d.duracao !== undefined ? { duracao_seg: d.duracao } : {}),
+        });
+      }
+      if (event === 'ramal_status') {
+        const d = data as { ramal: string; status: 'online' | 'offline' | 'busy' };
+        setRamais((prev) =>
+          prev.map((r) => (r.ramal === d.ramal ? { ...r, status: d.status } : r)),
+        );
+      }
+    },
+    [addChamada, updateChamada],
+  );
+
+  useSSE(handleSSE);
+
   return (
     <div className="flex h-screen">
       <Sidebar />
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center text-gray-400">
-          <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-          </svg>
-          <p className="text-lg font-medium mb-2">Chamadas</p>
-          <p className="text-sm">Em desenvolvimento — Fase 1C</p>
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-4 shrink-0">
+          <h1 className="text-lg font-semibold text-gray-900">Chamadas</h1>
+          <div className="flex-1" />
+          <button
+            onClick={refresh}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Atualizar
+          </button>
+        </header>
+
+        {/* Alerta de chamadas ativas */}
+        <CallAlert chamadas={chamadas} />
+
+        {/* Status dos ramais */}
+        <RamalStatus ramais={ramais} />
+
+        {/* Filtros */}
+        <div className="flex gap-1 px-4 py-2 border-b border-gray-200 bg-white">
+          {[
+            { value: '', label: 'Todas' },
+            { value: 'telefone', label: 'Telefone' },
+            { value: 'whatsapp', label: 'WhatsApp Voz' },
+            { value: 'whatsapp-tentativa', label: 'Tentativas' },
+          ].map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFiltroOrigem(f.value)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                filtroOrigem === f.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
+
+        {/* Lista de chamadas */}
+        <CallLog chamadas={chamadas} loading={loading} />
       </div>
     </div>
   );

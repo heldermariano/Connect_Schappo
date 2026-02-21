@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { isAMIConnected, getActiveCallsCount } from '@/lib/ami-listener';
 
 export async function GET() {
   const checks: Record<string, string> = {};
@@ -29,11 +30,15 @@ export async function GET() {
     healthy = false;
   }
 
+  // Status AMI (nao afeta health — pode estar desconectado no dev)
+  checks.ami = isAMIConnected() ? 'connected' : 'disconnected';
+  checks.ami_active_calls = String(getActiveCallsCount());
+
   return NextResponse.json(
     {
       status: healthy ? 'ok' : 'degraded',
       version: '1.0.0',
-      phase: '1A',
+      phase: '1C',
       checks,
     },
     { status: healthy ? 200 : 503 },

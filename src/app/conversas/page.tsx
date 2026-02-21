@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Conversa, Mensagem } from '@/lib/types';
+import { Conversa, Mensagem, Chamada } from '@/lib/types';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import CategoryFilter from '@/components/filters/CategoryFilter';
 import ConversaList from '@/components/chat/ConversaList';
 import MessageView from '@/components/chat/MessageView';
+import CallAlert from '@/components/calls/CallAlert';
 import { useSSE } from '@/hooks/useSSE';
 import { useConversas } from '@/hooks/useConversas';
 import { useMensagens } from '@/hooks/useMensagens';
@@ -15,6 +16,7 @@ export default function ConversasPage() {
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState('');
   const [selectedConversa, setSelectedConversa] = useState<Conversa | null>(null);
+  const [activeCalls, setActiveCalls] = useState<Chamada[]>([]);
 
   // Derivar filtros do seletor
   const filterParams = (() => {
@@ -60,12 +62,21 @@ export default function ConversasPage() {
           ultima_msg_at: new Date().toISOString(),
         });
       }
-      if (event === 'chamada_nova' || event === 'chamada_atualizada') {
-        // Atualizar lista de conversas para refletir eventos de chamada
+      if (event === 'chamada_nova') {
+        const d = data as { chamada: Chamada };
+        setActiveCalls((prev) => [...prev, d.chamada]);
+        refresh();
+      }
+      if (event === 'chamada_atualizada') {
+        const d = data as { chamada_id: number; status: string; duracao?: number };
+        if (d.status !== 'ringing') {
+          // Remover da lista de chamadas ativas
+          setActiveCalls((prev) => prev.filter((c) => c.id !== d.chamada_id));
+        }
         refresh();
       }
     },
-    [selectedConversa, addMensagem, updateConversa, refresh],
+    [selectedConversa, addMensagem, updateConversa, refresh, setActiveCalls],
   );
 
   useSSE(handleSSE);
@@ -83,6 +94,7 @@ export default function ConversasPage() {
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0">
         <Header busca={busca} onBuscaChange={setBusca} />
+        <CallAlert chamadas={activeCalls} />
         <div className="flex flex-1 min-h-0">
           {/* Painel esquerdo: filtros + lista */}
           <div className="w-80 border-r border-gray-200 flex flex-col shrink-0 bg-white">
