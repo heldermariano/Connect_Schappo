@@ -20,6 +20,7 @@ export interface ParsedUAZAPIMessage {
   nome_grupo: string | null;
   telefone: string | null;
   avatar_url: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export interface ParsedUAZAPICall {
@@ -27,6 +28,95 @@ export interface ParsedUAZAPICall {
   caller_phone: string;
   owner: string;
   categoria: string;
+}
+
+/**
+ * Extrai o texto da mensagem de forma segura.
+ * message.content pode ser string OU objeto com campo .text
+ * message.text eh sempre string (mais confiavel)
+ */
+function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
+  // Prioridade 1: message.text (sempre string)
+  if (message.text && typeof message.text === 'string') {
+    return message.text;
+  }
+  // Prioridade 2: message.content (pode ser string ou objeto)
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content && typeof message.content === 'object' && 'text' in message.content) {
+    return message.content.text;
+  }
+  return '';
+}
+
+/**
+ * Extrai o telefone do remetente.
+ * NUNCA usar message.sender (eh LID, formato @lid)
+ * SEMPRE usar message.sender_pn (formato @s.whatsapp.net)
+ */
+function extractSenderPhone(message: WebhookPayloadUAZAPI['message']): string {
+  // Prioridade 1: sender_pn (telefone real)
+  if (message.sender_pn) {
+    return message.sender_pn.replace('@s.whatsapp.net', '');
+  }
+  // Prioridade 2: senderPhone (campo legado)
+  if (message.senderPhone) {
+    return message.senderPhone;
+  }
+  // Prioridade 3: chatid para individuais
+  if (!message.isGroup && message.chatid) {
+    return message.chatid.replace('@s.whatsapp.net', '');
+  }
+  return '';
+}
+
+/**
+ * Extrai o nome do contato/remetente.
+ * chat.wa_contactName geralmente esta vazio!
+ * Usar chat.name ou chat.wa_name como fallback
+ */
+function extractContactName(chat: WebhookPayloadUAZAPI['chat'], message: WebhookPayloadUAZAPI['message']): string {
+  if (chat.wa_isGroup) {
+    // Em grupos, o nome do contato eh o remetente
+    return message.senderName || '';
+  }
+  // Para individuais: chat.name > chat.wa_name > chat.wa_contactName
+  return chat.name || chat.wa_name || chat.wa_contactName || '';
+}
+
+/**
+ * Extrai o nome do grupo
+ */
+function extractGroupName(chat: WebhookPayloadUAZAPI['chat'], message: WebhookPayloadUAZAPI['message']): string | null {
+  if (!chat.wa_isGroup) return null;
+  return message.groupName || chat.name || chat.wa_name || null;
+}
+
+/**
+ * Extrai o telefone da conversa (individual)
+ */
+function extractConversationPhone(chat: WebhookPayloadUAZAPI['chat']): string {
+  // chat.phone existe e tem valor para individuais
+  if (chat.phone) return chat.phone;
+  // Fallback: extrair de wa_chatid
+  if (chat.wa_chatid && !chat.wa_chatid.includes('@g.us')) {
+    return chat.wa_chatid.replace('@s.whatsapp.net', '');
+  }
+  return '';
+}
+
+/**
+ * Normaliza o tipo de mensagem.
+ * UAZAPI envia 'Conversation' e 'ExtendedTextMessage' para texto.
+ */
+function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string {
+  const rawType = message.messageType || message.type || 'text';
+  // Normalizar tipos de texto
+  if (rawType === 'Conversation' || rawType === 'ExtendedTextMessage') {
+    return 'text';
+  }
+  return rawType.toLowerCase();
 }
 
 export function isMessageEvent(payload: WebhookPayloadUAZAPI): boolean {
@@ -37,40 +127,54 @@ export function isCallEvent(payload: WebhookPayloadUAZAPI): boolean {
   return payload.EventType === 'call';
 }
 
+/**
+ * Verifica o token do webhook (UAZAPI envia no body, nao no header)
+ */
+export function validateWebhookToken(payload: WebhookPayloadUAZAPI, expectedToken: string): boolean {
+  return payload.token === expectedToken;
+}
+
 export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIMessage | null {
   if (!isMessageEvent(payload)) return null;
 
   const { chat, message, owner } = payload;
-  if (!message?.id || !chat?.wa_chatid) return null;
+  if (!chat?.wa_chatid) return null;
 
-  const wa_chatid = message.chatid || chat.wa_chatid;
+  // Ignorar mensagens enviadas pela API (evitar loop)
+  if (message.wasSentByApi) return null;
+
+  const wa_chatid = chat.wa_chatid;
   const isGroup = chat.wa_isGroup === true || wa_chatid.includes('@g.us');
   const categoria = OWNER_CATEGORY_MAP[owner] || 'geral';
 
-  // Extrair telefone do wa_chatid (individual)
-  let telefone: string | null = null;
-  if (!isGroup && wa_chatid.includes('@')) {
-    telefone = wa_chatid.split('@')[0];
-  }
+  // Usar messageid (sem prefixo owner) para campo UNIQUE no banco
+  const wa_message_id = message.messageid || message.id;
 
   return {
     wa_chatid,
-    wa_message_id: message.id,
+    wa_message_id,
     from_me: message.fromMe === true,
-    sender_phone: message.senderPhone || null,
-    sender_name: message.senderName || null,
-    tipo_mensagem: message.messageType || 'text',
-    conteudo: message.content || message.text || null,
-    media_url: null, // UAZAPI envia media em campo separado se houver
+    sender_phone: extractSenderPhone(message) || null,
+    sender_name: message.senderName || extractContactName(chat, message) || null,
+    tipo_mensagem: normalizeMessageType(message),
+    conteudo: extractMessageText(message) || null,
+    media_url: null, // TODO: extrair para mensagens de midia
     media_mimetype: null,
     media_filename: null,
     tipo: isGroup ? 'grupo' : 'individual',
     categoria,
     provider: 'uazapi',
-    nome_contato: chat.wa_contactName || null,
-    nome_grupo: isGroup ? (message.groupName || null) : null,
-    telefone,
-    avatar_url: chat.imagePreview ? `data:image/jpeg;base64,${chat.imagePreview}` : null,
+    nome_contato: extractContactName(chat, message) || null,
+    nome_grupo: extractGroupName(chat, message),
+    telefone: extractConversationPhone(chat) || null,
+    avatar_url: chat.imagePreview || null, // Eh URL, nao base64!
+    metadata: {
+      instance_name: payload.instanceName,
+      message_type_raw: message.messageType,
+      sender_lid: message.sender_lid,
+      chat_source: payload.chatSource,
+      timestamp: message.messageTimestamp,
+    },
   };
 }
 
@@ -80,7 +184,12 @@ export function parseUAZAPICall(payload: WebhookPayloadUAZAPI): ParsedUAZAPICall
   const wa_chatid = payload.chat?.wa_chatid || payload.message?.from || '';
   if (!wa_chatid) return null;
 
-  const callerPhone = wa_chatid.split('@')[0];
+  // Extrair telefone: usar chat.phone ou extrair de wa_chatid
+  let callerPhone = payload.chat?.phone || '';
+  if (!callerPhone) {
+    callerPhone = wa_chatid.split('@')[0];
+  }
+
   const categoria = OWNER_CATEGORY_MAP[payload.owner] || 'geral';
 
   return {

@@ -448,26 +448,90 @@ POST /webhook            — Configurar webhook
 GET  /sse                — Server-Sent Events
 ```
 
-#### Payload do webhook UAZAPI (mensagem recebida):
+#### Payload REAL — Mensagem individual:
 
 ```json
 {
+  "BaseUrl": "https://schappo.uazapi.com",
   "EventType": "messages",
+  "instanceName": "EEG",
   "owner": "556192894339",
+  "token": "TOKEN_DA_INSTANCIA",
+  "chatSource": "updated",
   "chat": {
-    "wa_chatid": "5561999999999@s.whatsapp.net",
-    "wa_contactName": "João Silva",
+    "wa_chatid": "556191223332@s.whatsapp.net",
+    "wa_chatlid": "250624293740768@lid",
     "wa_isGroup": false,
-    "imagePreview": "base64..."
+    "wa_contactName": "",
+    "wa_name": "",
+    "name": "",
+    "phone": "556191223332",
+    "imagePreview": "",
+    "wa_unreadCount": 1
   },
   "message": {
-    "id": "3EB0A1B2C3D4E5F6",
+    "id": "556192894339:AC7CFB9E5C7742D8BFE91B9803942A67",
+    "messageid": "AC7CFB9E5C7742D8BFE91B9803942A67",
+    "chatid": "556191223332@s.whatsapp.net",
+    "chatlid": "250624293740768@lid",
     "fromMe": false,
-    "content": "Olá, preciso agendar um exame",
-    "messageType": "text",
-    "chatid": "5561999999999@s.whatsapp.net",
-    "senderName": "João Silva",
-    "senderPhone": "5561999999999"
+    "type": "text",
+    "messageType": "ExtendedTextMessage",
+    "text": "Bom dia, gostaria de ter acesso ao exame",
+    "content": {
+      "text": "Bom dia, gostaria de ter acesso ao exame",
+      "contextInfo": { "expiration": 7776000 }
+    },
+    "sender": "250624293740768@lid",
+    "sender_pn": "556191223332@s.whatsapp.net",
+    "sender_lid": "250624293740768@lid",
+    "senderName": "",
+    "isGroup": false,
+    "groupName": "Unknown",
+    "messageTimestamp": 1771692584000,
+    "source": "android",
+    "wasSentByApi": false
+  }
+}
+```
+
+#### Payload REAL — Mensagem de grupo:
+
+```json
+{
+  "BaseUrl": "https://schappo.uazapi.com",
+  "EventType": "messages",
+  "instanceName": "EEG",
+  "owner": "556192894339",
+  "token": "TOKEN_DA_INSTANCIA",
+  "chatSource": "updated",
+  "chat": {
+    "wa_chatid": "120363400460335306@g.us",
+    "wa_isGroup": true,
+    "wa_contactName": "",
+    "wa_name": "CLAUDIA DOMINGO",
+    "name": "CLAUDIA DOMINGO",
+    "phone": "",
+    "imagePreview": "https://pps.whatsapp.net/v/t61.24694-24/...",
+    "wa_unreadCount": 44
+  },
+  "message": {
+    "id": "556192894339:4AF07FA16B4843F9853D",
+    "messageid": "4AF07FA16B4843F9853D",
+    "chatid": "120363400460335306@g.us",
+    "fromMe": false,
+    "type": "text",
+    "messageType": "Conversation",
+    "text": "*EEG 21/02/2026 - Claudia*\n\n🧠 Paciente...",
+    "content": "*EEG 21/02/2026 - Claudia*\n\n🧠 Paciente...",
+    "sender": "88807777009685@lid",
+    "sender_pn": "556191827054@s.whatsapp.net",
+    "sender_lid": "88807777009685@lid",
+    "senderName": "Claudia Santrib",
+    "isGroup": true,
+    "groupName": "CLAUDIA DOMINGO",
+    "messageTimestamp": 1771712966000,
+    "wasSentByApi": false
   }
 }
 ```
@@ -489,20 +553,22 @@ GET  /sse                — Server-Sent Events
 
 #### Mapeamento de campos UAZAPI → Banco:
 
-| UAZAPI Payload | Campo no Banco |
-|---|---|
-| `message.chatid` / `chat.wa_chatid` | `conversas.wa_chatid` |
-| `message.id` | `mensagens.wa_message_id` |
-| `message.fromMe` | `mensagens.from_me` |
-| `message.content` / `message.text` | `mensagens.conteudo` |
-| `message.messageType` | `mensagens.tipo_mensagem` |
-| `chat.wa_contactName` | `conversas.nome_contato` |
-| `message.groupName` | `conversas.nome_grupo` |
-| `chat.wa_isGroup` | `conversas.tipo` ('grupo' / 'individual') |
-| `owner` | `conversas.categoria` (via OWNER_CATEGORY_MAP) |
-| `chat.imagePreview` | `conversas.avatar_url` |
-| `message.senderName` (grupo) | `mensagens.sender_name` |
-| `message.senderPhone` (grupo) | `mensagens.sender_phone` |
+| UAZAPI Payload | Campo no Banco | Notas |
+|---|---|---|
+| `chat.wa_chatid` | `conversas.wa_chatid` | Chave unica da conversa |
+| `message.messageid` | `mensagens.wa_message_id` | Usar `messageid` (sem owner prefix) |
+| `message.fromMe` | `mensagens.from_me` | Boolean |
+| `message.text` | `mensagens.conteudo` | SEMPRE usar `.text` (string). `.content` pode ser objeto! |
+| `message.type` | `mensagens.tipo_mensagem` | 'text', 'image', 'audio', etc. |
+| `chat.name \|\| chat.wa_name` | `conversas.nome_contato` | `wa_contactName` geralmente vazio |
+| `message.groupName \|\| chat.name` | `conversas.nome_grupo` | Para grupos |
+| `chat.wa_isGroup` | `conversas.tipo` | true='grupo', false='individual' |
+| `owner` | `conversas.categoria` | Via OWNER_CATEGORY_MAP |
+| `chat.imagePreview` | `conversas.avatar_url` | Eh URL (nao base64!) |
+| `message.senderName` | `mensagens.sender_name` | Pode estar vazio em individuais |
+| `message.sender_pn` | `mensagens.sender_phone` | Usar `sender_pn`, NAO `sender` (que eh LID) |
+| `chat.phone` | `conversas.telefone` | Em individual; vazio em grupo |
+| `body.token` | validacao webhook | Comparar com WEBHOOK_SECRET |
 
 ### 360Dialog (WhatsApp — número Geral)
 

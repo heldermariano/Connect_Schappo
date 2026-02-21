@@ -90,25 +90,47 @@ export type SSEEvent =
 // --- Webhook Payloads ---
 
 export interface WebhookPayloadUAZAPI {
+  BaseUrl?: string;
   EventType: 'messages' | 'call' | 'status' | string;
+  instanceName?: string;
   owner: string;
+  token?: string;
+  chatSource?: string;
   chat: {
     wa_chatid: string;
-    wa_contactName?: string;
+    wa_chatlid?: string;
     wa_isGroup?: boolean;
+    wa_contactName?: string;
+    wa_name?: string;
+    name?: string;
+    phone?: string;
     imagePreview?: string;
+    wa_unreadCount?: number;
   };
   message: {
     id: string;
+    messageid?: string;
     fromMe?: boolean;
-    content?: string;
+    content?: string | { text: string; contextInfo?: Record<string, unknown> };
     text?: string;
+    type?: string;
     messageType?: string;
     chatid?: string;
+    chatlid?: string;
+    sender?: string;
+    sender_pn?: string;
+    sender_lid?: string;
     senderName?: string;
     senderPhone?: string;
+    isGroup?: boolean;
     groupName?: string;
     from?: string;
+    messageTimestamp?: number;
+    source?: string;
+    wasSentByApi?: boolean;
+    quoted?: string;
+    reaction?: string;
+    edited?: string;
   };
 }
 

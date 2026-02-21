@@ -2,12 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 import { WebhookPayloadUAZAPI } from '@/lib/types';
-import { parseUAZAPIMessage, parseUAZAPICall, isCallEvent } from '@/lib/webhook-parser-uazapi';
+import {
+  parseUAZAPIMessage,
+  parseUAZAPICall,
+  isCallEvent,
+  validateWebhookToken,
+} from '@/lib/webhook-parser-uazapi';
 
 export async function POST(request: NextRequest) {
   // Responder rapido — processar async
   try {
     const payload: WebhookPayloadUAZAPI = await request.json();
+
+    // Validar token do webhook (UAZAPI envia no body)
+    const webhookSecret = process.env.WEBHOOK_SECRET;
+    if (webhookSecret && !validateWebhookToken(payload, webhookSecret)) {
+      console.warn('[webhook/uazapi] Token invalido recebido');
+      // Retornar 200 mesmo assim para nao causar retry
+      return NextResponse.json({ status: 'ok' });
+    }
 
     // Processar em background (nao bloquear resposta)
     processUAZAPIWebhook(payload).catch((err) =>
@@ -69,7 +82,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
   );
   const conversaId = conversaResult.rows[0].id;
 
-  // 2. Registrar mensagem
+  // 2. Registrar mensagem (com metadata)
   const msgResult = await pool.query(
     `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) AS id`,
     [
@@ -83,7 +96,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
       parsed.media_url,
       parsed.media_mimetype,
       parsed.media_filename,
-      JSON.stringify({}),
+      JSON.stringify(parsed.metadata),
     ],
   );
   const msgId = msgResult.rows[0].id;
