@@ -1,0 +1,51 @@
+{
+  "_doc": "Configuracao do no HTTP Request no N8N para enviar auto-resposta via UAZAPI",
+  "_posicao": "Apos o no IF (isCallEvent = true)",
+
+  "node_type": "n8n-nodes-base.httpRequest",
+  "name": "Auto-resposta Chamada",
+  "parameters": {
+    "method": "POST",
+    "url": "={{$env.UAZAPI_URL}}/send/text",
+    "authentication": "none",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "token",
+          "value": "={{$env.UAZAPI_TOKEN}}"
+        }
+      ]
+    },
+    "sendBody": true,
+    "bodyContentType": "json",
+    "jsonBody": {
+      "phone": "={{$json._callerChatId}}",
+      "message": "={{$json._autoReplyMessage}}",
+      "isGroup": false
+    }
+  },
+
+  "_notas": {
+    "descricao": "Envia mensagem de texto via UAZAPI para o numero que tentou ligar",
+    "variaveis_necessarias": [
+      "UAZAPI_URL — URL base da instancia UAZAPI (ex: https://sua-instancia.uazapi.com)",
+      "UAZAPI_TOKEN — Token de autenticacao da UAZAPI"
+    ],
+    "campos_dinamicos": [
+      "_callerChatId — vem do no Function (n8n-call-detection.js)",
+      "_autoReplyMessage — mensagem montada no no Function"
+    ],
+    "importante": "O phone deve ser o wa_chatid completo (ex: 5561999887766@s.whatsapp.net)"
+  },
+
+  "_exemplo_payload_enviado": {
+    "phone": "5561999887766@s.whatsapp.net",
+    "message": "Ola! Notamos que voce tentou ligar para nosso numero de EEG.\n\nEste numero nao recebe chamadas de voz.\nPara falar conosco por telefone, ligue para *(61) 3345-5701*\nou envie uma mensagem para wa.me/556133455701.\n\nSe preferir, responda esta mensagem que atenderemos por aqui!",
+    "isGroup": false
+  }
+}
