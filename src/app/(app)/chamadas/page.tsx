@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { Chamada } from '@/lib/types';
-import Sidebar from '@/components/layout/Sidebar';
 import CallLog from '@/components/calls/CallLog';
 import CallAlert from '@/components/calls/CallAlert';
 import RamalStatus from '@/components/calls/RamalStatus';
@@ -53,52 +52,49 @@ export default function ChamadasPage() {
   useSSE(handleSSE);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-14 bg-schappo-500 flex items-center px-4 gap-4 shrink-0 shadow-sm">
-          <h1 className="text-lg font-semibold text-white">Chamadas</h1>
-          <div className="flex-1" />
+    <>
+      {/* Header */}
+      <header className="h-14 bg-schappo-500 flex items-center px-4 gap-4 shrink-0 shadow-sm">
+        <h1 className="text-lg font-semibold text-white">Chamadas</h1>
+        <div className="flex-1" />
+        <button
+          onClick={refresh}
+          className="text-xs text-white/80 hover:text-white hover:underline"
+        >
+          Atualizar
+        </button>
+      </header>
+
+      {/* Alerta de chamadas ativas */}
+      <CallAlert chamadas={chamadas} />
+
+      {/* Status dos ramais */}
+      <RamalStatus ramais={ramais} />
+
+      {/* Filtros */}
+      <div className="flex gap-1 px-4 py-2 border-b border-gray-200 bg-white">
+        {[
+          { value: '', label: 'Todas' },
+          { value: 'telefone', label: 'Telefone' },
+          { value: 'whatsapp', label: 'WhatsApp Voz' },
+          { value: 'whatsapp-tentativa', label: 'Tentativas' },
+        ].map((f) => (
           <button
-            onClick={refresh}
-            className="text-xs text-white/80 hover:text-white hover:underline"
+            key={f.value}
+            onClick={() => setFiltroOrigem(f.value)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              filtroOrigem === f.value
+                ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
           >
-            Atualizar
+            {f.label}
           </button>
-        </header>
-
-        {/* Alerta de chamadas ativas */}
-        <CallAlert chamadas={chamadas} />
-
-        {/* Status dos ramais */}
-        <RamalStatus ramais={ramais} />
-
-        {/* Filtros */}
-        <div className="flex gap-1 px-4 py-2 border-b border-gray-200 bg-white">
-          {[
-            { value: '', label: 'Todas' },
-            { value: 'telefone', label: 'Telefone' },
-            { value: 'whatsapp', label: 'WhatsApp Voz' },
-            { value: 'whatsapp-tentativa', label: 'Tentativas' },
-          ].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFiltroOrigem(f.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                filtroOrigem === f.value
-                  ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Lista de chamadas */}
-        <CallLog chamadas={chamadas} loading={loading} />
+        ))}
       </div>
-    </div>
+
+      {/* Lista de chamadas */}
+      <CallLog chamadas={chamadas} loading={loading} />
+    </>
   );
 }

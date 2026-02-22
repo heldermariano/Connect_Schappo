@@ -1,23 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useContatos } from '@/hooks/useContatos';
 import { Contato } from '@/lib/types';
 import ContatoList from '@/components/contatos/ContatoList';
 import AddContatoModal from '@/components/contatos/AddContatoModal';
 import ImportCsvModal from '@/components/contatos/ImportCsvModal';
+import ContatoDetailModal from '@/components/contatos/ContatoDetailModal';
 
 export default function ContatosPage() {
-  const router = useRouter();
   const { contatos, total, loading, loadingMore, hasMore, loadMore, busca, setBusca, refresh, syncing, syncResult, sync } = useContatos();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedContato, setSelectedContato] = useState<Contato | null>(null);
 
   const handleSelect = (contato: Contato) => {
-    if (contato.conversa_id) {
-      router.push(`/conversas/${contato.conversa_id}`);
-    }
+    setSelectedContato(contato);
   };
 
   const handleAdd = async (nome: string, telefone: string, email?: string) => {
@@ -116,6 +114,12 @@ export default function ContatosPage() {
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={refresh}
+      />
+      <ContatoDetailModal
+        contato={selectedContato}
+        open={!!selectedContato}
+        onClose={() => setSelectedContato(null)}
+        onSaved={refresh}
       />
     </div>
   );

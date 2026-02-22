@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import ImageLightbox from './ImageLightbox';
+
 interface MediaPreviewProps {
   tipo: string;
   messageId: number | null;
@@ -13,6 +16,8 @@ function proxyUrl(messageId: number): string {
 }
 
 export default function MediaPreview({ tipo, messageId, mimetype, filename }: MediaPreviewProps) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   // Sem messageId, mostrar placeholder
   if (!messageId) {
     return (
@@ -69,7 +74,16 @@ export default function MediaPreview({ tipo, messageId, mimetype, filename }: Me
     return (
       <div className="mb-1">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt="Imagem" className="max-w-full rounded max-h-80 object-contain" loading="lazy" />
+        <img
+          src={url}
+          alt="Imagem"
+          className="max-w-full rounded max-h-80 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+          loading="lazy"
+          onClick={() => setLightboxOpen(true)}
+        />
+        {lightboxOpen && (
+          <ImageLightbox src={url} alt="Imagem" onClose={() => setLightboxOpen(false)} />
+        )}
       </div>
     );
   }

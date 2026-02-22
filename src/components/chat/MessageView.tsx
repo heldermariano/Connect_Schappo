@@ -143,7 +143,7 @@ export default function MessageView({
       </div>
 
       {/* Campo de envio de mensagem */}
-      <MessageInput onSend={handleSend} />
+      <MessageInput onSend={handleSend} conversaId={conversa.id} />
     </div>
   );
 }

@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
   if (busca) {
     conditions.push(
-      `(c.nome_contato ILIKE $${paramIndex} OR c.nome_grupo ILIKE $${paramIndex} OR c.telefone ILIKE $${paramIndex})`,
+      `(c.nome_contato ILIKE $${paramIndex} OR c.nome_grupo ILIKE $${paramIndex} OR c.telefone ILIKE $${paramIndex} OR ct.nome ILIKE $${paramIndex})`,
     );
     values.push(`%${busca}%`);
     paramIndex++;
@@ -63,23 +63,34 @@ export async function GET(request: NextRequest) {
 
   try {
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM atd.conversas c ${whereClause}`,
+      `SELECT COUNT(*)
+       FROM atd.conversas c
+       LEFT JOIN atd.contatos ct ON ct.telefone = c.telefone AND ct.telefone IS NOT NULL AND ct.telefone != ''
+       ${whereClause}`,
       values,
     );
     const total = parseInt(countResult.rows[0].count);
 
     const result = await pool.query(
-      `SELECT c.*, a.nome AS atendente_nome
+      `SELECT c.*, a.nome AS atendente_nome,
+              COALESCE(ct.nome, c.nome_contato) AS nome_contato_display
        FROM atd.conversas c
        LEFT JOIN atd.atendentes a ON a.id = c.atendente_id
+       LEFT JOIN atd.contatos ct ON ct.telefone = c.telefone AND ct.telefone IS NOT NULL AND ct.telefone != ''
        ${whereClause}
        ORDER BY c.ultima_msg_at DESC NULLS LAST
        LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
       [...values, limit, offset],
     );
 
+    // Sobrescrever nome_contato com nome do contato salvo (se disponivel)
+    const conversas = result.rows.map((row) => ({
+      ...row,
+      nome_contato: row.nome_contato_display || row.nome_contato,
+    }));
+
     return NextResponse.json({
-      conversas: result.rows,
+      conversas,
       total,
       limit,
       offset,

@@ -3,25 +3,24 @@
 import { useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Conversa, Mensagem, Chamada } from '@/lib/types';
-import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import CategoryFilter from '@/components/filters/CategoryFilter';
 import ConversaList from '@/components/chat/ConversaList';
 import MessageView from '@/components/chat/MessageView';
 import CallAlert from '@/components/calls/CallAlert';
-import Softphone from '@/components/softphone/Softphone';
 import { useSSE } from '@/hooks/useSSE';
 import { useConversas } from '@/hooks/useConversas';
 import { useMensagens } from '@/hooks/useMensagens';
+import { useAppContext } from '@/contexts/AppContext';
 import { playNotificationBeep, showMentionToast } from '@/lib/notification';
 
 export default function ConversasPage() {
   const { data: session } = useSession();
+  const { operatorStatus, setOperatorStatus } = useAppContext();
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState('');
   const [selectedConversa, setSelectedConversa] = useState<Conversa | null>(null);
   const [activeCalls, setActiveCalls] = useState<Chamada[]>([]);
-  const [operatorStatus, setOperatorStatus] = useState('disponivel');
   // Set de conversa_ids onde o atendente foi mencionado (nao lidas)
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
   // Mapa de nomes de grupo por conversa_id (para toast)
@@ -160,44 +159,38 @@ export default function ConversasPage() {
   );
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0">
-        <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
-        <CallAlert chamadas={activeCalls} />
-        <div className="flex flex-1 min-h-0">
-          {/* Painel esquerdo: filtros + lista */}
-          <div className="w-80 border-r border-gray-200 flex flex-col shrink-0 bg-white">
-            <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} />
-            <ConversaList
-              conversas={conversas}
-              activeId={selectedConversa?.id ?? null}
-              onSelect={handleSelectConversa}
-              loading={loading}
-              mencionadoEm={mencionadoEm}
-            />
-          </div>
-
-          {/* Painel central: mensagens */}
-          <MessageView
-            conversa={selectedConversa}
-            mensagens={mensagens}
-            loading={loadingMsgs}
-            hasMore={hasMore}
-            onLoadMore={loadMore}
-            onSend={handleSendMensagem}
-            onMarcarLida={marcarComoLida}
-            onAtribuir={handleAtribuir}
-            onDialNumber={(number: string) => {
-              const event = new CustomEvent('softphone-dial', { detail: { number } });
-              window.dispatchEvent(event);
-            }}
+    <>
+      <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
+      <CallAlert chamadas={activeCalls} />
+      <div className="flex flex-1 min-h-0">
+        {/* Painel esquerdo: filtros + lista */}
+        <div className="w-80 border-r border-gray-200 flex flex-col shrink-0 bg-white">
+          <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} />
+          <ConversaList
+            conversas={conversas}
+            activeId={selectedConversa?.id ?? null}
+            onSelect={handleSelectConversa}
+            loading={loading}
+            mencionadoEm={mencionadoEm}
           />
-
-          {/* Painel direito: softphone (sempre visivel) */}
-          <Softphone operatorStatus={operatorStatus} />
         </div>
+
+        {/* Painel central: mensagens */}
+        <MessageView
+          conversa={selectedConversa}
+          mensagens={mensagens}
+          loading={loadingMsgs}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          onSend={handleSendMensagem}
+          onMarcarLida={marcarComoLida}
+          onAtribuir={handleAtribuir}
+          onDialNumber={(number: string) => {
+            const event = new CustomEvent('softphone-dial', { detail: { number } });
+            window.dispatchEvent(event);
+          }}
+        />
       </div>
-    </div>
+    </>
   );
 }
