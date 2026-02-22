@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 
 const NAV_ITEMS = [
   { href: '/conversas', label: 'Conversas', icon: 'chat' },
@@ -45,6 +46,11 @@ function SidebarLogo() {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const userName = (session?.user as { nome?: string })?.nome;
+  const initials = userName
+    ? userName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
 
   return (
     <aside className="w-16 bg-schappo-black flex flex-col items-center py-4 gap-2 shrink-0">
@@ -68,6 +74,25 @@ export default function Sidebar() {
           </Link>
         );
       })}
+
+      {/* Spacer + botão de logout no rodapé */}
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <div
+          title={userName || 'Usuário'}
+          className="w-9 h-9 rounded-full bg-schappo-500/20 flex items-center justify-center text-xs font-semibold text-schappo-300"
+        >
+          {initials}
+        </div>
+        <button
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          title="Sair"
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:text-red-400 hover:bg-white/5 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </button>
+      </div>
     </aside>
   );
 }
