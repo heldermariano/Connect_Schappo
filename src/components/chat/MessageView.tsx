@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
 import MessageBubble from './MessageBubble';
+import MessageInput from './MessageInput';
+import AtribuirDropdown from './AtribuirDropdown';
 import Avatar from '@/components/ui/Avatar';
 import CallButton from '@/components/calls/CallButton';
 
@@ -12,6 +14,9 @@ interface MessageViewProps {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
+  onSend: (conversaId: number, conteudo: string) => Promise<void>;
+  onMarcarLida: (conversaId: number) => void;
+  onAtribuir: (conversaId: number, atendenteId: number | null) => void;
 }
 
 export default function MessageView({
@@ -20,14 +25,37 @@ export default function MessageView({
   loading,
   hasMore,
   onLoadMore,
+  onSend,
+  onMarcarLida,
+  onAtribuir,
 }: MessageViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const markedReadRef = useRef<number | null>(null);
 
   // Auto-scroll para ultima mensagem
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensagens.length]);
+
+  // Marcar como lida ao selecionar conversa
+  useEffect(() => {
+    if (conversa && conversa.nao_lida > 0 && markedReadRef.current !== conversa.id) {
+      markedReadRef.current = conversa.id;
+      onMarcarLida(conversa.id);
+    }
+    if (!conversa) {
+      markedReadRef.current = null;
+    }
+  }, [conversa, onMarcarLida]);
+
+  const handleSend = useCallback(
+    async (conteudo: string) => {
+      if (!conversa) return;
+      await onSend(conversa.id, conteudo);
+    },
+    [conversa, onSend],
+  );
 
   if (!conversa) {
     return (
@@ -59,6 +87,12 @@ export default function MessageView({
             {conversa.telefone && ` \u00B7 ${conversa.telefone}`}
           </div>
         </div>
+        <AtribuirDropdown
+          conversaId={conversa.id}
+          atendenteId={conversa.atendente_id}
+          atendenteNome={(conversa as Conversa & { atendente_nome?: string }).atendente_nome}
+          onAtribuir={onAtribuir}
+        />
         {/* Click-to-call: apenas para conversas individuais com telefone */}
         {!isGroup && conversa.telefone && (
           <CallButton telefone={conversa.telefone} size="md" label="Ligar" />
@@ -95,10 +129,8 @@ export default function MessageView({
         <div ref={bottomRef} />
       </div>
 
-      {/* Barra de status read-only */}
-      <div className="h-10 bg-gray-100 border-t border-gray-200 flex items-center justify-center text-xs text-gray-400 shrink-0">
-        Modo visualizacao &mdash; Fase 1 (read-only)
-      </div>
+      {/* Campo de envio de mensagem */}
+      <MessageInput onSend={handleSend} />
     </div>
   );
 }

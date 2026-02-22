@@ -39,7 +39,7 @@ export default function ConversasPage() {
     }
   })();
 
-  const { conversas, loading, updateConversa, refresh } = useConversas({
+  const { conversas, loading, updateConversa, refresh, marcarComoLida } = useConversas({
     ...filterParams,
     busca: busca || undefined,
   });
@@ -57,6 +57,7 @@ export default function ConversasPage() {
     hasMore,
     loadMore,
     addMensagem,
+    sendMensagem,
   } = useMensagens(selectedConversa?.id ?? null);
 
   const userPhone = session?.user?.telefone;
@@ -121,9 +122,9 @@ export default function ConversasPage() {
 
   const handleSelectConversa = (conversa: Conversa) => {
     setSelectedConversa(conversa);
-    // Marcar como lida localmente
+    // Marcar como lida (local + server)
     if (conversa.nao_lida > 0) {
-      updateConversa(conversa.id, { nao_lida: 0 });
+      marcarComoLida(conversa.id);
     }
     // Limpar badge de mencao ao abrir a conversa
     setMencionadoEm((prev) => {
@@ -132,6 +133,29 @@ export default function ConversasPage() {
       return next;
     });
   };
+
+  const handleSendMensagem = useCallback(
+    async (conversaId: number, conteudo: string) => {
+      await sendMensagem(conversaId, conteudo);
+      // Atualizar conversa na lista (ultima msg e nao_lida)
+      updateConversa(conversaId, {
+        ultima_mensagem: conteudo.substring(0, 200),
+        ultima_msg_at: new Date().toISOString(),
+        nao_lida: 0,
+      });
+    },
+    [sendMensagem, updateConversa],
+  );
+
+  const handleAtribuir = useCallback(
+    (conversaId: number, atendenteId: number | null) => {
+      updateConversa(conversaId, { atendente_id: atendenteId });
+      if (selectedConversa && selectedConversa.id === conversaId) {
+        setSelectedConversa((prev) => prev ? { ...prev, atendente_id: atendenteId } : null);
+      }
+    },
+    [updateConversa, selectedConversa],
+  );
 
   return (
     <div className="flex h-screen">
@@ -159,6 +183,9 @@ export default function ConversasPage() {
             loading={loadingMsgs}
             hasMore={hasMore}
             onLoadMore={loadMore}
+            onSend={handleSendMensagem}
+            onMarcarLida={marcarComoLida}
+            onAtribuir={handleAtribuir}
           />
         </div>
       </div>

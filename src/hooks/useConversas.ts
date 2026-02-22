@@ -16,6 +16,7 @@ interface UseConversasResult {
   error: string | null;
   refresh: () => void;
   updateConversa: (conversaId: number, updates: Partial<Conversa>) => void;
+  marcarComoLida: (conversaId: number) => void;
 }
 
 export function useConversas(params: UseConversasParams = {}): UseConversasResult {
@@ -62,5 +63,14 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
     );
   }, []);
 
-  return { conversas, total, loading, error, refresh: fetchConversas, updateConversa };
+  const marcarComoLida = useCallback((conversaId: number) => {
+    // Atualizar localmente
+    updateConversa(conversaId, { nao_lida: 0 });
+    // Chamar API (fire-and-forget)
+    fetch(`/api/conversas/${conversaId}/read`, { method: 'PATCH' }).catch(() => {
+      // Silenciar erro — o update local ja foi feito
+    });
+  }, [updateConversa]);
+
+  return { conversas, total, loading, error, refresh: fetchConversas, updateConversa, marcarComoLida };
 }

@@ -10,6 +10,7 @@ interface UseMensagensResult {
   hasMore: boolean;
   loadMore: () => void;
   addMensagem: (msg: Mensagem) => void;
+  sendMensagem: (conversaId: number, conteudo: string) => Promise<void>;
 }
 
 export function useMensagens(conversaId: number | null): UseMensagensResult {
@@ -66,5 +67,23 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     });
   }, []);
 
-  return { mensagens, loading, error, hasMore, loadMore, addMensagem };
+  const sendMensagem = useCallback(async (cId: number, conteudo: string) => {
+    const res = await fetch('/api/mensagens/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversa_id: cId, conteudo }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: 'Erro ao enviar' }));
+      throw new Error(data.error || 'Erro ao enviar mensagem');
+    }
+
+    const data = await res.json();
+    if (data.mensagem) {
+      addMensagem(data.mensagem);
+    }
+  }, [addMensagem]);
+
+  return { mensagens, loading, error, hasMore, loadMore, addMensagem, sendMensagem };
 }
