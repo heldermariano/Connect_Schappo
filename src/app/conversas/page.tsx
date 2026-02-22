@@ -142,7 +142,7 @@ export default function ConversasPage() {
         <div className="flex flex-1 min-h-0">
           {/* Painel esquerdo: filtros + lista */}
           <div className="w-80 border-r border-gray-200 flex flex-col shrink-0 bg-white">
-            <CategoryFilter selected={filtro} onChange={setFiltro} />
+            <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} />
             <ConversaList
               conversas={conversas}
               activeId={selectedConversa?.id ?? null}

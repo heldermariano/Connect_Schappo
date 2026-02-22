@@ -3,19 +3,30 @@
 interface CategoryFilterProps {
   selected: string;
   onChange: (value: string) => void;
+  grupo?: string;
 }
 
-const FILTERS = [
+const ALL_FILTERS = [
   { value: '', label: 'Todos' },
   { value: 'individual', label: 'Individual' },
   { value: 'grupo-eeg', label: 'Grp EEG' },
   { value: 'grupo-recepcao', label: 'Grp Recep' },
 ];
 
-export default function CategoryFilter({ selected, onChange }: CategoryFilterProps) {
+// Filtros permitidos por grupo de atendimento
+const GRUPO_FILTERS: Record<string, string[]> = {
+  recepcao: ['', 'individual', 'grupo-recepcao'],
+  eeg: ['', 'individual', 'grupo-eeg'],
+  todos: ['', 'individual', 'grupo-eeg', 'grupo-recepcao'],
+};
+
+export default function CategoryFilter({ selected, onChange, grupo = 'todos' }: CategoryFilterProps) {
+  const allowedValues = GRUPO_FILTERS[grupo] || GRUPO_FILTERS.todos;
+  const filters = ALL_FILTERS.filter((f) => allowedValues.includes(f.value));
+
   return (
     <div className="flex gap-1 px-3 py-2 border-b border-gray-200 bg-white">
-      {FILTERS.map((f) => (
+      {filters.map((f) => (
         <button
           key={f.value}
           onClick={() => onChange(f.value)}

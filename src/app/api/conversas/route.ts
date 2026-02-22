@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 
+// Categorias permitidas por grupo de atendimento
+const GRUPO_CATEGORIAS: Record<string, string[]> = {
+  recepcao: ['recepcao', 'geral'],
+  eeg: ['eeg'],
+  todos: ['eeg', 'recepcao', 'geral'],
+};
+
 export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
+  }
+
+  const grupo = (session.user as { grupo?: string }).grupo || 'todos';
+  const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
+
   const params = request.nextUrl.searchParams;
   const categoria = params.get('categoria'); // 'eeg', 'recepcao', 'geral'
   const tipo = params.get('tipo'); // 'individual', 'grupo'
@@ -13,7 +30,18 @@ export async function GET(request: NextRequest) {
   const values: unknown[] = [];
   let paramIndex = 1;
 
+  // Filtro por grupo do atendente (server-side)
+  if (grupo !== 'todos') {
+    const placeholders = categoriasPermitidas.map(() => `$${paramIndex++}`);
+    conditions.push(`c.categoria IN (${placeholders.join(', ')})`);
+    values.push(...categoriasPermitidas);
+  }
+
   if (categoria) {
+    // Validar que a categoria solicitada esta dentro do escopo permitido
+    if (!categoriasPermitidas.includes(categoria)) {
+      return NextResponse.json({ conversas: [], total: 0, limit, offset });
+    }
     conditions.push(`c.categoria = $${paramIndex++}`);
     values.push(categoria);
   }
