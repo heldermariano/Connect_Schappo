@@ -85,6 +85,10 @@ WEBHOOK_SECRET=token_seguro_producao
 PANEL_USER=admin
 PANEL_PASS=senha_segura_producao
 
+# NextAuth (obrigatorio em producao)
+NEXTAUTH_SECRET=gerar_com_openssl_rand_base64_32
+NEXTAUTH_URL=https://connect.clinicaschappo.com
+
 # App
 NEXT_PUBLIC_APP_URL=https://connect.clinicaschappo.com
 NEXT_PUBLIC_APP_NAME=Connect Schappo

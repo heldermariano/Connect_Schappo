@@ -5,12 +5,13 @@ import { useState } from 'react';
 interface AddContatoModalProps {
   open: boolean;
   onClose: () => void;
-  onAdd: (nome: string, telefone: string) => Promise<void>;
+  onAdd: (nome: string, telefone: string, email?: string) => Promise<void>;
 }
 
 export default function AddContatoModal({ open, onClose, onAdd }: AddContatoModalProps) {
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,9 +26,10 @@ export default function AddContatoModal({ open, onClose, onAdd }: AddContatoModa
     try {
       setLoading(true);
       setError(null);
-      await onAdd(nome.trim(), telefone.trim());
+      await onAdd(nome.trim(), telefone.trim(), email.trim() || undefined);
       setNome('');
       setTelefone('');
+      setEmail('');
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao adicionar');
@@ -68,6 +70,17 @@ export default function AddContatoModal({ open, onClose, onAdd }: AddContatoModa
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent"
             />
             <p className="text-xs text-gray-400 mt-1">Formato: DDI + DDD + numero (ex: 5561999999999)</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="contato@email.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent"
+            />
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}

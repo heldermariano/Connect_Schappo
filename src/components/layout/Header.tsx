@@ -10,12 +10,15 @@ import StatusSelector from '@/components/ui/StatusSelector';
 interface HeaderProps {
   busca: string;
   onBuscaChange: (value: string) => void;
+  presenca?: StatusPresenca;
+  onPresencaChange?: (status: StatusPresenca) => void;
 }
 
-export default function Header({ busca, onBuscaChange }: HeaderProps) {
+export default function Header({ busca, onBuscaChange, presenca: presencaProp, onPresencaChange }: HeaderProps) {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [presenca, setPresenca] = useState<StatusPresenca>('disponivel');
+  const [presencaLocal, setPresencaLocal] = useState<StatusPresenca>('disponivel');
+  const presenca = presencaProp ?? presencaLocal;
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Fechar menu ao clicar fora
@@ -32,7 +35,8 @@ export default function Header({ busca, onBuscaChange }: HeaderProps) {
   }, [menuOpen]);
 
   const handleStatusChange = useCallback(async (newStatus: StatusPresenca) => {
-    setPresenca(newStatus);
+    setPresencaLocal(newStatus);
+    onPresencaChange?.(newStatus);
     try {
       await fetch('/api/atendentes/status', {
         method: 'PATCH',
@@ -42,7 +46,7 @@ export default function Header({ busca, onBuscaChange }: HeaderProps) {
     } catch (err) {
       console.error('Erro ao atualizar status:', err);
     }
-  }, []);
+  }, [onPresencaChange]);
 
   const handleLogout = useCallback(async () => {
     // Atualizar status para offline antes de sair

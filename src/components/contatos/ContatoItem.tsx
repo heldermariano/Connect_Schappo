@@ -57,9 +57,16 @@ export default function ContatoItem({ contato, onClick }: ContatoItemProps) {
           )}
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="text-xs text-gray-500">
-            {formatPhone(contato.telefone)}
-          </span>
+          <div className="min-w-0">
+            <span className="text-xs text-gray-500 block">
+              {formatPhone(contato.telefone)}
+            </span>
+            {contato.email && (
+              <span className="text-[11px] text-gray-400 block truncate">
+                {contato.email}
+              </span>
+            )}
+          </div>
           {contato.categoria && (
             <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-schappo-100 text-schappo-700 shrink-0 ml-2">
               {CATEGORIA_LABELS[contato.categoria] || contato.categoria}

@@ -6,11 +6,13 @@ import { useContatos } from '@/hooks/useContatos';
 import { Contato } from '@/lib/types';
 import ContatoList from '@/components/contatos/ContatoList';
 import AddContatoModal from '@/components/contatos/AddContatoModal';
+import ImportCsvModal from '@/components/contatos/ImportCsvModal';
 
 export default function ContatosPage() {
   const router = useRouter();
   const { contatos, total, loading, busca, setBusca, refresh, syncing, syncResult, sync } = useContatos();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const handleSelect = (contato: Contato) => {
     if (contato.conversa_id) {
@@ -18,11 +20,11 @@ export default function ContatosPage() {
     }
   };
 
-  const handleAdd = async (nome: string, telefone: string) => {
+  const handleAdd = async (nome: string, telefone: string, email?: string) => {
     const res = await fetch('/api/contatos/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome, telefone }),
+      body: JSON.stringify({ nome, telefone, email }),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -41,6 +43,15 @@ export default function ContatosPage() {
             {!loading && <span className="text-sm font-normal text-gray-400 ml-2">({total})</span>}
           </h1>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Importar CSV
+            </button>
             <button
               onClick={sync}
               disabled={syncing}
@@ -92,11 +103,16 @@ export default function ContatosPage() {
         onSelect={handleSelect}
       />
 
-      {/* Modal */}
+      {/* Modais */}
       <AddContatoModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAdd}
+      />
+      <ImportCsvModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={refresh}
       />
     </div>
   );

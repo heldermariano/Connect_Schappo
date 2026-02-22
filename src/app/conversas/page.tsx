@@ -9,6 +9,7 @@ import CategoryFilter from '@/components/filters/CategoryFilter';
 import ConversaList from '@/components/chat/ConversaList';
 import MessageView from '@/components/chat/MessageView';
 import CallAlert from '@/components/calls/CallAlert';
+import Softphone from '@/components/softphone/Softphone';
 import { useSSE } from '@/hooks/useSSE';
 import { useConversas } from '@/hooks/useConversas';
 import { useMensagens } from '@/hooks/useMensagens';
@@ -20,6 +21,7 @@ export default function ConversasPage() {
   const [filtro, setFiltro] = useState('');
   const [selectedConversa, setSelectedConversa] = useState<Conversa | null>(null);
   const [activeCalls, setActiveCalls] = useState<Chamada[]>([]);
+  const [operatorStatus, setOperatorStatus] = useState('disponivel');
   // Set de conversa_ids onde o atendente foi mencionado (nao lidas)
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
   // Mapa de nomes de grupo por conversa_id (para toast)
@@ -157,11 +159,13 @@ export default function ConversasPage() {
     [updateConversa, selectedConversa],
   );
 
+  const sipEnabled = (session?.user as { sip_enabled?: boolean })?.sip_enabled ?? false;
+
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0">
-        <Header busca={busca} onBuscaChange={setBusca} />
+        <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
         <CallAlert chamadas={activeCalls} />
         <div className="flex flex-1 min-h-0">
           {/* Painel esquerdo: filtros + lista */}
@@ -176,7 +180,7 @@ export default function ConversasPage() {
             />
           </div>
 
-          {/* Painel direito: mensagens */}
+          {/* Painel central: mensagens */}
           <MessageView
             conversa={selectedConversa}
             mensagens={mensagens}
@@ -186,7 +190,17 @@ export default function ConversasPage() {
             onSend={handleSendMensagem}
             onMarcarLida={marcarComoLida}
             onAtribuir={handleAtribuir}
+            onDialNumber={sipEnabled ? (number: string) => {
+              // Preencher o dialpad do softphone com o numero
+              const event = new CustomEvent('softphone-dial', { detail: { number } });
+              window.dispatchEvent(event);
+            } : undefined}
           />
+
+          {/* Painel direito: softphone */}
+          {sipEnabled && (
+            <Softphone operatorStatus={operatorStatus} />
+          )}
         </div>
       </div>
     </div>

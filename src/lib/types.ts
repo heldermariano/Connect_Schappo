@@ -12,6 +12,11 @@ export interface Atendente {
   ramal: string | null;
   ativo: boolean;
   role: 'atendente' | 'supervisor' | 'admin';
+  sip_server: string | null;
+  sip_port: number;
+  sip_username: string | null;
+  sip_transport: 'wss' | 'ws';
+  sip_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -64,11 +69,14 @@ export interface Contato {
   id: number;
   nome: string;
   telefone: string | null;
+  email: string | null;
   avatar_url: string | null;
   tipo: 'individual' | 'grupo';
   conversa_id: number | null;
   categoria: 'eeg' | 'recepcao' | 'geral';
   ultima_msg_at: string | null;
+  chatwoot_id: number | null;
+  notas: string | null;
 }
 
 export interface Chamada {
@@ -92,6 +100,21 @@ export interface Chamada {
   created_at: string;
 }
 
+// --- SIP / Softphone ---
+
+export interface SipSettings {
+  sip_server: string;
+  sip_port: number;
+  sip_username: string;
+  sip_password: string;
+  sip_transport: 'wss' | 'ws';
+  sip_enabled: boolean;
+}
+
+export type SipRegistrationState = 'unregistered' | 'registering' | 'registered' | 'error';
+
+export type SipCallState = 'idle' | 'calling' | 'ringing' | 'in-call' | 'on-hold';
+
 // --- SSE Events ---
 
 export type SSEEvent =
@@ -100,7 +123,8 @@ export type SSEEvent =
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
   | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }
-  | { type: 'atendente_status'; data: { atendente_id: number; nome: string; status: string } };
+  | { type: 'atendente_status'; data: { atendente_id: number; nome: string; status: string } }
+  | { type: 'softphone_incoming'; data: { caller_number: string; caller_name?: string } };
 
 // --- Webhook Payloads ---
 

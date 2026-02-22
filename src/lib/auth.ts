@@ -12,6 +12,7 @@ export interface AuthUser {
   role: string;
   ramal: string | null;
   telefone: string | null;
+  sip_enabled: boolean;
 }
 
 // Estende os tipos do NextAuth
@@ -40,7 +41,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const result = await pool.query(
-          `SELECT id, nome, username, password_hash, grupo_atendimento, role, ramal, telefone
+          `SELECT id, nome, username, password_hash, grupo_atendimento, role, ramal, telefone, sip_enabled
            FROM atd.atendentes
            WHERE username = $1 AND ativo = true`,
           [credentials.username],
@@ -70,6 +71,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           ramal: user.ramal || null,
           telefone: user.telefone || null,
+          sip_enabled: user.sip_enabled || false,
         };
       },
     }),
@@ -84,6 +86,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.ramal = user.ramal;
         token.telefone = user.telefone;
+        token.sip_enabled = user.sip_enabled;
       }
       return token;
     },
@@ -96,6 +99,7 @@ export const authOptions: NextAuthOptions = {
         role: token.role as string,
         ramal: (token.ramal as string) || null,
         telefone: (token.telefone as string) || null,
+        sip_enabled: (token.sip_enabled as boolean) || false,
       };
       return session;
     },
