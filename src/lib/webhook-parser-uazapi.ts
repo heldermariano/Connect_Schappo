@@ -35,20 +35,79 @@ export interface ParsedUAZAPICall {
  * Extrai o texto da mensagem de forma segura.
  * message.content pode ser string OU objeto com campo .text
  * message.text eh sempre string (mais confiavel)
+ * NUNCA retornar JSON bruto — sempre extrair o texto limpo
  */
 function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
   // Prioridade 1: message.text (sempre string)
   if (message.text && typeof message.text === 'string') {
     return message.text;
   }
-  // Prioridade 2: message.content (pode ser string ou objeto)
+  // Prioridade 2: message.content como string
   if (typeof message.content === 'string') {
+    // Se parecer JSON, tentar parsear e extrair .text
+    if (message.content.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(message.content);
+        if (parsed.text) return parsed.text;
+      } catch { /* nao eh JSON valido, usar como string */ }
+    }
     return message.content;
   }
-  if (message.content && typeof message.content === 'object' && 'text' in message.content) {
-    return message.content.text;
+  // Prioridade 3: message.content como objeto
+  if (message.content && typeof message.content === 'object') {
+    if ('text' in message.content && typeof message.content.text === 'string') {
+      return message.content.text;
+    }
+    // Para reacoes, extrair o emoji
+    if ('text' in message.content) {
+      return String(message.content.text || '');
+    }
   }
   return '';
+}
+
+/**
+ * Extrai URL de midia do payload.
+ * Para mensagens de midia (imagem, audio, video, documento, sticker),
+ * a URL esta dentro de message.content como objeto com campo URL.
+ */
+function extractMediaUrl(message: WebhookPayloadUAZAPI['message']): string | null {
+  const content = message.content;
+  if (!content || typeof content !== 'object') return null;
+
+  // URL direta no content
+  if ('URL' in content && typeof content.URL === 'string') {
+    return content.URL;
+  }
+  // URL dentro de submensagem (quotedMessage.imageMessage.URL etc)
+  return null;
+}
+
+/**
+ * Extrai mimetype da midia do payload.
+ */
+function extractMediaMimetype(message: WebhookPayloadUAZAPI['message']): string | null {
+  const content = message.content;
+  if (!content || typeof content !== 'object') return null;
+  if ('mimetype' in content && typeof content.mimetype === 'string') {
+    return content.mimetype;
+  }
+  return null;
+}
+
+/**
+ * Extrai nome do arquivo da midia.
+ */
+function extractMediaFilename(message: WebhookPayloadUAZAPI['message']): string | null {
+  const content = message.content;
+  if (!content || typeof content !== 'object') return null;
+  if ('fileName' in content && typeof content.fileName === 'string') {
+    return content.fileName;
+  }
+  if ('title' in content && typeof content.title === 'string') {
+    return content.title;
+  }
+  return null;
 }
 
 /**
@@ -117,15 +176,36 @@ function extractConversationPhone(chat: WebhookPayloadUAZAPI['chat']): string {
 
 /**
  * Normaliza o tipo de mensagem.
- * UAZAPI envia 'Conversation' e 'ExtendedTextMessage' para texto.
+ * UAZAPI envia messageType em PascalCase (ex: 'ExtendedTextMessage', 'ImageMessage').
+ * Normalizar para tipos simples: text, image, audio, video, document, sticker, reaction, contact, location
  */
 function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string {
   const rawType = message.messageType || message.type || 'text';
-  // Normalizar tipos de texto
-  if (rawType === 'Conversation' || rawType === 'ExtendedTextMessage') {
+  const lower = rawType.toLowerCase();
+
+  // Tipos de texto
+  if (lower === 'conversation' || lower === 'extendedtextmessage') {
     return 'text';
   }
-  return rawType.toLowerCase();
+  // Tipos de midia — extrair nome base
+  if (lower.endsWith('message')) {
+    const base = lower.replace('message', '');
+    // Mapear nomes conhecidos
+    const MAP: Record<string, string> = {
+      image: 'image',
+      audio: 'audio',
+      video: 'video',
+      document: 'document',
+      sticker: 'sticker',
+      reaction: 'reaction',
+      contact: 'contact',
+      location: 'location',
+      liveLocation: 'location',
+      livelocation: 'location',
+    };
+    return MAP[base] || base;
+  }
+  return lower;
 }
 
 /**
@@ -193,9 +273,9 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
     sender_name: extractSenderName(message) || extractContactName(chat, message) || null,
     tipo_mensagem: normalizeMessageType(message),
     conteudo: extractMessageText(message) || null,
-    media_url: null, // TODO: extrair para mensagens de midia
-    media_mimetype: null,
-    media_filename: null,
+    media_url: extractMediaUrl(message),
+    media_mimetype: extractMediaMimetype(message),
+    media_filename: extractMediaFilename(message),
     tipo: isGroup ? 'grupo' : 'individual',
     categoria,
     provider: 'uazapi',

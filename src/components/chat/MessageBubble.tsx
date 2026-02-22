@@ -43,6 +43,34 @@ function formatPhoneShort(phone: string | null): string {
 }
 
 /**
+ * Limpa conteudo que pode ter sido salvo como JSON bruto.
+ * Extrai o campo .text de objetos JSON, ou retorna null se for pura midia.
+ */
+function cleanContent(conteudo: string | null, tipo: string): string | null {
+  if (!conteudo) return null;
+
+  // Se nao comeca com {, eh texto normal
+  if (!conteudo.startsWith('{')) return conteudo;
+
+  try {
+    const parsed = JSON.parse(conteudo);
+    // Se tem campo .text, extrair
+    if (parsed.text && typeof parsed.text === 'string') {
+      return parsed.text;
+    }
+    // Se eh midia (tem URL), nao exibir como texto
+    if (parsed.URL) return null;
+    // Se eh reacao (tem key), extrair texto
+    if (parsed.key && parsed.text !== undefined) {
+      return String(parsed.text);
+    }
+  } catch {
+    // Nao eh JSON valido, retornar como esta
+  }
+  return conteudo;
+}
+
+/**
  * Renderiza texto com mencoes destacadas em negrito laranja.
  * Detecta padroes @NUMERO e @NOME no texto.
  */
@@ -100,13 +128,31 @@ function renderTextWithMentions(text: string, mencoes: string[]): ReactNode[] {
 
 export default function MessageBubble({ mensagem, showSender }: MessageBubbleProps) {
   const isMe = mensagem.from_me;
-  const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem);
+  const tipoNorm = mensagem.tipo_mensagem.toLowerCase().replace('message', '');
+  const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem)
+    || ['image', 'audio', 'video', 'document', 'sticker'].includes(tipoNorm);
+  const isReaction = mensagem.tipo_mensagem === 'reaction' || tipoNorm === 'reaction';
+
+  // Limpar conteudo que pode ser JSON bruto (dados antigos)
+  const textoLimpo = cleanContent(mensagem.conteudo, mensagem.tipo_mensagem);
+
+  // Extrair media_url de conteudo JSON se media_url estiver vazio
+  let mediaUrl = mensagem.media_url;
+  if (!mediaUrl && mensagem.conteudo?.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(mensagem.conteudo);
+      if (parsed.URL) mediaUrl = parsed.URL;
+    } catch { /* ignorar */ }
+  }
 
   // Nome a exibir: sender_name ou telefone formatado
   const senderDisplay = mensagem.sender_name || formatPhoneShort(mensagem.sender_phone);
   const senderColor = senderDisplay ? getSenderColor(senderDisplay) : 'text-schappo-600';
 
   const mencoes = mensagem.mencoes || [];
+
+  // Reacoes: exibir inline compacto
+  if (isReaction) return null;
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
@@ -125,19 +171,19 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
         {/* Preview de midia */}
         {hasMedia && (
           <MediaPreview
-            tipo={mensagem.tipo_mensagem}
-            url={mensagem.media_url}
+            tipo={mensagem.tipo_mensagem.includes('Message') ? tipoNorm : mensagem.tipo_mensagem}
+            url={mediaUrl}
             mimetype={mensagem.media_mimetype}
             filename={mensagem.media_filename}
           />
         )}
 
         {/* Conteudo de texto com mencoes destacadas */}
-        {mensagem.conteudo && (
+        {textoLimpo && (
           <p className="text-sm whitespace-pre-wrap break-words">
             {mencoes.length > 0
-              ? renderTextWithMentions(mensagem.conteudo, mencoes)
-              : mensagem.conteudo}
+              ? renderTextWithMentions(textoLimpo, mencoes)
+              : textoLimpo}
           </p>
         )}
 

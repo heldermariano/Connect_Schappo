@@ -76,17 +76,17 @@ export default function Sidebar() {
       })}
 
       {/* Spacer + botão de logout no rodapé */}
-      <div className="mt-auto flex flex-col items-center gap-2">
+      <div className="mt-auto flex flex-col items-center gap-2 pb-2">
         <div
           title={userName || 'Usuário'}
-          className="w-9 h-9 rounded-full bg-schappo-500/20 flex items-center justify-center text-xs font-semibold text-schappo-300"
+          className="w-9 h-9 rounded-full bg-schappo-500/30 flex items-center justify-center text-xs font-bold text-white"
         >
           {initials}
         </div>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
           title="Sair"
-          className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:text-red-400 hover:bg-white/5 transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-300 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
