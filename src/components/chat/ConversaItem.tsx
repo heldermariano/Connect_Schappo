@@ -83,6 +83,16 @@ export default function ConversaItem({ conversa, active, onClick, mencionado }: 
             )}
           </div>
         </div>
+        {/* Badge de atribuição */}
+        <div className="mt-0.5">
+          {conversa.atendente_id ? (
+            <span className="text-[10px] text-green-600">
+              Respondido por <span className="font-semibold">{(conversa as Conversa & { atendente_nome?: string }).atendente_nome || 'Operador'}</span>
+            </span>
+          ) : (
+            <span className="text-[10px] text-gray-400">Não atribuída</span>
+          )}
+        </div>
       </div>
     </button>
   );

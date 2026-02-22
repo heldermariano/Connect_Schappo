@@ -74,6 +74,14 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
 
     if (msgId === 0) continue; // Duplicada
 
+    // Reset atribuicao quando cliente envia mensagem (nao from_me)
+    if (!parsed.from_me) {
+      await pool.query(
+        `UPDATE atd.conversas SET atendente_id = NULL WHERE id = $1 AND atendente_id IS NOT NULL`,
+        [conversaId],
+      );
+    }
+
     // 3. Buscar mensagem completa
     const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);
 
@@ -84,7 +92,7 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
     });
 
     const convData = await pool.query(
-      `SELECT ultima_mensagem, nao_lida FROM atd.conversas WHERE id = $1`,
+      `SELECT ultima_mensagem, nao_lida, atendente_id FROM atd.conversas WHERE id = $1`,
       [conversaId],
     );
     if (convData.rows[0]) {
@@ -94,6 +102,7 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
           conversa_id: conversaId,
           ultima_msg: convData.rows[0].ultima_mensagem || '',
           nao_lida: convData.rows[0].nao_lida,
+          atendente_id: convData.rows[0].atendente_id,
         },
       });
     }

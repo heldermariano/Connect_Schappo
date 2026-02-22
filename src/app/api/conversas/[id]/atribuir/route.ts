@@ -37,7 +37,7 @@ export async function PATCH(
 
     const result = await pool.query(
       `UPDATE atd.conversas SET atendente_id = $1, updated_at = NOW()
-       WHERE id = $2 RETURNING id, ultima_mensagem, nao_lida`,
+       WHERE id = $2 RETURNING id, ultima_mensagem, nao_lida, atendente_id`,
       [atendente_id || null, conversaId],
     );
 
@@ -47,6 +47,16 @@ export async function PATCH(
 
     const conversa = result.rows[0];
 
+    // Buscar nome do atendente para o SSE
+    let atendente_nome: string | null = null;
+    if (conversa.atendente_id) {
+      const atendenteRes = await pool.query(
+        `SELECT nome FROM atd.atendentes WHERE id = $1`,
+        [conversa.atendente_id],
+      );
+      atendente_nome = atendenteRes.rows[0]?.nome || null;
+    }
+
     // Emitir SSE
     sseManager.broadcast({
       type: 'conversa_atualizada',
@@ -54,6 +64,8 @@ export async function PATCH(
         conversa_id: conversaId,
         ultima_msg: conversa.ultima_mensagem || '',
         nao_lida: conversa.nao_lida,
+        atendente_id: conversa.atendente_id,
+        atendente_nome,
       },
     });
 

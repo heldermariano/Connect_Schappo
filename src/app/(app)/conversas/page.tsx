@@ -150,12 +150,20 @@ export default function ConversasPage() {
         }
       }
       if (event === 'conversa_atualizada') {
-        const d = data as { conversa_id: number; ultima_msg: string; nao_lida: number };
-        updateConversa(d.conversa_id, {
+        const d = data as { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null };
+        const updates: Partial<Conversa> = {
           ultima_mensagem: d.ultima_msg,
           nao_lida: d.nao_lida,
           ultima_msg_at: new Date().toISOString(),
-        });
+        };
+        if (d.atendente_id !== undefined) {
+          updates.atendente_id = d.atendente_id;
+        }
+        updateConversa(d.conversa_id, updates);
+        // Atualizar conversa selecionada se for a mesma
+        if (selectedConversa && selectedConversa.id === d.conversa_id && d.atendente_id !== undefined) {
+          setSelectedConversa((prev) => prev ? { ...prev, atendente_id: d.atendente_id ?? null, ...(d.atendente_nome !== undefined ? { atendente_nome: d.atendente_nome } : {}) } as Conversa : null);
+        }
       }
       if (event === 'chamada_nova') {
         const d = data as { chamada: Chamada };
@@ -189,8 +197,27 @@ export default function ConversasPage() {
     });
   };
 
+  const userId = session?.user?.id ? parseInt(session.user.id as string) : null;
+
   const handleSendMensagem = useCallback(
     async (conversaId: number, conteudo: string) => {
+      // Auto-atribuir se nao atribuida
+      if (selectedConversa && selectedConversa.atendente_id === null && userId) {
+        try {
+          await fetch(`/api/conversas/${conversaId}/atribuir`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ atendente_id: userId }),
+          });
+          updateConversa(conversaId, { atendente_id: userId });
+          setSelectedConversa((prev) =>
+            prev ? { ...prev, atendente_id: userId } : null,
+          );
+        } catch (err) {
+          console.error('[conversas] Erro ao auto-atribuir:', err);
+        }
+      }
+
       await sendMensagem(conversaId, conteudo);
       // Atualizar conversa na lista (ultima msg e nao_lida)
       updateConversa(conversaId, {
@@ -199,7 +226,7 @@ export default function ConversasPage() {
         nao_lida: 0,
       });
     },
-    [sendMensagem, updateConversa],
+    [sendMensagem, updateConversa, selectedConversa, userId],
   );
 
   const handleAtribuir = useCallback(
@@ -210,6 +237,25 @@ export default function ConversasPage() {
       }
     },
     [updateConversa, selectedConversa],
+  );
+
+  const handleFinalizar = useCallback(
+    async (conversaId: number) => {
+      try {
+        await fetch(`/api/conversas/${conversaId}/atribuir`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ atendente_id: null }),
+        });
+        updateConversa(conversaId, { atendente_id: null });
+        setSelectedConversa((prev) =>
+          prev ? { ...prev, atendente_id: null } : null,
+        );
+      } catch (err) {
+        console.error('[conversas] Erro ao finalizar atendimento:', err);
+      }
+    },
+    [updateConversa],
   );
 
   return (
@@ -243,6 +289,8 @@ export default function ConversasPage() {
             const event = new CustomEvent('softphone-dial', { detail: { number } });
             window.dispatchEvent(event);
           }}
+          currentUserId={userId ?? undefined}
+          onFinalizar={handleFinalizar}
         />
       </div>
     </>

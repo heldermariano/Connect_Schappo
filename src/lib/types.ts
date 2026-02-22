@@ -119,7 +119,7 @@ export type SipCallState = 'idle' | 'calling' | 'ringing' | 'in-call' | 'on-hold
 
 export type SSEEvent =
   | { type: 'nova_mensagem'; data: { conversa_id: number; mensagem: Mensagem } }
-  | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number } }
+  | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null } }
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
   | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }

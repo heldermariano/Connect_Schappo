@@ -106,6 +106,14 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
   // Se mensagem duplicada (id=0), nao emitir SSE
   if (msgId === 0) return;
 
+  // Reset atribuicao quando cliente envia mensagem (nao from_me)
+  if (!parsed.from_me) {
+    await pool.query(
+      `UPDATE atd.conversas SET atendente_id = NULL WHERE id = $1 AND atendente_id IS NOT NULL`,
+      [conversaId],
+    );
+  }
+
   // Cache de participante de grupo (nao bloqueia o fluxo)
   if (parsed.tipo === 'grupo' && parsed.sender_phone && parsed.sender_name) {
     upsertParticipant(parsed.sender_phone, parsed.wa_chatid, parsed.sender_name).catch((err) =>
@@ -124,7 +132,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
 
   // 5. Broadcast conversa atualizada
   const convData = await pool.query(
-    `SELECT ultima_mensagem, nao_lida FROM atd.conversas WHERE id = $1`,
+    `SELECT ultima_mensagem, nao_lida, atendente_id FROM atd.conversas WHERE id = $1`,
     [conversaId],
   );
   if (convData.rows[0]) {
@@ -134,6 +142,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
         conversa_id: conversaId,
         ultima_msg: convData.rows[0].ultima_mensagem || '',
         nao_lida: convData.rows[0].nao_lida,
+        atendente_id: convData.rows[0].atendente_id,
       },
     });
   }

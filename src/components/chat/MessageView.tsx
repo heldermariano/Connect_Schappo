@@ -18,6 +18,8 @@ interface MessageViewProps {
   onMarcarLida: (conversaId: number) => void;
   onAtribuir: (conversaId: number, atendenteId: number | null) => void;
   onDialNumber?: (number: string) => void;
+  currentUserId?: number;
+  onFinalizar?: (conversaId: number) => void;
 }
 
 export default function MessageView({
@@ -30,6 +32,8 @@ export default function MessageView({
   onMarcarLida,
   onAtribuir,
   onDialNumber,
+  currentUserId,
+  onFinalizar,
 }: MessageViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -95,6 +99,15 @@ export default function MessageView({
           atendenteNome={(conversa as Conversa & { atendente_nome?: string }).atendente_nome}
           onAtribuir={onAtribuir}
         />
+        {currentUserId && conversa.atendente_id === currentUserId && onFinalizar && (
+          <button
+            onClick={() => onFinalizar(conversa.id)}
+            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+            title="Finalizar atendimento e liberar conversa"
+          >
+            Finalizar
+          </button>
+        )}
         {/* Click-to-call: apenas para conversas individuais com telefone */}
         {!isGroup && conversa.telefone && onDialNumber && (
           <button
@@ -142,8 +155,16 @@ export default function MessageView({
         <div ref={bottomRef} />
       </div>
 
-      {/* Campo de envio de mensagem */}
-      <MessageInput onSend={handleSend} conversaId={conversa.id} />
+      {/* Campo de envio de mensagem ou barra de bloqueio */}
+      {currentUserId && conversa.atendente_id !== null && conversa.atendente_id !== currentUserId ? (
+        <div className="px-4 py-3 bg-gray-100 border-t border-gray-200 text-center">
+          <span className="text-sm text-gray-500">
+            Atendimento em andamento por <span className="font-semibold text-gray-700">{(conversa as Conversa & { atendente_nome?: string }).atendente_nome || 'outro operador'}</span>
+          </span>
+        </div>
+      ) : (
+        <MessageInput onSend={handleSend} conversaId={conversa.id} />
+      )}
     </div>
   );
 }

@@ -41,7 +41,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
     const filters = is360 ? CHANNEL_FILTERS_360 : CHANNEL_FILTERS_UAZAPI;
 
     return (
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-center gap-1 px-3 py-2 border-b border-gray-200 bg-white">
         <span className="text-xs font-semibold text-schappo-600 bg-schappo-50 px-2 py-1 rounded-md border border-schappo-200 mr-1">
           {channelLabel}
         </span>
@@ -71,7 +71,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
   const filters = ALL_FILTERS.filter((f) => allowedValues.includes(f.value));
 
   return (
-    <div className="flex gap-1 px-3 py-2 border-b border-gray-200 bg-white">
+    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 bg-white">
       {filters.map((f) => (
         <button
           key={f.value}
