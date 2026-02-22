@@ -167,6 +167,13 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
           </div>
         )}
 
+        {/* Nome do operador em mensagens enviadas */}
+        {isMe && senderDisplay && (
+          <div className="text-xs font-semibold mb-0.5 text-green-700">
+            {senderDisplay}
+          </div>
+        )}
+
         {/* Preview de midia via proxy */}
         {hasMedia && (
           <MediaPreview

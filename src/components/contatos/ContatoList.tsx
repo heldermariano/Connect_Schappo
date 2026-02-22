@@ -19,7 +19,6 @@ export default function ContatoList({ contatos, loading, loadingMore, hasMore, o
   const handleScroll = useCallback(() => {
     const el = listRef.current;
     if (!el || !hasMore || loadingMore || !onLoadMore) return;
-    // Carregar mais quando chegar perto do fim (200px)
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
       onLoadMore();
     }
@@ -49,14 +48,16 @@ export default function ContatoList({ contatos, loading, loadingMore, hasMore, o
   }
 
   return (
-    <div ref={listRef} className="flex-1 overflow-y-auto">
-      {contatos.map((contato, idx) => (
-        <ContatoItem
-          key={`${contato.telefone}-${idx}`}
-          contato={contato}
-          onClick={() => onSelect(contato)}
-        />
-      ))}
+    <div ref={listRef} className="flex-1 overflow-y-auto p-3">
+      <div className="grid grid-cols-2 gap-2">
+        {contatos.map((contato, idx) => (
+          <ContatoItem
+            key={`${contato.telefone}-${idx}`}
+            contato={contato}
+            onClick={() => onSelect(contato)}
+          />
+        ))}
+      </div>
       {loadingMore && (
         <div className="py-3 text-center text-xs text-gray-400">
           Carregando mais...

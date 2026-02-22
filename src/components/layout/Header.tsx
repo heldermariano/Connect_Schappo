@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 import SearchBar from '@/components/filters/SearchBar';
 import StatusBadge, { StatusPresenca } from '@/components/ui/StatusBadge';
 import StatusSelector from '@/components/ui/StatusSelector';
+import Avatar from '@/components/ui/Avatar';
+import { Contato } from '@/lib/types';
 
 interface HeaderProps {
   busca: string;
@@ -14,12 +17,77 @@ interface HeaderProps {
   onPresencaChange?: (status: StatusPresenca) => void;
 }
 
+function formatPhone(phone: string | null): string {
+  if (!phone) return '';
+  const num = phone.replace(/\D/g, '');
+  if (num.length === 13 && num.startsWith('55')) {
+    return `(${num.slice(2, 4)}) ${num.slice(4, 9)}-${num.slice(9)}`;
+  }
+  if (num.length === 12 && num.startsWith('55')) {
+    return `(${num.slice(2, 4)}) ${num.slice(4, 8)}-${num.slice(8)}`;
+  }
+  return phone;
+}
+
 export default function Header({ busca, onBuscaChange, presenca: presencaProp, onPresencaChange }: HeaderProps) {
   const { data: session } = useSession();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [presencaLocal, setPresencaLocal] = useState<StatusPresenca>('disponivel');
   const presenca = presencaProp ?? presencaLocal;
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Busca de contatos
+  const [contatos, setContatos] = useState<Contato[]>([]);
+  const [buscaContatos, setBuscaContatos] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [criandoConversa, setCriandoConversa] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Buscar contatos quando busca muda
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!busca || busca.trim().length < 2) {
+      setContatos([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setBuscaContatos(true);
+      try {
+        const res = await fetch(`/api/contatos?busca=${encodeURIComponent(busca.trim())}&limit=8`);
+        if (res.ok) {
+          const data = await res.json();
+          setContatos(data.contatos || []);
+          setShowDropdown(true);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar contatos:', err);
+      } finally {
+        setBuscaContatos(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [busca]);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
 
   // Fechar menu ao clicar fora
   useEffect(() => {
@@ -49,7 +117,6 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
   }, [onPresencaChange]);
 
   const handleLogout = useCallback(async () => {
-    // Atualizar status para offline antes de sair
     try {
       await fetch('/api/atendentes/status', {
         method: 'PATCH',
@@ -62,6 +129,36 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
     signOut({ callbackUrl: '/login' });
   }, []);
 
+  const handleContatoClick = useCallback(async (contato: Contato) => {
+    if (contato.conversa_id) {
+      setShowDropdown(false);
+      onBuscaChange('');
+      router.push(`/conversas?id=${contato.conversa_id}`);
+      return;
+    }
+
+    // Criar conversa nova
+    if (!contato.telefone) return;
+    setCriandoConversa(contato.telefone);
+    try {
+      const res = await fetch('/api/conversas/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: contato.telefone, nome: contato.nome }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShowDropdown(false);
+        onBuscaChange('');
+        router.push(`/conversas?id=${data.conversa.id}`);
+      }
+    } catch (err) {
+      console.error('Erro ao criar conversa:', err);
+    } finally {
+      setCriandoConversa(null);
+    }
+  }, [router, onBuscaChange]);
+
   const user = session?.user;
   const initials = user?.nome
     ? user.nome.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
@@ -70,8 +167,59 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
   return (
     <header className="h-14 bg-schappo-500 flex items-center px-4 gap-4 shrink-0 shadow-sm">
       <Logo variant="light" size="sm" />
-      <div className="flex-1">
+      <div className="flex-1 relative" ref={dropdownRef}>
         <SearchBar value={busca} onChange={onBuscaChange} />
+
+        {/* Dropdown de resultados de contatos */}
+        {showDropdown && busca.trim().length >= 2 && (
+          <div className="absolute top-full left-0 right-0 mt-1 max-w-md bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+            {buscaContatos && contatos.length === 0 && (
+              <div className="px-4 py-3 text-sm text-gray-400 text-center">Buscando...</div>
+            )}
+            {!buscaContatos && contatos.length === 0 && (
+              <div className="px-4 py-3 text-sm text-gray-400 text-center">Nenhum contato encontrado</div>
+            )}
+            {contatos.length > 0 && (
+              <>
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span className="text-xs font-semibold text-gray-500 uppercase">Contatos</span>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {contatos.map((contato, idx) => (
+                    <button
+                      key={`${contato.telefone}-${idx}`}
+                      onClick={() => handleContatoClick(contato)}
+                      disabled={criandoConversa === contato.telefone}
+                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0 disabled:opacity-50"
+                    >
+                      <Avatar nome={contato.nome} avatarUrl={contato.avatar_url} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">{contato.nome}</div>
+                        <div className="text-xs text-gray-500">{formatPhone(contato.telefone)}</div>
+                      </div>
+                      {contato.conversa_id ? (
+                        <span className="text-xs text-schappo-600 font-medium shrink-0">Abrir</span>
+                      ) : (
+                        <span className="text-xs text-green-600 font-medium shrink-0 flex items-center gap-1">
+                          {criandoConversa === contato.telefone ? (
+                            'Criando...'
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              Conversar
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* User menu */}

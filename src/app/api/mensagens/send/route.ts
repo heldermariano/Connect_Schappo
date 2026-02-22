@@ -138,13 +138,17 @@ export async function POST(request: NextRequest) {
     // Enviar via provider correto
     let sendResult: { success: boolean; messageId?: string; error?: string };
 
+    // Prefixar nome do operador em negrito (visivel no WhatsApp)
+    const nomeOperador = session.user.nome;
+    const textToSend = `*${nomeOperador}:*\n${conteudo.trim()}`;
+
     if (conversa.provider === '360dialog') {
       // 360Dialog: numero sem @s.whatsapp.net
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      sendResult = await sendVia360Dialog(to, conteudo.trim());
+      sendResult = await sendVia360Dialog(to, textToSend);
     } else {
       // UAZAPI: aceita numero ou chatid
-      sendResult = await sendViaUAZAPI(destinatario, conteudo.trim());
+      sendResult = await sendViaUAZAPI(destinatario, textToSend);
     }
 
     if (!sendResult.success) {

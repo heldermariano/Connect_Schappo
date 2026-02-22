@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 import { Conversa, Mensagem, Chamada } from '@/lib/types';
 import Header from '@/components/layout/Header';
 import CategoryFilter from '@/components/filters/CategoryFilter';
@@ -16,6 +17,7 @@ import { playNotificationBeep, showMentionToast } from '@/lib/notification';
 
 export default function ConversasPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
   const { operatorStatus, setOperatorStatus } = useAppContext();
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState('');
@@ -25,6 +27,8 @@ export default function ConversasPage() {
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
   // Mapa de nomes de grupo por conversa_id (para toast)
   const groupNamesRef = useRef<Map<number, string>>(new Map());
+  // Track se ja processou o query param ?id
+  const processedIdRef = useRef<string | null>(null);
 
   // Derivar filtros do seletor
   const filterParams = (() => {
@@ -51,6 +55,36 @@ export default function ConversasPage() {
       groupNamesRef.current.set(c.id, c.nome_grupo);
     }
   });
+
+  // Pre-selecionar conversa via query param ?id=X
+  const paramId = searchParams.get('id');
+  useEffect(() => {
+    if (!paramId || paramId === processedIdRef.current || loading) return;
+    const id = parseInt(paramId, 10);
+    if (isNaN(id)) return;
+
+    // Tentar encontrar na lista atual
+    const found = conversas.find((c) => c.id === id);
+    if (found) {
+      setSelectedConversa(found);
+      if (found.nao_lida > 0) marcarComoLida(found.id);
+      processedIdRef.current = paramId;
+      // Limpar o query param da URL
+      window.history.replaceState({}, '', '/conversas');
+    } else if (!loading && conversas.length > 0) {
+      // Conversa pode nao estar nos filtros atuais — buscar diretamente
+      fetch(`/api/conversas?id=${id}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data?.conversas?.length > 0) {
+            setSelectedConversa(data.conversas[0]);
+            processedIdRef.current = paramId;
+            window.history.replaceState({}, '', '/conversas');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [paramId, conversas, loading, marcarComoLida]);
 
   const {
     mensagens,

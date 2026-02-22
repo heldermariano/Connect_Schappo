@@ -200,14 +200,18 @@ export async function POST(request: NextRequest) {
     const mediaType = getMediaType(mimetype);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
+    // Prefixar nome do operador em negrito no caption (visivel no WhatsApp)
+    const nomeOperador = session.user.nome;
+    const captionToSend = caption ? `*${nomeOperador}:*\n${caption}` : `*${nomeOperador}*`;
+
     // Enviar via provider correto
     let sendResult: { success: boolean; messageId?: string; error?: string };
 
     if (conversa.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, file.name, mimetype, caption);
+      sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, file.name, mimetype, captionToSend);
     } else {
-      sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, caption);
+      sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, captionToSend);
     }
 
     if (!sendResult.success) {

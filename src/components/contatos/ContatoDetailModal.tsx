@@ -20,6 +20,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [criandoConversa, setCriandoConversa] = useState(false);
 
   useEffect(() => {
     if (contato) {
@@ -68,12 +69,37 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
     }
   }, [contato, nome, email, notas, onSaved]);
 
-  const handleAbrirConversa = () => {
-    if (contato?.conversa_id) {
+  const handleEnviarMensagem = useCallback(async () => {
+    if (!contato?.telefone) return;
+
+    if (contato.conversa_id) {
       onClose();
-      router.push(`/conversas`);
+      router.push(`/conversas?id=${contato.conversa_id}`);
+      return;
     }
-  };
+
+    // Criar conversa nova
+    setCriandoConversa(true);
+    try {
+      const res = await fetch('/api/conversas/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: contato.telefone, nome: contato.nome }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onClose();
+        router.push(`/conversas?id=${data.conversa.id}`);
+      } else {
+        setError('Erro ao criar conversa');
+      }
+    } catch (err) {
+      console.error('Erro ao criar conversa:', err);
+      setError('Erro ao criar conversa');
+    } finally {
+      setCriandoConversa(false);
+    }
+  }, [contato, router, onClose]);
 
   if (!open || !contato) return null;
 
@@ -99,6 +125,22 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
             </svg>
           </button>
         </div>
+
+        {/* Botao Enviar Mensagem — principal */}
+        {contato.telefone && (
+          <div className="px-6 pt-4">
+            <button
+              onClick={handleEnviarMensagem}
+              disabled={criandoConversa}
+              className="w-full px-4 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              {criandoConversa ? 'Abrindo...' : 'Enviar Mensagem'}
+            </button>
+          </div>
+        )}
 
         {/* Body */}
         <div className="px-6 py-4 space-y-4">
@@ -159,19 +201,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-2">
-          {contato.conversa_id && (
-            <button
-              onClick={handleAbrirConversa}
-              className="px-4 py-2 text-sm font-medium text-schappo-600 bg-schappo-50 rounded-lg hover:bg-schappo-100 transition-colors flex items-center gap-1.5"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              Abrir Conversa
-            </button>
-          )}
-          <div className="flex-1" />
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"

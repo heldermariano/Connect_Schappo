@@ -20,11 +20,35 @@ export async function GET(request: NextRequest) {
   const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
 
   const params = request.nextUrl.searchParams;
+  const idParam = params.get('id'); // Buscar conversa por ID direto
   const categoria = params.get('categoria'); // 'eeg', 'recepcao', 'geral'
   const tipo = params.get('tipo'); // 'individual', 'grupo'
   const busca = params.get('busca'); // Busca por nome/telefone
   const limit = Math.min(parseInt(params.get('limit') || '50'), 100);
   const offset = parseInt(params.get('offset') || '0');
+
+  // Busca direta por ID (para pré-selecionar conversa via ?id=)
+  if (idParam) {
+    try {
+      const result = await pool.query(
+        `SELECT c.*, a.nome AS atendente_nome,
+                COALESCE(ct.nome, c.nome_contato) AS nome_contato_display
+         FROM atd.conversas c
+         LEFT JOIN atd.atendentes a ON a.id = c.atendente_id
+         LEFT JOIN atd.contatos ct ON ct.telefone = c.telefone AND ct.telefone IS NOT NULL AND ct.telefone != ''
+         WHERE c.id = $1`,
+        [parseInt(idParam, 10)],
+      );
+      const conversas = result.rows.map((row) => ({
+        ...row,
+        nome_contato: row.nome_contato_display || row.nome_contato,
+      }));
+      return NextResponse.json({ conversas, total: conversas.length, limit: 1, offset: 0 });
+    } catch (err) {
+      console.error('[api/conversas] Erro busca por id:', err);
+      return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+    }
+  }
 
   const conditions: string[] = ['c.is_archived = FALSE'];
   const values: unknown[] = [];
