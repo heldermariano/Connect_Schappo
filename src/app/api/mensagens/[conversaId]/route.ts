@@ -84,8 +84,38 @@ export async function GET(
     // Resolver nomes das mencoes
     const mencoesResolvidas = await resolveMencoes([...allMencoes]);
 
-    // Adicionar mencoes_resolvidas a cada mensagem que tem mencoes
-    const mensagensComMencoes = mensagens.map((msg) => {
+    // Coletar sender_phones unicos (nao from_me) para buscar avatares
+    const senderPhones = new Set<string>();
+    for (const msg of mensagens) {
+      if (!msg.from_me && msg.sender_phone) {
+        senderPhones.add(msg.sender_phone);
+      }
+    }
+
+    // Batch-query avatares dos participantes
+    let avatarMap: Record<string, string> = {};
+    if (senderPhones.size > 0) {
+      try {
+        const avatarResult = await pool.query(
+          `SELECT DISTINCT ON (wa_phone) wa_phone, avatar_url
+           FROM atd.participantes_grupo
+           WHERE wa_phone = ANY($1) AND avatar_url IS NOT NULL AND avatar_url != ''
+           ORDER BY wa_phone, atualizado_at DESC`,
+          [[...senderPhones]],
+        );
+        for (const row of avatarResult.rows) {
+          avatarMap[row.wa_phone] = row.avatar_url;
+        }
+      } catch {
+        // Tabela pode nao existir — ignorar
+      }
+    }
+
+    // Adicionar mencoes_resolvidas e sender_avatar_url a cada mensagem
+    const mensagensEnriquecidas = mensagens.map((msg) => {
+      const enriched = { ...msg } as Record<string, unknown>;
+
+      // Mencoes resolvidas
       if (Array.isArray(msg.mencoes) && msg.mencoes.length > 0) {
         const resolved: Record<string, string> = {};
         for (const phone of msg.mencoes) {
@@ -93,12 +123,18 @@ export async function GET(
             resolved[phone] = mencoesResolvidas[phone];
           }
         }
-        return { ...msg, mencoes_resolvidas: resolved };
+        enriched.mencoes_resolvidas = resolved;
       }
-      return msg;
+
+      // Avatar do sender
+      if (!msg.from_me && msg.sender_phone && avatarMap[msg.sender_phone]) {
+        enriched.sender_avatar_url = avatarMap[msg.sender_phone];
+      }
+
+      return enriched;
     });
 
-    return NextResponse.json({ mensagens: mensagensComMencoes, hasMore });
+    return NextResponse.json({ mensagens: mensagensEnriquecidas, hasMore });
   } catch (err) {
     console.error('[api/mensagens] Erro:', err);
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });

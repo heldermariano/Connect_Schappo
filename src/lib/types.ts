@@ -55,8 +55,20 @@ export interface Mensagem {
   status: 'received' | 'sent' | 'delivered' | 'read' | 'failed';
   mencoes: string[];
   mencoes_resolvidas?: Record<string, string>;
+  sender_avatar_url?: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+export interface Contato {
+  id: number;
+  nome: string;
+  telefone: string | null;
+  avatar_url: string | null;
+  tipo: 'individual' | 'grupo';
+  conversa_id: number | null;
+  categoria: 'eeg' | 'recepcao' | 'geral';
+  ultima_msg_at: string | null;
 }
 
 export interface Chamada {

@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import { Mensagem } from '@/lib/types';
 import MediaPreview from './MediaPreview';
-import { getSenderColor } from '@/components/ui/Avatar';
+import Avatar, { getSenderColor } from '@/components/ui/Avatar';
 
 interface MessageBubbleProps {
   mensagem: Mensagem;
@@ -145,6 +145,16 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
+      {/* Mini-avatar para mensagens recebidas em grupos */}
+      {showSender && !isMe && (
+        <div className="shrink-0 mr-1.5 mt-auto mb-1">
+          <Avatar
+            nome={senderDisplay || '?'}
+            avatarUrl={mensagem.sender_avatar_url}
+            size="xs"
+          />
+        </div>
+      )}
       <div
         className={`max-w-[70%] rounded-lg px-3 py-2 ${
           isMe ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900 shadow-sm'

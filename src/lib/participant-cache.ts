@@ -8,6 +8,7 @@ export async function upsertParticipant(
   waPhone: string,
   waChatid: string,
   nomeWhatsapp: string | null,
+  avatarUrl?: string | null,
 ): Promise<void> {
   if (!waPhone || !waChatid) return;
 
@@ -15,15 +16,19 @@ export async function upsertParticipant(
   const hasRealName = nomeWhatsapp && nomeWhatsapp.trim() && !/^\d+$/.test(nomeWhatsapp.trim());
 
   await pool.query(
-    `INSERT INTO atd.participantes_grupo (wa_phone, wa_chatid, nome_whatsapp, atualizado_at)
-     VALUES ($1, $2, $3, NOW())
+    `INSERT INTO atd.participantes_grupo (wa_phone, wa_chatid, nome_whatsapp, avatar_url, atualizado_at)
+     VALUES ($1, $2, $3, $4, NOW())
      ON CONFLICT (wa_phone, wa_chatid) DO UPDATE SET
        nome_whatsapp = CASE
          WHEN $3 IS NOT NULL AND $3 != '' THEN $3
          ELSE atd.participantes_grupo.nome_whatsapp
        END,
+       avatar_url = CASE
+         WHEN $4 IS NOT NULL AND $4 != '' THEN $4
+         ELSE atd.participantes_grupo.avatar_url
+       END,
        atualizado_at = NOW()`,
-    [waPhone, waChatid, hasRealName ? nomeWhatsapp!.trim() : null],
+    [waPhone, waChatid, hasRealName ? nomeWhatsapp!.trim() : null, avatarUrl || null],
   );
 }
 
