@@ -159,8 +159,6 @@ export default function ConversasPage() {
     [updateConversa, selectedConversa],
   );
 
-  const sipEnabled = (session?.user as { sip_enabled?: boolean })?.sip_enabled ?? false;
-
   return (
     <div className="flex h-screen">
       <Sidebar />
@@ -190,17 +188,14 @@ export default function ConversasPage() {
             onSend={handleSendMensagem}
             onMarcarLida={marcarComoLida}
             onAtribuir={handleAtribuir}
-            onDialNumber={sipEnabled ? (number: string) => {
-              // Preencher o dialpad do softphone com o numero
+            onDialNumber={(number: string) => {
               const event = new CustomEvent('softphone-dial', { detail: { number } });
               window.dispatchEvent(event);
-            } : undefined}
+            }}
           />
 
-          {/* Painel direito: softphone */}
-          {sipEnabled && (
-            <Softphone operatorStatus={operatorStatus} />
-          )}
+          {/* Painel direito: softphone (sempre visivel) */}
+          <Softphone operatorStatus={operatorStatus} />
         </div>
       </div>
     </div>

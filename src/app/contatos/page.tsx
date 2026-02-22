@@ -10,7 +10,7 @@ import ImportCsvModal from '@/components/contatos/ImportCsvModal';
 
 export default function ContatosPage() {
   const router = useRouter();
-  const { contatos, total, loading, busca, setBusca, refresh, syncing, syncResult, sync } = useContatos();
+  const { contatos, total, loading, loadingMore, hasMore, loadMore, busca, setBusca, refresh, syncing, syncResult, sync } = useContatos();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
@@ -100,6 +100,9 @@ export default function ContatosPage() {
       <ContatoList
         contatos={contatos}
         loading={loading}
+        loadingMore={loadingMore}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
         onSelect={handleSelect}
       />
 

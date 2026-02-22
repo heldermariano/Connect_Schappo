@@ -243,10 +243,17 @@ export function isCallEvent(payload: WebhookPayloadUAZAPI): boolean {
 }
 
 /**
- * Verifica o token do webhook (UAZAPI envia no body, nao no header)
+ * Verifica o token do webhook (UAZAPI envia o token da instancia no body).
+ * Aceita WEBHOOK_SECRET ou qualquer UAZAPI_INSTANCE_TOKENS (separados por virgula).
  */
 export function validateWebhookToken(payload: WebhookPayloadUAZAPI, expectedToken: string): boolean {
-  return payload.token === expectedToken;
+  if (!payload.token) return false;
+  // Verificar contra o WEBHOOK_SECRET
+  if (payload.token === expectedToken) return true;
+  // Verificar contra os tokens das instancias UAZAPI
+  const instanceTokens = process.env.UAZAPI_INSTANCE_TOKENS || process.env.UAZAPI_TOKEN || '';
+  const tokens = instanceTokens.split(',').map((t) => t.trim()).filter(Boolean);
+  return tokens.includes(payload.token);
 }
 
 export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIMessage | null {

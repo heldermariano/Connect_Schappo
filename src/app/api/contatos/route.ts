@@ -91,20 +91,35 @@ export async function GET(request: NextRequest) {
       SELECT * FROM dedup
     `;
 
-    const values: string[] = [];
+    const values: unknown[] = [];
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '100', 10);
+    const offset = (page - 1) * limit;
 
     if (busca) {
       query += ` WHERE nome ILIKE $1 OR telefone ILIKE $1 OR email ILIKE $1`;
       values.push(`%${busca}%`);
     }
 
-    query += ` ORDER BY nome ASC LIMIT 500`;
+    // Contar total
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM (${query}) AS c`,
+      values,
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    // Paginar
+    query += ` ORDER BY nome ASC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
+    values.push(limit, offset);
 
     const result = await pool.query(query, values);
 
     return NextResponse.json({
       contatos: result.rows,
-      total: result.rows.length,
+      total,
+      page,
+      limit,
+      hasMore: offset + result.rows.length < total,
     });
   } catch (err) {
     console.error('[api/contatos] Erro:', err);
