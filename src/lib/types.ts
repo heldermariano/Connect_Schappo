@@ -54,6 +54,7 @@ export interface Mensagem {
   quoted_msg_id: string | null;
   status: 'received' | 'sent' | 'delivered' | 'read' | 'failed';
   mencoes: string[];
+  mencoes_resolvidas?: Record<string, string>;
   metadata: Record<string, unknown>;
   created_at: string;
 }

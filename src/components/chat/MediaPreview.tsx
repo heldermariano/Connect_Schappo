@@ -2,14 +2,19 @@
 
 interface MediaPreviewProps {
   tipo: string;
-  url: string | null;
+  messageId: number | null;
   mimetype: string | null;
   filename: string | null;
 }
 
-export default function MediaPreview({ tipo, url, mimetype, filename }: MediaPreviewProps) {
-  // Sem URL, mostrar placeholder
-  if (!url) {
+// Constroi URL do proxy de midia
+function proxyUrl(messageId: number): string {
+  return `/api/media/${messageId}`;
+}
+
+export default function MediaPreview({ tipo, messageId, mimetype, filename }: MediaPreviewProps) {
+  // Sem messageId, mostrar placeholder
+  if (!messageId) {
     return (
       <div className="bg-gray-100 rounded p-2 mb-1 text-xs text-gray-500 flex items-center gap-2">
         {tipo === 'image' && (
@@ -57,12 +62,14 @@ export default function MediaPreview({ tipo, url, mimetype, filename }: MediaPre
     );
   }
 
-  // Com URL — renderizar preview
+  const url = proxyUrl(messageId);
+
+  // Com URL proxy — renderizar preview
   if (tipo === 'image') {
     return (
       <div className="mb-1">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt="Imagem" className="max-w-full rounded" loading="lazy" />
+        <img src={url} alt="Imagem" className="max-w-full rounded max-h-80 object-contain" loading="lazy" />
       </div>
     );
   }
@@ -78,7 +85,7 @@ export default function MediaPreview({ tipo, url, mimetype, filename }: MediaPre
   if (tipo === 'video') {
     return (
       <div className="mb-1">
-        <video controls src={url} className="max-w-full rounded" />
+        <video controls src={url} className="max-w-full rounded max-h-80" />
       </div>
     );
   }
@@ -96,6 +103,15 @@ export default function MediaPreview({ tipo, url, mimetype, filename }: MediaPre
         </svg>
         {filename || 'Baixar documento'}
       </a>
+    );
+  }
+
+  if (tipo === 'sticker') {
+    return (
+      <div className="mb-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="Sticker" className="w-32 h-32 object-contain" loading="lazy" />
+      </div>
     );
   }
 

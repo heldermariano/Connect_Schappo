@@ -290,6 +290,7 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
       sender_lid: message.sender_lid,
       chat_source: payload.chatSource,
       timestamp: message.messageTimestamp,
+      message_id_full: message.id, // ID completo com owner prefix para download de midia
     },
   };
 }

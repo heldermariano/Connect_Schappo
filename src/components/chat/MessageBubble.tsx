@@ -72,9 +72,9 @@ function cleanContent(conteudo: string | null, tipo: string): string | null {
 
 /**
  * Renderiza texto com mencoes destacadas em negrito laranja.
- * Detecta padroes @NUMERO e @NOME no texto.
+ * Substitui @NUMERO por @NOME quando disponivel no mapa de mencoes resolvidas.
  */
-function renderTextWithMentions(text: string, mencoes: string[]): ReactNode[] {
+function renderTextWithMentions(text: string, mencoes: string[], mencoesResolvidas?: Record<string, string>): ReactNode[] {
   if (!mencoes || mencoes.length === 0) {
     return [text];
   }
@@ -86,39 +86,33 @@ function renderTextWithMentions(text: string, mencoes: string[]): ReactNode[] {
   let match: RegExpExecArray | null;
 
   while ((match = mentionRegex.exec(text)) !== null) {
-    // Texto antes da mencao
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
 
-    const mentionText = match[0];
     const mentionValue = match[1];
 
-    // Verificar se este valor corresponde a uma mencao real
-    const isMention = mencoes.some((phone) => {
-      return mentionValue === phone || phone.endsWith(mentionValue) || mentionValue.includes(phone.slice(-4));
-    });
-
-    if (isMention) {
-      parts.push(
-        <span key={match.index} className="text-schappo-500 font-semibold">
-          {mentionText}
-        </span>,
-      );
-    } else {
-      // @ encontrado mas nao bate com mencoes reais — destacar mesmo assim
-      // pois o WhatsApp envia o texto com @ para mencoes
-      parts.push(
-        <span key={match.index} className="text-schappo-500 font-semibold">
-          {mentionText}
-        </span>,
-      );
+    // Tentar resolver nome da mencao
+    let displayName = match[0];
+    if (mencoesResolvidas) {
+      // Procurar pelo numero exato ou parcial
+      for (const [phone, nome] of Object.entries(mencoesResolvidas)) {
+        if (mentionValue === phone || phone.endsWith(mentionValue) || mentionValue.includes(phone.slice(-4))) {
+          displayName = `@${nome}`;
+          break;
+        }
+      }
     }
+
+    parts.push(
+      <span key={match.index} className="text-schappo-500 font-semibold">
+        {displayName}
+      </span>,
+    );
 
     lastIndex = match.index + match[0].length;
   }
 
-  // Texto restante
   if (lastIndex < text.length) {
     parts.push(text.slice(lastIndex));
   }
@@ -136,20 +130,15 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
   // Limpar conteudo que pode ser JSON bruto (dados antigos)
   const textoLimpo = cleanContent(mensagem.conteudo, mensagem.tipo_mensagem);
 
-  // Extrair media_url de conteudo JSON se media_url estiver vazio
-  let mediaUrl = mensagem.media_url;
-  if (!mediaUrl && mensagem.conteudo?.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(mensagem.conteudo);
-      if (parsed.URL) mediaUrl = parsed.URL;
-    } catch { /* ignorar */ }
-  }
+  // Usar messageId para proxy de midia (em vez de URL direta do WhatsApp)
+  const hasWaMessageId = !!mensagem.wa_message_id;
 
   // Nome a exibir: sender_name ou telefone formatado
   const senderDisplay = mensagem.sender_name || formatPhoneShort(mensagem.sender_phone);
   const senderColor = senderDisplay ? getSenderColor(senderDisplay) : 'text-schappo-600';
 
   const mencoes = mensagem.mencoes || [];
+  const mencoesResolvidas = mensagem.mencoes_resolvidas;
 
   // Reacoes: exibir inline compacto
   if (isReaction) return null;
@@ -168,11 +157,11 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
           </div>
         )}
 
-        {/* Preview de midia */}
+        {/* Preview de midia via proxy */}
         {hasMedia && (
           <MediaPreview
             tipo={mensagem.tipo_mensagem.includes('Message') ? tipoNorm : mensagem.tipo_mensagem}
-            url={mediaUrl}
+            messageId={hasWaMessageId ? mensagem.id : null}
             mimetype={mensagem.media_mimetype}
             filename={mensagem.media_filename}
           />

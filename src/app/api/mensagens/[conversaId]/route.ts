@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
+/**
+ * Resolve mencoes (telefones) para nomes via atd.participantes_grupo.
+ * Retorna mapa { telefone: nome } para cada telefone mencionado.
+ */
+async function resolveMencoes(phones: string[]): Promise<Record<string, string>> {
+  if (phones.length === 0) return {};
+
+  try {
+    const result = await pool.query(
+      `SELECT wa_phone, COALESCE(nome_salvo, nome_whatsapp) as nome
+       FROM atd.participantes_grupo
+       WHERE wa_phone = ANY($1) AND COALESCE(nome_salvo, nome_whatsapp) IS NOT NULL`,
+      [phones],
+    );
+
+    const map: Record<string, string> = {};
+    for (const row of result.rows) {
+      if (row.nome) {
+        map[row.wa_phone] = row.nome;
+      }
+    }
+    return map;
+  } catch {
+    // Tabela pode nao existir ainda — retornar vazio
+    return {};
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ conversaId: string }> },
@@ -43,7 +71,34 @@ export async function GET(
     const mensagens = result.rows.reverse();
     const hasMore = result.rows.length === limit;
 
-    return NextResponse.json({ mensagens, hasMore });
+    // Coletar todos os telefones mencionados para resolver nomes em lote
+    const allMencoes = new Set<string>();
+    for (const msg of mensagens) {
+      if (Array.isArray(msg.mencoes)) {
+        for (const phone of msg.mencoes) {
+          allMencoes.add(phone);
+        }
+      }
+    }
+
+    // Resolver nomes das mencoes
+    const mencoesResolvidas = await resolveMencoes([...allMencoes]);
+
+    // Adicionar mencoes_resolvidas a cada mensagem que tem mencoes
+    const mensagensComMencoes = mensagens.map((msg) => {
+      if (Array.isArray(msg.mencoes) && msg.mencoes.length > 0) {
+        const resolved: Record<string, string> = {};
+        for (const phone of msg.mencoes) {
+          if (mencoesResolvidas[phone]) {
+            resolved[phone] = mencoesResolvidas[phone];
+          }
+        }
+        return { ...msg, mencoes_resolvidas: resolved };
+      }
+      return msg;
+    });
+
+    return NextResponse.json({ mensagens: mensagensComMencoes, hasMore });
   } catch (err) {
     console.error('[api/mensagens] Erro:', err);
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
