@@ -64,7 +64,8 @@ export async function GET(
 
       if (!downloadResp.ok) {
         console.error(`[media proxy] UAZAPI download falhou: ${downloadResp.status}`);
-        return NextResponse.json({ error: 'download_failed' }, { status: 502 });
+        const errStatus = downloadResp.status === 404 ? 404 : 502;
+        return NextResponse.json({ error: 'media_unavailable', message: 'Midia nao disponivel' }, { status: errStatus });
       }
 
       const data = await downloadResp.json();
@@ -79,11 +80,28 @@ export async function GET(
     }
 
     // Fazer fetch do arquivo e servir como stream (em vez de redirect)
-    const fileResp = await fetch(fileUrl);
-    if (!fileResp.ok) {
-      // URL pode ter expirado, limpar cache
+    let fileResp = await fetch(fileUrl);
+    if (!fileResp.ok && cached) {
+      // URL do cache expirou, tentar obter nova URL da UAZAPI
       urlCache.delete(id);
-      return NextResponse.json({ error: 'file_fetch_failed' }, { status: 502 });
+      const isAudioRetry = msg.tipo_mensagem === 'audio';
+      const retryResp = await fetch(`${UAZAPI_URL}/message/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+        body: JSON.stringify({ id: waMessageId, return_link: true, generate_mp3: isAudioRetry ? 'true' : 'false' }),
+      });
+      if (retryResp.ok) {
+        const retryData = await retryResp.json();
+        const retryUrl = retryData.fileURL || retryData.fileUrl || retryData.url;
+        if (retryUrl) {
+          urlCache.set(id, { url: retryUrl, expiresAt: Date.now() + CACHE_TTL });
+          fileResp = await fetch(retryUrl);
+        }
+      }
+    }
+    if (!fileResp.ok) {
+      urlCache.delete(id);
+      return NextResponse.json({ error: 'media_unavailable', message: 'Midia nao disponivel no momento' }, { status: 404 });
     }
 
     const contentType = msg.media_mimetype || fileResp.headers.get('content-type') || 'application/octet-stream';
