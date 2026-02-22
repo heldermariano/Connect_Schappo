@@ -224,3 +224,24 @@ export const OWNER_CATEGORY_MAP: Record<string, string> = {
   '556183008973': 'recepcao',
   '556133455701': 'geral',
 };
+
+// --- Canais WhatsApp ---
+
+export interface WhatsAppChannel {
+  id: string;
+  label: string;
+  phone: string;
+  provider: 'uazapi' | '360dialog';
+}
+
+export const WHATSAPP_CHANNELS: WhatsAppChannel[] = [
+  { id: 'eeg', label: 'EEG', phone: '556192894339', provider: 'uazapi' },
+  { id: 'recepcao', label: 'Recepção', phone: '556183008973', provider: 'uazapi' },
+  { id: 'geral', label: 'Geral', phone: '556133455701', provider: '360dialog' },
+];
+
+export const GRUPO_CHANNELS: Record<string, string[]> = {
+  eeg: ['eeg'],
+  recepcao: ['recepcao', 'geral'],
+  todos: ['eeg', 'recepcao', 'geral'],
+};

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { Conversa, Mensagem, Chamada } from '@/lib/types';
@@ -30,8 +30,27 @@ export default function ConversasPage() {
   // Track se ja processou o query param ?id
   const processedIdRef = useRef<string | null>(null);
 
+  // Canal selecionado via searchParams
+  const canal = searchParams.get('canal');
+  const prevCanalRef = useRef<string | null>(canal);
+
+  // Reset filtro quando canal muda — default 'individual' (nao tem "Todos")
+  useEffect(() => {
+    if (canal !== prevCanalRef.current) {
+      setFiltro(canal ? 'individual' : '');
+      prevCanalRef.current = canal;
+    }
+  }, [canal]);
+
   // Derivar filtros do seletor
-  const filterParams = (() => {
+  const filterParams = useMemo(() => {
+    if (canal) {
+      // Canal selecionado: categoria fixa, tipo pelo filtro
+      // Sem "Todos" — filtro sempre tem tipo definido
+      const tipo = filtro === 'grupo' ? 'grupo' : 'individual';
+      return { categoria: canal, tipo };
+    }
+    // Sem canal: comportamento original
     switch (filtro) {
       case 'individual':
         return { tipo: 'individual' };
@@ -42,7 +61,7 @@ export default function ConversasPage() {
       default:
         return {};
     }
-  })();
+  }, [canal, filtro]);
 
   const { conversas, loading, updateConversa, refresh, marcarComoLida } = useConversas({
     ...filterParams,
@@ -64,13 +83,14 @@ export default function ConversasPage() {
     if (isNaN(id)) return;
 
     // Tentar encontrar na lista atual
+    // Preservar ?canal= ao limpar ?id
+    const baseUrl = canal ? `/conversas?canal=${canal}` : '/conversas';
     const found = conversas.find((c) => c.id === id);
     if (found) {
       setSelectedConversa(found);
       if (found.nao_lida > 0) marcarComoLida(found.id);
       processedIdRef.current = paramId;
-      // Limpar o query param da URL
-      window.history.replaceState({}, '', '/conversas');
+      window.history.replaceState({}, '', baseUrl);
     } else if (!loading && conversas.length > 0) {
       // Conversa pode nao estar nos filtros atuais — buscar diretamente
       fetch(`/api/conversas?id=${id}`)
@@ -79,12 +99,12 @@ export default function ConversasPage() {
           if (data?.conversas?.length > 0) {
             setSelectedConversa(data.conversas[0]);
             processedIdRef.current = paramId;
-            window.history.replaceState({}, '', '/conversas');
+            window.history.replaceState({}, '', baseUrl);
           }
         })
         .catch(() => {});
     }
-  }, [paramId, conversas, loading, marcarComoLida]);
+  }, [paramId, conversas, loading, marcarComoLida, canal]);
 
   const {
     mensagens,
@@ -199,7 +219,7 @@ export default function ConversasPage() {
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}
         <div className="w-80 border-r border-gray-200 flex flex-col shrink-0 bg-white">
-          <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} />
+          <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} canal={canal} />
           <ConversaList
             conversas={conversas}
             activeId={selectedConversa?.id ?? null}
