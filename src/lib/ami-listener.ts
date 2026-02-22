@@ -335,6 +335,61 @@ export function getActiveCallsCount(): number {
 }
 
 /**
+ * Originate: inicia uma chamada do ramal do atendente para o destino.
+ * O ramal toca primeiro; quando atendente atende, liga para o destino.
+ * Retorna o ActionID usado para rastrear a chamada.
+ */
+export function originate(
+  ramal: string,
+  destino: string,
+  callerId?: string,
+): Promise<{ success: boolean; actionId: string; error?: string }> {
+  return new Promise((resolve) => {
+    if (!amiConnected || !amiInstance) {
+      resolve({ success: false, actionId: '', error: 'AMI nao disponivel' });
+      return;
+    }
+
+    const actionId = `originate-${Date.now()}-${ramal}`;
+
+    try {
+      amiInstance.action(
+        {
+          action: 'Originate',
+          channel: `SIP/${ramal}`,
+          exten: destino,
+          context: 'from-internal',
+          priority: '1',
+          callerid: callerId || `"Connect Schappo" <33455701>`,
+          async: 'true',
+          actionid: actionId,
+          timeout: '30000',
+        },
+        (err: Error | null, res: Record<string, string>) => {
+          if (err) {
+            console.error(`[AMI] Originate falhou ramal=${ramal} destino=${destino}:`, err.message);
+            resolve({ success: false, actionId, error: err.message });
+          } else {
+            const response = res?.response || '';
+            if (response.toLowerCase() === 'error') {
+              const msg = res?.message || 'Erro desconhecido';
+              console.error(`[AMI] Originate rejeitado: ${msg}`);
+              resolve({ success: false, actionId, error: msg });
+            } else {
+              console.log(`[AMI] Originate enviado: ramal=${ramal} destino=${destino} actionId=${actionId}`);
+              resolve({ success: true, actionId });
+            }
+          }
+        },
+      );
+    } catch (err) {
+      console.error(`[AMI] Excecao no Originate ramal=${ramal}:`, err);
+      resolve({ success: false, actionId, error: 'Excecao interna' });
+    }
+  });
+}
+
+/**
  * Envia QueuePause ao Asterisk para pausar/despausar um ramal em todas as filas.
  * Fallback gracioso se AMI nao estiver conectado.
  */

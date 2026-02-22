@@ -1,6 +1,7 @@
 'use client';
 
 import { Chamada } from '@/lib/types';
+import CallButton from './CallButton';
 
 interface CallItemProps {
   chamada: Chamada & { atendente_nome?: string | null };
@@ -62,6 +63,11 @@ export default function CallItem({ chamada }: CallItemProps) {
   const origemConfig = getOrigemLabel(chamada.origem);
   const isIncoming = chamada.direcao === 'recebida';
 
+  // Numero para rediscar: se recebida, ligar para caller; se realizada, ligar para called
+  const rediscNumber = isIncoming ? chamada.caller_number : chamada.called_number;
+  // Mostrar rediscar apenas para chamadas finalizadas com numero valido
+  const showRedial = rediscNumber && rediscNumber.length >= 8 && chamada.status !== 'ringing';
+
   return (
     <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors">
       {/* Icone direcao */}
@@ -111,6 +117,13 @@ export default function CallItem({ chamada }: CallItemProps) {
           )}
         </div>
       </div>
+
+      {/* Rediscar */}
+      {showRedial && (
+        <div className="shrink-0">
+          <CallButton telefone={rediscNumber} size="sm" />
+        </div>
+      )}
 
       {/* Status + duracao */}
       <div className="text-right shrink-0">

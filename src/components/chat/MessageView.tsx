@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
 import MessageBubble from './MessageBubble';
 import Avatar from '@/components/ui/Avatar';
+import CallButton from '@/components/calls/CallButton';
 
 interface MessageViewProps {
   conversa: Conversa | null;
@@ -55,9 +56,13 @@ export default function MessageView({
           <div className="text-sm font-medium text-gray-900 truncate">{displayName}</div>
           <div className="text-[11px] text-gray-400 truncate">
             <span className="text-schappo-600 font-medium">{conversa.categoria.toUpperCase()}</span> &middot; {conversa.provider}
-            {conversa.telefone && ` &middot; ${conversa.telefone}`}
+            {conversa.telefone && ` \u00B7 ${conversa.telefone}`}
           </div>
         </div>
+        {/* Click-to-call: apenas para conversas individuais com telefone */}
+        {!isGroup && conversa.telefone && (
+          <CallButton telefone={conversa.telefone} size="md" label="Ligar" />
+        )}
       </div>
 
       {/* Area de mensagens */}
