@@ -14,7 +14,7 @@ interface MessageViewProps {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  onSend: (conversaId: number, conteudo: string) => Promise<void>;
+  onSend: (conversaId: number, conteudo: string, mencoes?: string[]) => Promise<void>;
   onMarcarLida: (conversaId: number) => void;
   onAtribuir: (conversaId: number, atendenteId: number | null) => void;
   onDialNumber?: (number: string) => void;
@@ -62,9 +62,9 @@ export default function MessageView({
   }, [conversa, onMarcarLida]);
 
   const handleSend = useCallback(
-    async (conteudo: string) => {
+    async (conteudo: string, mencoes?: string[]) => {
       if (!conversa) return;
-      await onSend(conversa.id, conteudo);
+      await onSend(conversa.id, conteudo, mencoes);
     },
     [conversa, onSend],
   );
@@ -191,7 +191,7 @@ export default function MessageView({
           </span>
         </div>
       ) : (
-        <MessageInput onSend={handleSend} conversaId={conversa.id} />
+        <MessageInput onSend={handleSend} conversaId={conversa.id} chatId={conversa.wa_chatid} tipoConversa={conversa.tipo} />
       )}
     </div>
   );

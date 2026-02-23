@@ -19,7 +19,7 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 };
 
 // Envia mensagem via UAZAPI
-async function sendViaUAZAPI(number: string, text: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+async function sendViaUAZAPI(number: string, text: string, mentionedJid?: string[]): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
   const token = process.env.UAZAPI_TOKEN;
 
@@ -28,13 +28,18 @@ async function sendViaUAZAPI(number: string, text: string): Promise<{ success: b
   }
 
   try {
+    const payload: Record<string, unknown> = { number, text };
+    if (mentionedJid && mentionedJid.length > 0) {
+      payload.mentionedJid = mentionedJid;
+    }
+
     const res = await fetch(`${url}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         token,
       },
-      body: JSON.stringify({ number, text }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -97,11 +102,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { conversa_id, conteudo } = await request.json();
+    const { conversa_id, conteudo, mencoes } = await request.json();
 
     if (!conversa_id || !conteudo || typeof conteudo !== 'string' || !conteudo.trim()) {
       return NextResponse.json({ error: 'conversa_id e conteudo sao obrigatorios' }, { status: 400 });
     }
+
+    // Validar mencoes (array opcional de telefones)
+    const mencoesArray: string[] = Array.isArray(mencoes) ? mencoes.filter((m: unknown) => typeof m === 'string') : [];
 
     // Buscar conversa no banco
     const conversaResult = await pool.query(
@@ -142,13 +150,21 @@ export async function POST(request: NextRequest) {
     const nomeOperador = session.user.nome;
     const textToSend = `*${nomeOperador}:*\n${conteudo.trim()}`;
 
+    // Converter telefones em JIDs do WhatsApp para mencoes
+    const mentionedJid = mencoesArray.length > 0
+      ? mencoesArray.map((phone) => {
+          const clean = phone.replace(/\D/g, '');
+          return clean.includes('@') ? clean : `${clean}@s.whatsapp.net`;
+        })
+      : undefined;
+
     if (conversa.provider === '360dialog') {
       // 360Dialog: numero sem @s.whatsapp.net
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendVia360Dialog(to, textToSend);
     } else {
       // UAZAPI: aceita numero ou chatid
-      sendResult = await sendViaUAZAPI(destinatario, textToSend);
+      sendResult = await sendViaUAZAPI(destinatario, textToSend, mentionedJid);
     }
 
     if (!sendResult.success) {
@@ -162,8 +178,8 @@ export async function POST(request: NextRequest) {
     const msgResult = await pool.query(
       `INSERT INTO atd.mensagens (
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6)
+        tipo_mensagem, conteudo, status, metadata, mencoes
+      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6, $7)
       ON CONFLICT (wa_message_id) DO NOTHING
       RETURNING *`,
       [
@@ -173,6 +189,7 @@ export async function POST(request: NextRequest) {
         session.user.nome,
         conteudo.trim(),
         JSON.stringify({ sent_by: session.user.id, sent_by_name: session.user.nome }),
+        mencoesArray.length > 0 ? mencoesArray : '{}',
       ],
     );
 

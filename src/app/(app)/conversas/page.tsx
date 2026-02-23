@@ -201,7 +201,7 @@ export default function ConversasPage() {
   const userId = session?.user?.id ? parseInt(session.user.id as string) : null;
 
   const handleSendMensagem = useCallback(
-    async (conversaId: number, conteudo: string) => {
+    async (conversaId: number, conteudo: string, mencoes?: string[]) => {
       // Auto-atribuir se nao atribuida
       if (selectedConversa && selectedConversa.atendente_id === null && userId) {
         try {
@@ -219,7 +219,7 @@ export default function ConversasPage() {
         }
       }
 
-      await sendMensagem(conversaId, conteudo);
+      await sendMensagem(conversaId, conteudo, mencoes);
       // Atualizar conversa na lista (ultima msg e nao_lida)
       updateConversa(conversaId, {
         ultima_mensagem: conteudo.substring(0, 200),

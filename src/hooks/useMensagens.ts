@@ -11,7 +11,7 @@ interface UseMensagensResult {
   loadMore: () => void;
   addMensagem: (msg: Mensagem) => void;
   removeMensagem: (msgId: number) => void;
-  sendMensagem: (conversaId: number, conteudo: string) => Promise<void>;
+  sendMensagem: (conversaId: number, conteudo: string, mencoes?: string[]) => Promise<void>;
 }
 
 export function useMensagens(conversaId: number | null): UseMensagensResult {
@@ -72,11 +72,15 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     setMensagens((prev) => prev.filter((m) => m.id !== msgId));
   }, []);
 
-  const sendMensagem = useCallback(async (cId: number, conteudo: string) => {
+  const sendMensagem = useCallback(async (cId: number, conteudo: string, mencoes?: string[]) => {
+    const body: Record<string, unknown> = { conversa_id: cId, conteudo };
+    if (mencoes && mencoes.length > 0) {
+      body.mencoes = mencoes;
+    }
     const res = await fetch('/api/mensagens/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversa_id: cId, conteudo }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {

@@ -1,25 +1,52 @@
 'use client';
 
-import { useState, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
 import AttachmentPreview from './AttachmentPreview';
 import ExameSearch from './ExameSearch';
+import MentionAutocomplete, { Participant } from './MentionAutocomplete';
 
 interface MessageInputProps {
-  onSend: (conteudo: string) => Promise<void>;
+  onSend: (conteudo: string, mencoes?: string[]) => Promise<void>;
   conversaId?: number;
   disabled?: boolean;
+  chatId?: string;
+  tipoConversa?: string;
 }
 
 const ACCEPTED_TYPES = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx';
 
-export default function MessageInput({ onSend, conversaId, disabled }: MessageInputProps) {
+export default function MessageInput({ onSend, conversaId, disabled, chatId, tipoConversa }: MessageInputProps) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [exameSearch, setExameSearch] = useState<string | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionedPhones, setMentionedPhones] = useState<string[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const mentionStartRef = useRef<number>(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isGroup = tipoConversa === 'grupo';
+
+  // Fetch participantes quando abre conversa de grupo
+  useEffect(() => {
+    if (!isGroup || !chatId) {
+      setParticipants([]);
+      return;
+    }
+    fetch(`/api/participantes/${encodeURIComponent(chatId)}`)
+      .then((r) => (r.ok ? r.json() : { participantes: [] }))
+      .then((data) => setParticipants(data.participantes || []))
+      .catch(() => setParticipants([]));
+  }, [chatId, isGroup]);
+
+  // Limpar mencoes ao mudar de conversa
+  useEffect(() => {
+    setMentionedPhones([]);
+    setMentionQuery(null);
+  }, [conversaId]);
 
   const handleSend = useCallback(async () => {
     if (sending) return;
@@ -54,6 +81,7 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
 
         setText('');
         setAttachments([]);
+        setMentionedPhones([]);
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
@@ -74,8 +102,10 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
     setError(null);
 
     try {
-      await onSend(trimmed);
+      const mencoes = mentionedPhones.length > 0 ? [...mentionedPhones] : undefined;
+      await onSend(trimmed, mencoes);
       setText('');
+      setMentionedPhones([]);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -85,19 +115,58 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
       setSending(false);
       textareaRef.current?.focus();
     }
-  }, [text, sending, onSend, attachments, conversaId]);
+  }, [text, sending, onSend, attachments, conversaId, mentionedPhones]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Se autocomplete de mencao aberto, deixar ele tratar ArrowUp/Down/Enter/Esc
+      if (mentionQuery !== null) {
+        if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
+          return; // MentionAutocomplete captura via document listener
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend],
+    [handleSend, mentionQuery],
   );
 
-  // Auto-resize do textarea + deteccao de busca de exames (#)
+  // Detectar @ no texto para autocomplete de mencao
+  const detectMention = useCallback((value: string, cursorPos: number) => {
+    if (!isGroup) {
+      setMentionQuery(null);
+      return;
+    }
+
+    // Procurar @ antes do cursor
+    const before = value.slice(0, cursorPos);
+    const atIndex = before.lastIndexOf('@');
+
+    if (atIndex === -1) {
+      setMentionQuery(null);
+      return;
+    }
+
+    // Verificar se @ esta no inicio ou apos espaco/newline
+    if (atIndex > 0 && !/\s/.test(before[atIndex - 1])) {
+      setMentionQuery(null);
+      return;
+    }
+
+    // Texto entre @ e cursor (sem quebra de linha)
+    const query = before.slice(atIndex + 1);
+    if (query.includes('\n')) {
+      setMentionQuery(null);
+      return;
+    }
+
+    mentionStartRef.current = atIndex;
+    setMentionQuery(query);
+  }, [isGroup]);
+
+  // Auto-resize do textarea + deteccao de busca de exames (#) e mencoes (@)
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setText(value);
@@ -110,7 +179,38 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
     } else {
       setExameSearch(null);
     }
-  }, []);
+
+    detectMention(value, el.selectionStart);
+  }, [detectMention]);
+
+  const handleMentionSelect = useCallback((participant: Participant) => {
+    const start = mentionStartRef.current;
+    if (start === -1) return;
+
+    const textarea = textareaRef.current;
+    const cursorPos = textarea?.selectionStart ?? text.length;
+    const before = text.slice(0, start);
+    const after = text.slice(cursorPos);
+    const newText = `${before}@${participant.nome} ${after}`;
+
+    setText(newText);
+    setMentionQuery(null);
+    mentionStartRef.current = -1;
+
+    // Adicionar telefone a lista de mencionados (sem duplicatas)
+    setMentionedPhones((prev) =>
+      prev.includes(participant.phone) ? prev : [...prev, participant.phone],
+    );
+
+    // Reposicionar cursor apos o nome inserido
+    const newCursorPos = start + participant.nome.length + 2; // @Nome + espaco
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    });
+  }, [text]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -169,6 +269,16 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
               textareaRef.current.style.height = 'auto';
             }
           }}
+        />
+      )}
+
+      {/* Autocomplete de mencoes (ativado por @ em grupos) */}
+      {mentionQuery !== null && isGroup && participants.length > 0 && (
+        <MentionAutocomplete
+          query={mentionQuery}
+          participants={participants}
+          onSelect={handleMentionSelect}
+          onClose={() => setMentionQuery(null)}
         />
       )}
 
