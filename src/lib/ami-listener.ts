@@ -393,6 +393,60 @@ export function originate(
  * Envia QueuePause ao Asterisk para pausar/despausar um ramal em todas as filas.
  * Fallback gracioso se AMI nao estiver conectado.
  */
+/**
+ * Consulta o status de todos os SIP peers via AMI command "sip show peers".
+ * Retorna array de objetos { ramal, ip, status } para ramais na faixa especificada.
+ */
+export function getSipPeers(
+  minRamal: number,
+  maxRamal: number,
+): Promise<{ ramal: string; status: 'online' | 'offline' }[]> {
+  return new Promise((resolve) => {
+    if (!amiConnected || !amiInstance) {
+      resolve([]);
+      return;
+    }
+
+    try {
+      amiInstance.action(
+        { action: 'Command', command: 'sip show peers' },
+        (err: Error | null, res: Record<string, string>) => {
+          if (err) {
+            console.error('[AMI] Erro sip show peers:', err.message);
+            resolve([]);
+            return;
+          }
+
+          const output = res?.output || res?.content || '';
+          const lines = (Array.isArray(output) ? output.join('\n') : String(output)).split('\n');
+          const peers: { ramal: string; status: 'online' | 'offline' }[] = [];
+
+          for (const line of lines) {
+            // Formato: "100/100  10.150.77.x  D  Yes  Yes  A  5060  OK (15 ms)"
+            // ou "100  (Unspecified)  D  No  No"
+            const match = line.match(/^(\d{3})\b/);
+            if (!match) continue;
+
+            const ramalNum = parseInt(match[1]);
+            if (ramalNum < minRamal || ramalNum > maxRamal) continue;
+
+            const isOnline = /\bOK\b/.test(line);
+            peers.push({
+              ramal: match[1],
+              status: isOnline ? 'online' : 'offline',
+            });
+          }
+
+          resolve(peers);
+        },
+      );
+    } catch (err) {
+      console.error('[AMI] Excecao sip show peers:', err);
+      resolve([]);
+    }
+  });
+}
+
 export function pauseQueue(ramal: string, paused: boolean, reason?: string): void {
   if (!amiConnected || !amiInstance) {
     console.warn(`[AMI] QueuePause ignorado (AMI offline) — ramal=${ramal} paused=${paused}`);

@@ -7,6 +7,7 @@ import CallDisplay from './CallDisplay';
 import DialPad from './DialPad';
 import CallControls from './CallControls';
 import SipSettings from './SipSettings';
+import RamaisList from './RamaisList';
 
 interface SoftphoneProps {
   operatorStatus?: string;
@@ -106,6 +107,17 @@ export default function Softphone({ operatorStatus }: SoftphoneProps) {
           </div>
         )}
       </div>
+
+      {/* Lista de ramais online */}
+      <RamaisList
+        onDial={(ramal) => {
+          phone.setDialNumber(ramal);
+          if (phone.registrationState === 'registered') {
+            phone.makeCall(ramal);
+          }
+        }}
+        disabled={phone.registrationState !== 'registered' || isActive}
+      />
 
       {/* Configuracoes SIP */}
       <SipSettings

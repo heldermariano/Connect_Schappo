@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef, useCallback } from 'react';
+
 interface DialPadProps {
   number: string;
   onNumberChange: (number: string) => void;
@@ -34,6 +36,14 @@ const KEY_LABELS: Record<string, string> = {
   '#': '',
 };
 
+// Frequencias DTMF padrao (Hz): cada tecla = combinacao de frequencia baixa + alta
+const DTMF_FREQ: Record<string, [number, number]> = {
+  '1': [697, 1209], '2': [697, 1336], '3': [697, 1477],
+  '4': [770, 1209], '5': [770, 1336], '6': [770, 1477],
+  '7': [852, 1209], '8': [852, 1336], '9': [852, 1477],
+  '*': [941, 1209], '0': [941, 1336], '#': [941, 1477],
+};
+
 export default function DialPad({
   number,
   onNumberChange,
@@ -45,7 +55,48 @@ export default function DialPad({
   onAnswer,
   disabled,
 }: DialPadProps) {
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  const playDTMFTone = useCallback((digit: string) => {
+    const freqs = DTMF_FREQ[digit];
+    if (!freqs) return;
+
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      const ctx = audioCtxRef.current;
+
+      const gain = ctx.createGain();
+      gain.gain.value = 0.15;
+      gain.connect(ctx.destination);
+
+      const osc1 = ctx.createOscillator();
+      osc1.frequency.value = freqs[0];
+      osc1.type = 'sine';
+      osc1.connect(gain);
+
+      const osc2 = ctx.createOscillator();
+      osc2.frequency.value = freqs[1];
+      osc2.type = 'sine';
+      osc2.connect(gain);
+
+      const now = ctx.currentTime;
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.15);
+      osc2.stop(now + 0.15);
+
+      // Fade out suave
+      gain.gain.setValueAtTime(0.15, now + 0.12);
+      gain.gain.linearRampToValueAtTime(0, now + 0.15);
+    } catch {
+      // Audio nao disponivel
+    }
+  }, []);
+
   const handleKeyPress = (digit: string) => {
+    playDTMFTone(digit);
     if (isInCall && onDigit) {
       onDigit(digit);
     } else {
