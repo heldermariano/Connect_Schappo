@@ -19,7 +19,7 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 };
 
 // Envia mensagem via UAZAPI
-async function sendViaUAZAPI(number: string, text: string, mentionedJid?: string[]): Promise<{ success: boolean; messageId?: string; error?: string }> {
+async function sendViaUAZAPI(number: string, text: string, mentionedJid?: string[], quotedMsgId?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
   const token = process.env.UAZAPI_TOKEN;
 
@@ -31,6 +31,9 @@ async function sendViaUAZAPI(number: string, text: string, mentionedJid?: string
     const payload: Record<string, unknown> = { number, text };
     if (mentionedJid && mentionedJid.length > 0) {
       payload.mentionedJid = mentionedJid;
+    }
+    if (quotedMsgId) {
+      payload.quoted = quotedMsgId;
     }
 
     const res = await fetch(`${url}/send/text`, {
@@ -102,7 +105,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { conversa_id, conteudo, mencoes } = await request.json();
+    const { conversa_id, conteudo, mencoes, quoted_msg_id } = await request.json();
 
     if (!conversa_id || !conteudo || typeof conteudo !== 'string' || !conteudo.trim()) {
       return NextResponse.json({ error: 'conversa_id e conteudo sao obrigatorios' }, { status: 400 });
@@ -164,7 +167,7 @@ export async function POST(request: NextRequest) {
       sendResult = await sendVia360Dialog(to, textToSend);
     } else {
       // UAZAPI: aceita numero ou chatid
-      sendResult = await sendViaUAZAPI(destinatario, textToSend, mentionedJid);
+      sendResult = await sendViaUAZAPI(destinatario, textToSend, mentionedJid, quoted_msg_id);
     }
 
     if (!sendResult.success) {
@@ -178,8 +181,8 @@ export async function POST(request: NextRequest) {
     const msgResult = await pool.query(
       `INSERT INTO atd.mensagens (
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata, mencoes
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6, $7)
+        tipo_mensagem, conteudo, status, metadata, mencoes, quoted_msg_id
+      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6, $7, $8)
       ON CONFLICT (wa_message_id) DO NOTHING
       RETURNING *`,
       [
@@ -190,6 +193,7 @@ export async function POST(request: NextRequest) {
         conteudo.trim(),
         JSON.stringify({ sent_by: session.user.id, sent_by_name: session.user.nome }),
         mencoesArray.length > 0 ? mencoesArray : '{}',
+        quoted_msg_id || null,
       ],
     );
 

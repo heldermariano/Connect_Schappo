@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
+import MessageContextMenu from './MessageContextMenu';
+import ReactionPicker from './ReactionPicker';
+import ForwardModal from './ForwardModal';
 import AtribuirDropdown from './AtribuirDropdown';
 import Avatar from '@/components/ui/Avatar';
 import CallButton from '@/components/calls/CallButton';
@@ -14,7 +17,7 @@ interface MessageViewProps {
   loading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
-  onSend: (conversaId: number, conteudo: string, mencoes?: string[]) => Promise<void>;
+  onSend: (conversaId: number, conteudo: string, mencoes?: string[], quotedMsgId?: string) => Promise<void>;
   onMarcarLida: (conversaId: number) => void;
   onAtribuir: (conversaId: number, atendenteId: number | null) => void;
   onDialNumber?: (number: string) => void;
@@ -45,6 +48,23 @@ export default function MessageView({
   const containerRef = useRef<HTMLDivElement>(null);
   const markedReadRef = useRef<number | null>(null);
 
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; mensagem: Mensagem } | null>(null);
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<Mensagem | null>(null);
+  // Reaction picker state
+  const [reactionTarget, setReactionTarget] = useState<{ x: number; y: number; mensagem: Mensagem } | null>(null);
+  // Forward modal state
+  const [forwardingMsg, setForwardingMsg] = useState<Mensagem | null>(null);
+
+  // Limpar estados ao mudar de conversa
+  useEffect(() => {
+    setReplyingTo(null);
+    setContextMenu(null);
+    setReactionTarget(null);
+    setForwardingMsg(null);
+  }, [conversa?.id]);
+
   // Auto-scroll para ultima mensagem
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,12 +82,69 @@ export default function MessageView({
   }, [conversa, onMarcarLida]);
 
   const handleSend = useCallback(
-    async (conteudo: string, mencoes?: string[]) => {
+    async (conteudo: string, mencoes?: string[], quotedMsgId?: string) => {
       if (!conversa) return;
-      await onSend(conversa.id, conteudo, mencoes);
+      await onSend(conversa.id, conteudo, mencoes, quotedMsgId);
+      setReplyingTo(null);
     },
     [conversa, onSend],
   );
+
+  const handleContextMenu = useCallback((data: { x: number; y: number; mensagem: Mensagem }) => {
+    setContextMenu(data);
+    setReactionTarget(null);
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    if (!contextMenu) return;
+    const text = contextMenu.mensagem.conteudo || '';
+    navigator.clipboard.writeText(text).catch(() => {});
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleReply = useCallback(() => {
+    if (!contextMenu) return;
+    setReplyingTo(contextMenu.mensagem);
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleReact = useCallback(() => {
+    if (!contextMenu) return;
+    setReactionTarget({ x: contextMenu.x, y: contextMenu.y, mensagem: contextMenu.mensagem });
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleForward = useCallback(() => {
+    if (!contextMenu) return;
+    setForwardingMsg(contextMenu.mensagem);
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleDelete = useCallback(() => {
+    if (!contextMenu || !conversa || !onDeleteMensagem) return;
+    if (window.confirm('Excluir esta mensagem?')) {
+      onDeleteMensagem(conversa.id, contextMenu.mensagem.id);
+    }
+    setContextMenu(null);
+  }, [contextMenu, conversa, onDeleteMensagem]);
+
+  const handleSendReaction = useCallback(async (emoji: string) => {
+    if (!reactionTarget || !conversa) return;
+    try {
+      await fetch('/api/mensagens/react', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: conversa.id,
+          wa_message_id: reactionTarget.mensagem.wa_message_id,
+          emoji,
+        }),
+      });
+    } catch (err) {
+      console.error('[reaction] Erro:', err);
+    }
+    setReactionTarget(null);
+  }, [reactionTarget, conversa]);
 
   if (!conversa) {
     return (
@@ -176,12 +253,47 @@ export default function MessageView({
               showSender={isGroup}
               isAdmin={currentUserRole === 'admin'}
               onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+              onContextMenu={handleContextMenu}
             />
           ))
         )}
 
         <div ref={bottomRef} />
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <MessageContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          mensagem={contextMenu.mensagem}
+          isAdmin={currentUserRole === 'admin'}
+          isOwnMessage={contextMenu.mensagem.from_me}
+          onCopy={handleCopy}
+          onReply={handleReply}
+          onForward={handleForward}
+          onReact={handleReact}
+          onDelete={handleDelete}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Reaction Picker */}
+      {reactionTarget && (
+        <ReactionPicker
+          position={{ x: reactionTarget.x, y: reactionTarget.y }}
+          onReact={handleSendReaction}
+          onClose={() => setReactionTarget(null)}
+        />
+      )}
+
+      {/* Forward Modal */}
+      {forwardingMsg && (
+        <ForwardModal
+          mensagem={forwardingMsg}
+          onClose={() => setForwardingMsg(null)}
+        />
+      )}
 
       {/* Campo de envio de mensagem ou barra de bloqueio */}
       {currentUserId && conversa.atendente_id !== null && conversa.atendente_id !== currentUserId ? (
@@ -191,7 +303,14 @@ export default function MessageView({
           </span>
         </div>
       ) : (
-        <MessageInput onSend={handleSend} conversaId={conversa.id} chatId={conversa.wa_chatid} tipoConversa={conversa.tipo} />
+        <MessageInput
+          onSend={handleSend}
+          conversaId={conversa.id}
+          chatId={conversa.wa_chatid}
+          tipoConversa={conversa.tipo}
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
+        />
       )}
     </div>
   );

@@ -61,6 +61,16 @@ export interface Mensagem {
   mencoes: string[];
   mencoes_resolvidas?: Record<string, string>;
   sender_avatar_url?: string | null;
+  quoted_message?: {
+    id: number;
+    wa_message_id: string | null;
+    sender_name: string | null;
+    sender_phone: string | null;
+    from_me: boolean;
+    tipo_mensagem: string;
+    conteudo: string | null;
+    media_filename: string | null;
+  } | null;
   metadata: Record<string, unknown>;
   created_at: string;
 }

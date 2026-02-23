@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { Mensagem } from '@/lib/types';
 import MediaPreview from './MediaPreview';
+import QuotedMessage from './QuotedMessage';
 import Avatar, { getSenderColor } from '@/components/ui/Avatar';
 
 interface MessageBubbleProps {
@@ -10,6 +11,7 @@ interface MessageBubbleProps {
   showSender: boolean; // Em grupos, mostra nome do remetente
   isAdmin?: boolean;
   onDelete?: (msgId: number) => void;
+  onContextMenu?: (data: { x: number; y: number; mensagem: Mensagem }) => void;
 }
 
 function formatTime(dateStr: string): string {
@@ -145,7 +147,7 @@ function renderTextWithMentions(text: string, mencoesResolvidas?: Record<string,
   return parts.length > 0 ? parts : [text];
 }
 
-export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete }: MessageBubbleProps) {
+export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete, onContextMenu }: MessageBubbleProps) {
   const isMe = mensagem.from_me;
   const tipoNorm = mensagem.tipo_mensagem.toLowerCase().replace('message', '');
   const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem)
@@ -167,8 +169,16 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete 
   // Reacoes: exibir inline compacto
   if (isReaction) return null;
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onContextMenu?.({ x: e.clientX, y: e.clientY, mensagem });
+  };
+
   return (
-    <div className={`group flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
+    <div
+      className={`group flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}
+      onContextMenu={handleContextMenu}
+    >
       {/* Mini-avatar para mensagens recebidas em grupos */}
       {showSender && !isMe && (
         <div className="shrink-0 mr-1.5 mt-auto mb-1">
@@ -199,6 +209,11 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete 
           </div>
         )}
 
+        {/* Preview da mensagem citada (reply) */}
+        {mensagem.quoted_message && (
+          <QuotedMessage mensagem={mensagem.quoted_message as unknown as import('@/lib/types').Mensagem} inline />
+        )}
+
         {/* Preview de midia via proxy */}
         {hasMedia && (
           <MediaPreview
@@ -220,6 +235,9 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete 
 
         {/* Hora + status */}
         <div className={`flex items-center gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+          {mensagem.is_forwarded && (
+            <span className="text-[10px] text-gray-400 italic mr-1">Encaminhada</span>
+          )}
           <span className="text-[10px] text-gray-400">{formatTime(mensagem.created_at)}</span>
           {isMe && <StatusIcon status={mensagem.status} />}
         </div>

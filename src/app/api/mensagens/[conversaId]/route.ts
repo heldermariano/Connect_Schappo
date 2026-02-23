@@ -132,6 +132,28 @@ export async function GET(
       }
     }
 
+    // Batch-query mensagens citadas (quoted)
+    const quotedIds = new Set<string>();
+    for (const msg of mensagens) {
+      if (msg.quoted_msg_id) quotedIds.add(msg.quoted_msg_id);
+    }
+    let quotedMap: Record<string, Record<string, unknown>> = {};
+    if (quotedIds.size > 0) {
+      try {
+        const quotedResult = await pool.query(
+          `SELECT id, wa_message_id, sender_name, sender_phone, from_me, tipo_mensagem, LEFT(conteudo, 150) as conteudo, media_filename
+           FROM atd.mensagens
+           WHERE wa_message_id = ANY($1)`,
+          [[...quotedIds]],
+        );
+        for (const row of quotedResult.rows) {
+          quotedMap[row.wa_message_id] = row;
+        }
+      } catch {
+        // Coluna pode nao existir — ignorar
+      }
+    }
+
     // Adicionar mencoes_resolvidas e sender_avatar_url a cada mensagem
     const mensagensEnriquecidas = mensagens.map((msg) => {
       const enriched = { ...msg } as Record<string, unknown>;
@@ -161,6 +183,11 @@ export async function GET(
       // Avatar do sender
       if (!msg.from_me && msg.sender_phone && avatarMap[msg.sender_phone]) {
         enriched.sender_avatar_url = avatarMap[msg.sender_phone];
+      }
+
+      // Mensagem citada (quoted)
+      if (msg.quoted_msg_id && quotedMap[msg.quoted_msg_id]) {
+        enriched.quoted_message = quotedMap[msg.quoted_msg_id];
       }
 
       return enriched;

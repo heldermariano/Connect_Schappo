@@ -4,18 +4,24 @@ import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
 import AttachmentPreview from './AttachmentPreview';
 import ExameSearch from './ExameSearch';
 import MentionAutocomplete, { Participant } from './MentionAutocomplete';
+import EmojiPickerButton from './EmojiPickerButton';
+import AudioRecorder from './AudioRecorder';
+import QuotedMessage from './QuotedMessage';
+import { Mensagem } from '@/lib/types';
 
 interface MessageInputProps {
-  onSend: (conteudo: string, mencoes?: string[]) => Promise<void>;
+  onSend: (conteudo: string, mencoes?: string[], quotedMsgId?: string) => Promise<void>;
   conversaId?: number;
   disabled?: boolean;
   chatId?: string;
   tipoConversa?: string;
+  replyingTo?: Mensagem | null;
+  onCancelReply?: () => void;
 }
 
 const ACCEPTED_TYPES = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx';
 
-export default function MessageInput({ onSend, conversaId, disabled, chatId, tipoConversa }: MessageInputProps) {
+export default function MessageInput({ onSend, conversaId, disabled, chatId, tipoConversa, replyingTo, onCancelReply }: MessageInputProps) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,11 +30,13 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionedPhones, setMentionedPhones] = useState<string[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
   const mentionStartRef = useRef<number>(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isGroup = tipoConversa === 'grupo';
+  const hasMediaRecorder = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined';
 
   // Fetch participantes quando abre conversa de grupo
   useEffect(() => {
@@ -103,7 +111,8 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
 
     try {
       const mencoes = mentionedPhones.length > 0 ? [...mentionedPhones] : undefined;
-      await onSend(trimmed, mencoes);
+      const quotedMsgId = replyingTo?.wa_message_id || undefined;
+      await onSend(trimmed, mencoes, quotedMsgId);
       setText('');
       setMentionedPhones([]);
       if (textareaRef.current) {
@@ -115,7 +124,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       setSending(false);
       textareaRef.current?.focus();
     }
-  }, [text, sending, onSend, attachments, conversaId, mentionedPhones]);
+  }, [text, sending, onSend, attachments, conversaId, mentionedPhones, replyingTo]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -212,6 +221,26 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     });
   }, [text]);
 
+  const handleEmojiInsert = useCallback((emoji: string) => {
+    const textarea = textareaRef.current;
+    const cursorPos = textarea?.selectionStart ?? text.length;
+    const before = text.slice(0, cursorPos);
+    const after = text.slice(cursorPos);
+    const newText = `${before}${emoji}${after}`;
+    setText(newText);
+
+    const newCursorPos = cursorPos + emoji.length;
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+        // Resize textarea
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+      }
+    });
+  }, [text]);
+
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -229,7 +258,47 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  const handleSendAudio = useCallback(async (file: File) => {
+    if (!conversaId) return;
+    setIsRecording(false);
+    setSending(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('conversa_id', String(conversaId));
+      formData.append('file', file);
+
+      const res = await fetch('/api/mensagens/send-media', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Erro ao enviar audio' }));
+        throw new Error(data.error || 'Erro ao enviar audio');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar audio');
+    } finally {
+      setSending(false);
+    }
+  }, [conversaId]);
+
   const canSend = attachments.length > 0 || text.trim().length > 0;
+
+  // Se gravando, mostrar AudioRecorder em vez do input normal
+  if (isRecording) {
+    return (
+      <div className="border-t border-gray-200 bg-white shrink-0">
+        <AudioRecorder
+          onRecordingComplete={handleSendAudio}
+          onCancel={() => setIsRecording(false)}
+          disabled={disabled}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative border-t border-gray-200 bg-white shrink-0">
@@ -245,6 +314,11 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
             </svg>
           </button>
         </div>
+      )}
+
+      {/* Preview da mensagem sendo respondida */}
+      {replyingTo && onCancelReply && (
+        <QuotedMessage mensagem={replyingTo} onCancel={onCancelReply} />
       )}
 
       {/* Preview dos arquivos anexados */}
@@ -304,6 +378,23 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
           className="hidden"
         />
 
+        {/* Botao microfone */}
+        {hasMediaRecorder && (
+          <button
+            onClick={() => setIsRecording(true)}
+            disabled={disabled || sending}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
+                       text-gray-400 hover:text-red-500 hover:bg-gray-100
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-colors"
+            title="Gravar audio"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </button>
+        )}
+
         <textarea
           ref={textareaRef}
           value={text}
@@ -318,6 +409,10 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
                      placeholder:text-gray-400"
           style={{ maxHeight: '120px' }}
         />
+
+        {/* Emoji picker */}
+        <EmojiPickerButton onEmojiSelect={handleEmojiInsert} disabled={disabled || sending} />
+
         <button
           onClick={handleSend}
           disabled={disabled || sending || !canSend}
