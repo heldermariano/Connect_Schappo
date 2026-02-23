@@ -111,24 +111,65 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
     const remoteAudio = getRemoteAudio();
 
     const peerConnection = (session as unknown as { sessionDescriptionHandler?: { peerConnection?: RTCPeerConnection } }).sessionDescriptionHandler?.peerConnection;
-    if (!peerConnection) return;
+    if (!peerConnection) {
+      console.warn('[SIP] setupSessionMedia: peerConnection nao encontrado');
+      return;
+    }
+
+    console.log('[SIP] setupSessionMedia: configurando midia');
+    console.log('[SIP] ICE connectionState:', peerConnection.iceConnectionState);
+    console.log('[SIP] ICE gatheringState:', peerConnection.iceGatheringState);
+    console.log('[SIP] signaling state:', peerConnection.signalingState);
+
+    // Monitorar estado ICE
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log('[SIP] ICE connectionState mudou:', peerConnection.iceConnectionState);
+    };
+    peerConnection.onconnectionstatechange = () => {
+      console.log('[SIP] connectionState mudou:', peerConnection.connectionState);
+    };
+    peerConnection.onicegatheringstatechange = () => {
+      console.log('[SIP] ICE gatheringState mudou:', peerConnection.iceGatheringState);
+    };
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('[SIP] ICE candidate:', event.candidate.candidate);
+      } else {
+        console.log('[SIP] ICE gathering completo');
+      }
+    };
 
     // Escutar tracks remotos
     peerConnection.ontrack = (event) => {
+      console.log('[SIP] ontrack recebido:', event.track.kind, 'readyState:', event.track.readyState);
       if (event.streams[0]) {
         remoteAudio.srcObject = event.streams[0];
+        console.log('[SIP] remoteAudio.srcObject configurado, tracks:', event.streams[0].getTracks().map(t => `${t.kind}:${t.readyState}`));
       }
     };
 
     // Se ja tem streams, conectar
     const receivers = peerConnection.getReceivers();
+    console.log('[SIP] receivers existentes:', receivers.length);
     if (receivers.length > 0) {
       const stream = new MediaStream();
       receivers.forEach((r) => {
-        if (r.track) stream.addTrack(r.track);
+        if (r.track) {
+          stream.addTrack(r.track);
+          console.log('[SIP] track adicionada:', r.track.kind, 'enabled:', r.track.enabled, 'readyState:', r.track.readyState);
+        }
       });
       remoteAudio.srcObject = stream;
     }
+
+    // Log senders (audio local)
+    const senders = peerConnection.getSenders();
+    console.log('[SIP] senders:', senders.length);
+    senders.forEach((s) => {
+      if (s.track) {
+        console.log('[SIP] sender track:', s.track.kind, 'enabled:', s.track.enabled, 'readyState:', s.track.readyState);
+      }
+    });
   }, [getRemoteAudio]);
 
   // Cleanup sessao
@@ -150,22 +191,34 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
   // Observar mudancas de estado da sessao
   const watchSession = useCallback((session: Session) => {
     session.stateChange.addListener((state) => {
+      console.log('[SIP] Session state mudou:', state);
       switch (state) {
         case SessionState.Establishing:
           setCallState('calling');
           break;
         case SessionState.Established:
+          console.log('[SIP] Chamada ESTABELECIDA - configurando midia');
           setCallState('in-call');
           setupSessionMedia(session);
           startDurationTimer();
           getRingtone().pause();
           break;
         case SessionState.Terminating:
+          console.log('[SIP] Chamada TERMINANDO');
+          cleanupSession();
+          break;
         case SessionState.Terminated:
+          console.log('[SIP] Chamada TERMINADA');
           cleanupSession();
           break;
       }
     });
+
+    // Log SDP para debug
+    const sdh = (session as unknown as { sessionDescriptionHandler?: { on?: (event: string, cb: () => void) => void } }).sessionDescriptionHandler;
+    if (sdh && typeof sdh.on === 'function') {
+      sdh.on('sdp', () => console.log('[SIP] SDP event'));
+    }
   }, [setupSessionMedia, startDurationTimer, cleanupSession, getRingtone]);
 
   // Handler para chamadas recebidas
@@ -239,6 +292,8 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
 
       const scheme = sipSettings.sip_transport === 'wss' ? 'wss' : 'ws';
       const wsServer = `${scheme}://${sipSettings.sip_server}:${sipSettings.sip_port}/ws`;
+      console.log('[SIP] Conectando a:', wsServer);
+      console.log('[SIP] Usuario:', sipSettings.sip_username);
 
       const ua = new UserAgent({
         uri: UserAgent.makeURI(`sip:${sipSettings.sip_username}@${sipSettings.sip_server}`),
@@ -248,6 +303,7 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
         authorizationUsername: sipSettings.sip_username,
         authorizationPassword: sipSettings.sip_password,
         displayName: sipSettings.sip_username,
+        logLevel: 'warn',
         delegate: {
           onInvite: handleIncomingCall,
         },
@@ -320,6 +376,9 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
         return;
       }
 
+      console.log('[SIP] Iniciando chamada para:', number);
+      console.log('[SIP] URI destino:', `sip:${number}@${sipSettings?.sip_server}`);
+
       const inviter = new Inviter(userAgentRef.current, target, {
         sessionDescriptionHandlerOptions: {
           constraints: { audio: true, video: false },
@@ -332,6 +391,7 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
       watchSession(inviter);
 
       await inviter.invite();
+      console.log('[SIP] INVITE enviado com sucesso');
     } catch (err) {
       cleanupSession();
       setError(err instanceof Error ? err.message : 'Erro ao ligar');

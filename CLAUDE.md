@@ -62,7 +62,10 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Download e envio de laudos/tracados PDF | DONE |
 | Exclusao de conversas e mensagens (admin) | DONE |
 | Mencoes (@) em grupos com notificacao sonora | DONE |
-| Softphone WebRTC (SIP.js + Issabel) | DONE |
+| Softphone WebRTC (SIP.js + PJSIP/Issabel) | DONE |
+| Tons DTMF no teclado (Web Audio API) | DONE |
+| Config SIP em modal overlay | DONE |
+| Lista de ramais online (100-120) | DONE |
 | Click-to-call via AMI | DONE |
 | Contatos (listagem, busca, import CSV Chatwoot) | DONE |
 | Edicao de contatos (modal detalhes) | DONE |
@@ -149,6 +152,7 @@ connect-schappo/
 │   ├── GUIA_AUTORESPOSTA_N8N.md        # Fase 1E: auto-resposta via N8N
 │   ├── GUIA_DEPLOY_PRODUCAO.md         # Deploy Docker + Traefik
 │   ├── GUIA_DEPLOY_WHATSAPP_VOZ.md     # Fase 1D: SIP + Asterisk + 360Dialog
+│   ├── GUIA_WEBRTC_PJSIP.md           # Config PJSIP WebRTC (ramal 250, coexistencia chan_sip)
 │   └── MELHORIAS_FASE2.md              # Roadmap Fase 2 (parcialmente implementado)
 │
 ├── sql/
@@ -220,6 +224,7 @@ connect-schappo/
     │       │
     │       ├── chamadas/route.ts                # GET: log chamadas com filtros
     │       ├── calls/originate/route.ts         # POST: click-to-call via AMI
+    │       ├── ramais/route.ts                  # GET: lista ramais online (100-120) via AMI
     │       │
     │       ├── contatos/
     │       │   ├── route.ts                     # GET: lista unificada (UNION conversas+participantes+contatos)
@@ -262,11 +267,12 @@ connect-schappo/
     │   │
     │   ├── softphone/
     │   │   ├── Softphone.tsx             # Painel softphone completo
-    │   │   ├── DialPad.tsx               # Teclado numerico
+    │   │   ├── DialPad.tsx               # Teclado numerico (DTMF tones via Web Audio API)
     │   │   ├── CallDisplay.tsx           # Display chamada (numero, duracao)
     │   │   ├── CallControls.tsx          # Mute, hold, DTMF
     │   │   ├── SipStatus.tsx             # Indicador registro SIP
-    │   │   └── SipSettings.tsx           # Config servidor SIP
+    │   │   ├── SipSettings.tsx           # Config servidor SIP (modal overlay)
+    │   │   └── RamaisList.tsx            # Lista ramais online 100-120 (auto-refresh 15s)
     │   │
     │   ├── contatos/
     │   │   ├── ContatoList.tsx            # Lista com infinite scroll
@@ -380,6 +386,7 @@ Schema: atd
 |------|--------|-----------|
 | `/api/chamadas` | GET | Log com filtros (origem, status) |
 | `/api/calls/originate` | POST | Click-to-call via AMI |
+| `/api/ramais` | GET | Lista ramais online (100-120) via AMI |
 
 ### Contatos
 
@@ -427,6 +434,67 @@ Schema: atd
 - Eventos: Newchannel → DialBegin → BridgeEnter → Hangup
 - Origem: `from-whatsapp` = whatsapp, `from-external` = telefone
 - Lib: `asterisk-manager` npm
+
+### Issabel/Asterisk — Configuracao WebRTC (PJSIP)
+
+O softphone WebRTC usa **PJSIP** para o ramal 250, enquanto os ramais tradicionais (100-120) continuam em **chan_sip**. A coexistencia funciona via `preload` do PJSIP no `modules.conf`.
+
+**Servidor**: `10.150.77.91` (Issabel 4, Asterisk 16.21.1)
+
+| Componente | Driver | Transporte |
+|---|---|---|
+| Ramais 100-120 (telefones/MicroSIP) | chan_sip | UDP (porta 5060) |
+| Ramal 250 (WebRTC/Connect Schappo) | PJSIP | WSS (porta 8089 via HTTP server) |
+| Trunks telefonia | chan_sip | UDP |
+
+**Arquivos de configuracao no Asterisk**:
+
+| Arquivo | Conteudo |
+|---|---|
+| `/etc/asterisk/pjsip_custom.conf` | Endpoint 250 WebRTC (`webrtc=yes`, `direct_media=no`, `dtls_verify=no`) |
+| `/etc/asterisk/sip_custom.conf` | Apenas `[general](+)` com stunaddr (ramal 250 removido) |
+| `/etc/asterisk/modules.conf` | `preload => res_pjsip.so` + `preload => res_pjsip_transport_websocket.so` |
+
+**Config PJSIP (`pjsip_custom.conf`)**:
+```ini
+[auth250]
+type=auth
+auth_type=userpass
+username=250
+password=Schappo250
+
+[250]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+
+[250]
+type=endpoint
+context=from-internal
+disallow=all
+allow=ulaw,alaw
+webrtc=yes
+direct_media=no
+auth=auth250
+aors=250
+callerid="Connect Schappo" <250>
+dtmf_mode=rfc4733
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+dtls_verify=no
+```
+
+**O que `webrtc=yes` ativa automaticamente**: `rtcp_mux=yes`, `ice_support=yes`, `use_avpf=yes`, `media_encryption=dtls`, `dtls_auto_generate_cert=yes`, `media_use_received_transport=yes`, `bundle=yes`
+
+**IMPORTANTE — Por que PJSIP e nao chan_sip**: WebRTC exige `rtcp-mux` (multiplexar RTCP na mesma porta do RTP). chan_sip nao suporta rtcp-mux. Sem isso, o browser rejeita o SDP com: `"RTCP-MUX is not enabled when it is required"`.
+
+**IMPORTANTE — Preload obrigatorio**: Sem os preloads, chan_sip registra o handler WebSocket 'sip' primeiro e PJSIP fica "Not Running". Com preload, PJSIP carrega antes e controla o WebSocket.
+
+**Config do softphone no Connect Schappo**: Servidor `10.150.77.91`, Porta `8089`, Transporte `wss`, Usuario `250`
+
+Ver `docs/GUIA_WEBRTC_PJSIP.md` para detalhes completos de configuracao e troubleshooting.
 
 ---
 
@@ -532,6 +600,7 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 | `docs/CORRECAO_PAYLOAD_UAZAPI.md` | Mapeamento de campos UAZAPI real vs esperado (CRITICO) |
 | `docs/GUIA_DEPLOY_PRODUCAO.md` | Procedimento deploy Docker + Traefik |
 | `docs/GUIA_DEPLOY_WHATSAPP_VOZ.md` | Config SIP + Asterisk + 360Dialog Calling |
+| `docs/GUIA_WEBRTC_PJSIP.md` | Config PJSIP WebRTC no Issabel (ramal 250, coexistencia chan_sip) |
 | `docs/GUIA_AUTORESPOSTA_N8N.md` | Workflow N8N auto-resposta chamadas |
 | `docs/MELHORIAS_FASE2.md` | Roadmap original Fase 2 (parcialmente feito) |
 
