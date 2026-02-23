@@ -29,6 +29,21 @@ async function resolveMencoes(phones: string[]): Promise<Record<string, string>>
   }
 }
 
+/**
+ * Extrai numeros de telefone encontrados no texto apos @.
+ * Ex: "@253419897049 @93858004254863" → ["253419897049", "93858004254863"]
+ */
+function extractPhonesFromText(text: string | null): string[] {
+  if (!text) return [];
+  const regex = /@(\d{8,15})/g;
+  const phones: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    phones.push(match[1]);
+  }
+  return phones;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ conversaId: string }> },
@@ -72,12 +87,18 @@ export async function GET(
     const hasMore = result.rows.length === limit;
 
     // Coletar todos os telefones mencionados para resolver nomes em lote
+    // Inclui tanto o array mencoes[] quanto @numero encontrados no texto
     const allMencoes = new Set<string>();
     for (const msg of mensagens) {
       if (Array.isArray(msg.mencoes)) {
         for (const phone of msg.mencoes) {
           allMencoes.add(phone);
         }
+      }
+      // Extrair @numero do conteudo do texto
+      const textPhones = extractPhonesFromText(msg.conteudo);
+      for (const phone of textPhones) {
+        allMencoes.add(phone);
       }
     }
 
@@ -115,15 +136,26 @@ export async function GET(
     const mensagensEnriquecidas = mensagens.map((msg) => {
       const enriched = { ...msg } as Record<string, unknown>;
 
-      // Mencoes resolvidas
-      if (Array.isArray(msg.mencoes) && msg.mencoes.length > 0) {
+      // Coletar telefones do array mencoes + @numero no texto
+      const phoneSet = new Set<string>();
+      if (Array.isArray(msg.mencoes)) {
+        for (const phone of msg.mencoes) phoneSet.add(phone);
+      }
+      for (const phone of extractPhonesFromText(msg.conteudo)) {
+        phoneSet.add(phone);
+      }
+
+      // Resolver mencoes: funciona tanto para mencoes do array quanto @numero no texto
+      if (phoneSet.size > 0) {
         const resolved: Record<string, string> = {};
-        for (const phone of msg.mencoes) {
+        for (const phone of phoneSet) {
           if (mencoesResolvidas[phone]) {
             resolved[phone] = mencoesResolvidas[phone];
           }
         }
-        enriched.mencoes_resolvidas = resolved;
+        if (Object.keys(resolved).length > 0) {
+          enriched.mencoes_resolvidas = resolved;
+        }
       }
 
       // Avatar do sender

@@ -75,10 +75,27 @@ function cleanContent(conteudo: string | null, tipo: string): string | null {
 /**
  * Renderiza texto com mencoes destacadas em negrito laranja.
  * Substitui @NUMERO por @NOME quando disponivel no mapa de mencoes resolvidas.
+ * Funciona tanto para mencoes do array quanto para @numero encontrados no texto.
  */
-function renderTextWithMentions(text: string, mencoes: string[], mencoesResolvidas?: Record<string, string>): ReactNode[] {
-  if (!mencoes || mencoes.length === 0) {
-    return [text];
+function renderTextWithMentions(text: string, mencoesResolvidas?: Record<string, string>): ReactNode[] {
+  if (!mencoesResolvidas || Object.keys(mencoesResolvidas).length === 0) {
+    // Sem resolucao disponivel — ainda destacar @mencoes visualmente
+    const mentionRegex = /@([\d+]+|[\w\u00C0-\u017F]+(?:\s[\w\u00C0-\u017F]+)?)/g;
+    if (!mentionRegex.test(text)) return [text];
+    mentionRegex.lastIndex = 0;
+
+    const parts: ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = mentionRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+      parts.push(
+        <span key={match.index} className="text-schappo-500 font-semibold">{match[0]}</span>,
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    return parts;
   }
 
   // Regex para encontrar mencoes: @seguido de numero ou nome (ate espaco/pontuacao)
@@ -96,13 +113,19 @@ function renderTextWithMentions(text: string, mencoes: string[], mencoesResolvid
 
     // Tentar resolver nome da mencao
     let displayName = match[0];
-    if (mencoesResolvidas) {
-      // Procurar pelo numero exato ou parcial
-      for (const [phone, nome] of Object.entries(mencoesResolvidas)) {
-        if (mentionValue === phone || phone.endsWith(mentionValue) || mentionValue.includes(phone.slice(-4))) {
-          displayName = `@${nome}`;
-          break;
-        }
+    // Procurar pelo numero exato, parcial (sufixo) ou contido
+    for (const [phone, nome] of Object.entries(mencoesResolvidas)) {
+      const cleanPhone = phone.replace(/\D/g, '');
+      const cleanMention = mentionValue.replace(/\D/g, '');
+      if (
+        cleanMention === cleanPhone ||
+        cleanPhone.endsWith(cleanMention) ||
+        cleanMention.endsWith(cleanPhone) ||
+        cleanPhone.includes(cleanMention) ||
+        cleanMention.includes(cleanPhone)
+      ) {
+        displayName = `@${nome}`;
+        break;
       }
     }
 
@@ -139,7 +162,6 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete 
   const senderDisplay = mensagem.sender_name || formatPhoneShort(mensagem.sender_phone);
   const senderColor = senderDisplay ? getSenderColor(senderDisplay) : 'text-schappo-600';
 
-  const mencoes = mensagem.mencoes || [];
   const mencoesResolvidas = mensagem.mencoes_resolvidas;
 
   // Reacoes: exibir inline compacto
@@ -190,8 +212,8 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete 
         {/* Conteudo de texto com mencoes destacadas */}
         {textoLimpo && (
           <p className="text-sm whitespace-pre-wrap break-words">
-            {mencoes.length > 0
-              ? renderTextWithMentions(textoLimpo, mencoes)
+            {textoLimpo.includes('@')
+              ? renderTextWithMentions(textoLimpo, mencoesResolvidas)
               : textoLimpo}
           </p>
         )}
