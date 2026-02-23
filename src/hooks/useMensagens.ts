@@ -10,6 +10,7 @@ interface UseMensagensResult {
   hasMore: boolean;
   loadMore: () => void;
   addMensagem: (msg: Mensagem) => void;
+  removeMensagem: (msgId: number) => void;
   sendMensagem: (conversaId: number, conteudo: string) => Promise<void>;
 }
 
@@ -67,6 +68,10 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     });
   }, []);
 
+  const removeMensagem = useCallback((msgId: number) => {
+    setMensagens((prev) => prev.filter((m) => m.id !== msgId));
+  }, []);
+
   const sendMensagem = useCallback(async (cId: number, conteudo: string) => {
     const res = await fetch('/api/mensagens/send', {
       method: 'POST',
@@ -85,5 +90,5 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     }
   }, [addMensagem]);
 
-  return { mensagens, loading, error, hasMore, loadMore, addMensagem, sendMensagem };
+  return { mensagens, loading, error, hasMore, loadMore, addMensagem, removeMensagem, sendMensagem };
 }

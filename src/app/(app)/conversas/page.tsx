@@ -112,6 +112,7 @@ export default function ConversasPage() {
     hasMore,
     loadMore,
     addMensagem,
+    removeMensagem,
     sendMensagem,
   } = useMensagens(selectedConversa?.id ?? null);
 
@@ -258,6 +259,46 @@ export default function ConversasPage() {
     [updateConversa],
   );
 
+  const handleDeleteConversa = useCallback(
+    async (conversaId: number) => {
+      try {
+        const res = await fetch(`/api/conversas/${conversaId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          alert(body.error || 'Erro ao excluir conversa');
+          return;
+        }
+        // Remover da lista e limpar selecao
+        refresh();
+        setSelectedConversa(null);
+      } catch (err) {
+        console.error('[conversas] Erro ao excluir conversa:', err);
+        alert('Erro ao excluir conversa');
+      }
+    },
+    [refresh],
+  );
+
+  const handleDeleteMensagem = useCallback(
+    async (conversaId: number, msgId: number) => {
+      try {
+        const res = await fetch(`/api/mensagens/${conversaId}/${msgId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          alert(body.error || 'Erro ao excluir mensagem');
+          return;
+        }
+        removeMensagem(msgId);
+      } catch (err) {
+        console.error('[conversas] Erro ao excluir mensagem:', err);
+        alert('Erro ao excluir mensagem');
+      }
+    },
+    [removeMensagem],
+  );
+
+  const userRole = (session?.user as { role?: string })?.role;
+
   return (
     <>
       <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
@@ -291,6 +332,9 @@ export default function ConversasPage() {
           }}
           currentUserId={userId ?? undefined}
           onFinalizar={handleFinalizar}
+          currentUserRole={userRole}
+          onDeleteConversa={handleDeleteConversa}
+          onDeleteMensagem={handleDeleteMensagem}
         />
       </div>
     </>

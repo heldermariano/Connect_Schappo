@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, KeyboardEvent } from 'react';
 import AttachmentPreview from './AttachmentPreview';
+import ExameSearch from './ExameSearch';
 
 interface MessageInputProps {
   onSend: (conteudo: string) => Promise<void>;
@@ -16,6 +17,7 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [exameSearch, setExameSearch] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,12 +94,20 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
     [handleSend],
   );
 
-  // Auto-resize do textarea
+  // Auto-resize do textarea + deteccao de busca de exames (#)
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    const value = e.target.value;
+    setText(value);
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+
+    // Detectar comando # para busca de exames
+    if (value.startsWith('#') && value.length > 1) {
+      setExameSearch(value.slice(1).trim());
+    } else {
+      setExameSearch(null);
+    }
   }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,7 +128,7 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
   const canSend = attachment ? true : text.trim().length > 0;
 
   return (
-    <div className="border-t border-gray-200 bg-white shrink-0">
+    <div className="relative border-t border-gray-200 bg-white shrink-0">
       {error && (
         <div className="mx-4 mt-2 px-3 py-1.5 bg-red-50 text-red-600 text-xs rounded-md flex items-center gap-2">
           <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -138,6 +148,14 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
         <div className="pt-2">
           <AttachmentPreview file={attachment} onRemove={() => setAttachment(null)} />
         </div>
+      )}
+
+      {/* Popup busca de exames (ativado por #) */}
+      {exameSearch !== null && exameSearch.length >= 2 && (
+        <ExameSearch
+          searchTerm={exameSearch}
+          onClose={() => setExameSearch(null)}
+        />
       )}
 
       <div className="flex items-end gap-2 px-4 py-2">

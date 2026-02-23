@@ -20,6 +20,9 @@ interface MessageViewProps {
   onDialNumber?: (number: string) => void;
   currentUserId?: number;
   onFinalizar?: (conversaId: number) => void;
+  currentUserRole?: string;
+  onDeleteConversa?: (conversaId: number) => void;
+  onDeleteMensagem?: (conversaId: number, msgId: number) => void;
 }
 
 export default function MessageView({
@@ -34,6 +37,9 @@ export default function MessageView({
   onDialNumber,
   currentUserId,
   onFinalizar,
+  currentUserRole,
+  onDeleteConversa,
+  onDeleteMensagem,
 }: MessageViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -108,6 +114,22 @@ export default function MessageView({
             Finalizar
           </button>
         )}
+        {/* Excluir conversa (admin only) */}
+        {currentUserRole === 'admin' && onDeleteConversa && (
+          <button
+            onClick={() => {
+              if (window.confirm(`Excluir conversa "${displayName}" e todas as mensagens? Esta acao nao pode ser desfeita.`)) {
+                onDeleteConversa(conversa.id);
+              }
+            }}
+            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+            title="Excluir conversa"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
         {/* Click-to-call: apenas para conversas individuais com telefone */}
         {!isGroup && conversa.telefone && onDialNumber && (
           <button
@@ -148,7 +170,13 @@ export default function MessageView({
           </div>
         ) : (
           mensagens.map((msg) => (
-            <MessageBubble key={msg.id} mensagem={msg} showSender={isGroup} />
+            <MessageBubble
+              key={msg.id}
+              mensagem={msg}
+              showSender={isGroup}
+              isAdmin={currentUserRole === 'admin'}
+              onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+            />
           ))
         )}
 

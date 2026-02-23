@@ -8,6 +8,8 @@ import Avatar, { getSenderColor } from '@/components/ui/Avatar';
 interface MessageBubbleProps {
   mensagem: Mensagem;
   showSender: boolean; // Em grupos, mostra nome do remetente
+  isAdmin?: boolean;
+  onDelete?: (msgId: number) => void;
 }
 
 function formatTime(dateStr: string): string {
@@ -120,7 +122,7 @@ function renderTextWithMentions(text: string, mencoes: string[], mencoesResolvid
   return parts.length > 0 ? parts : [text];
 }
 
-export default function MessageBubble({ mensagem, showSender }: MessageBubbleProps) {
+export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete }: MessageBubbleProps) {
   const isMe = mensagem.from_me;
   const tipoNorm = mensagem.tipo_mensagem.toLowerCase().replace('message', '');
   const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem)
@@ -144,7 +146,7 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
   if (isReaction) return null;
 
   return (
-    <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
+    <div className={`group flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}>
       {/* Mini-avatar para mensagens recebidas em grupos */}
       {showSender && !isMe && (
         <div className="shrink-0 mr-1.5 mt-auto mb-1">
@@ -155,6 +157,7 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
           />
         </div>
       )}
+      <div className="relative">
       <div
         className={`max-w-[70%] rounded-lg px-3 py-2 ${
           isMe ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900 shadow-sm'
@@ -198,6 +201,23 @@ export default function MessageBubble({ mensagem, showSender }: MessageBubblePro
           <span className="text-[10px] text-gray-400">{formatTime(mensagem.created_at)}</span>
           {isMe && <StatusIcon status={mensagem.status} />}
         </div>
+      </div>
+      {/* Botao excluir mensagem (admin only, hover) */}
+      {isAdmin && onDelete && (
+        <button
+          onClick={() => {
+            if (window.confirm('Excluir esta mensagem?')) {
+              onDelete(mensagem.id);
+            }
+          }}
+          className={`absolute top-1 ${isMe ? 'left-[-24px]' : 'right-[-24px]'} hidden group-hover:block p-1 text-gray-400 hover:text-red-500 transition-colors`}
+          title="Excluir mensagem"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      )}
       </div>
     </div>
   );

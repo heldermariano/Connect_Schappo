@@ -25,17 +25,7 @@ function getMediaType(mimetype: string): 'image' | 'audio' | 'video' | 'document
   return 'document';
 }
 
-// Endpoint UAZAPI para cada tipo
-function getUazapiEndpoint(mediaType: string): string {
-  switch (mediaType) {
-    case 'image': return '/send/image';
-    case 'audio': return '/send/audio';
-    case 'video': return '/send/video';
-    default: return '/send/document';
-  }
-}
-
-// Envia midia via UAZAPI
+// Envia midia via UAZAPI (JSON + base64 via /send/media)
 async function sendMediaViaUAZAPI(
   number: string,
   mediaType: string,
@@ -49,17 +39,20 @@ async function sendMediaViaUAZAPI(
   if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
 
   try {
-    const endpoint = getUazapiEndpoint(mediaType);
-    const formData = new FormData();
-    formData.append('number', number);
-    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimetype });
-    formData.append('file', blob, filename);
-    if (caption) formData.append('caption', caption);
+    const base64Data = `data:${mimetype};base64,${fileBuffer.toString('base64')}`;
 
-    const res = await fetch(`${url}${endpoint}`, {
+    const res = await fetch(`${url}/send/media`, {
       method: 'POST',
-      headers: { token },
-      body: formData,
+      headers: {
+        'Content-Type': 'application/json',
+        token,
+      },
+      body: JSON.stringify({
+        number,
+        file: base64Data,
+        type: mediaType,
+        caption: caption || '',
+      }),
     });
 
     if (!res.ok) {
@@ -95,7 +88,7 @@ async function sendMediaVia360Dialog(
     const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimetype });
     formData.append('file', blob, filename);
     formData.append('messaging_product', 'whatsapp');
-    formData.append('type', mimetype);
+    formData.append('type', mediaType);
 
     const uploadRes = await fetch(`${apiUrl}/media`, {
       method: 'POST',
