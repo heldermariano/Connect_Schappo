@@ -74,10 +74,11 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
 
     if (msgId === 0) continue; // Duplicada
 
-    // Reset atribuicao quando cliente envia mensagem (nao from_me)
+    // Quando cliente envia mensagem: resetar atribuicao + desarquivar (reaparecer na caixa de entrada)
     if (!parsed.from_me) {
       await pool.query(
-        `UPDATE atd.conversas SET atendente_id = NULL WHERE id = $1 AND atendente_id IS NOT NULL`,
+        `UPDATE atd.conversas SET atendente_id = NULL, is_archived = FALSE
+         WHERE id = $1 AND (atendente_id IS NOT NULL OR is_archived = TRUE)`,
         [conversaId],
       );
     }

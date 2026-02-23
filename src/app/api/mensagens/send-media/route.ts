@@ -25,7 +25,18 @@ function getMediaType(mimetype: string): 'image' | 'audio' | 'video' | 'document
   return 'document';
 }
 
-// Envia midia via UAZAPI (JSON + base64 via /send/media)
+// Mapeia tipo de midia para endpoint UAZAPI especifico
+function getUAZAPIEndpoint(mediaType: string): string {
+  switch (mediaType) {
+    case 'image': return '/send/image';
+    case 'audio': return '/send/audio';
+    case 'video': return '/send/video';
+    case 'document': return '/send/document';
+    default: return '/send/document';
+  }
+}
+
+// Envia midia via UAZAPI usando endpoints especificos (/send/image, /send/document, etc.)
 async function sendMediaViaUAZAPI(
   number: string,
   mediaType: string,
@@ -40,25 +51,31 @@ async function sendMediaViaUAZAPI(
 
   try {
     const base64Data = `data:${mimetype};base64,${fileBuffer.toString('base64')}`;
+    const endpoint = getUAZAPIEndpoint(mediaType);
 
-    const res = await fetch(`${url}/send/media`, {
+    const body: Record<string, string> = {
+      number,
+      file: base64Data,
+      caption: caption || '',
+    };
+
+    // Campo filename para documentos (aparece como titulo no WhatsApp)
+    if (mediaType === 'document') {
+      body.filename = filename;
+    }
+
+    const res = await fetch(`${url}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         token,
       },
-      body: JSON.stringify({
-        number,
-        file: base64Data,
-        type: mediaType,
-        caption: caption || '',
-        filename,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
-      const body = await res.text();
-      console.error(`[send-media/uazapi] Erro: ${res.status}`, body);
+      const respBody = await res.text();
+      console.error(`[send-media/uazapi] Erro: ${res.status}`, respBody);
       return { success: false, error: `UAZAPI retornou ${res.status}` };
     }
 

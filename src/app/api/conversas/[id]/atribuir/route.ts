@@ -35,10 +35,13 @@ export async function PATCH(
       }
     }
 
+    // Se atendente_id = null → finalizando atendimento → arquivar conversa
+    const isFinalizando = !atendente_id;
+
     const result = await pool.query(
-      `UPDATE atd.conversas SET atendente_id = $1, updated_at = NOW()
+      `UPDATE atd.conversas SET atendente_id = $1, is_archived = $3, updated_at = NOW()
        WHERE id = $2 RETURNING id, ultima_mensagem, nao_lida, atendente_id`,
-      [atendente_id || null, conversaId],
+      [atendente_id || null, conversaId, isFinalizando],
     );
 
     if (result.rows.length === 0) {
