@@ -52,6 +52,7 @@ async function sendMediaViaUAZAPI(
         file: base64Data,
         type: mediaType,
         caption: caption || '',
+        filename,
       }),
     });
 
