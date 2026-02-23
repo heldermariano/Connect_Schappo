@@ -1,6 +1,6 @@
 # Connect Schappo — Status do Projeto
 
-> Ultima atualizacao: 22/02/2026
+> Ultima atualizacao: 23/02/2026
 
 ---
 
@@ -60,8 +60,27 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 ### Envio de Mensagens
 - [x] Envio de texto via UAZAPI e 360Dialog
 - [x] Envio de midia (imagem, audio, video, documento)
+- [x] Endpoints UAZAPI especificos (/send/document, /send/image, etc.) com filename
 - [x] Permissoes por categoria do operador
 - [x] Preview de anexo antes de enviar (16MB max)
+- [x] Multiplos attachments simultaneos (laudo + tracado)
+
+### Gestao de Conversas
+- [x] Atribuicao de conversas a atendentes
+- [x] Auto-atribuicao ao responder conversa nao atribuida
+- [x] Finalizar atendimento (is_archived = TRUE, conversa sai da caixa de entrada)
+- [x] Conversa reaparece automaticamente quando cliente envia nova mensagem
+- [x] Exclusao de conversas (admin)
+- [x] Exclusao de mensagens individuais (admin)
+
+### Busca de Exames
+- [x] Busca por nome do paciente via prefixo # no input de mensagem
+- [x] Conexao com banco externo NeuroSchappo (10.150.77.77)
+- [x] Exibe apenas o ultimo exame por paciente
+- [x] Download unificado de laudo + tracado (PDFs)
+- [x] Proxy para download via /api/exames/download (evita CORS)
+- [x] PDFs anexados como attachments prontos para enviar
+- [x] Nome original dos arquivos preservado no WhatsApp
 
 ### Contatos
 - [x] Lista unificada (conversas + participantes_grupo + contatos salvos)
@@ -78,7 +97,6 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 - [x] Media proxy com streaming (PDFs inline, docs download)
 - [x] Retry automatico para URLs de midia expiradas
 - [x] Fallback visual para imagens indisponiveis
-- [x] Atribuicao de conversas a atendentes
 - [x] Status de presenca (disponivel/pausa/ausente/offline)
 - [x] Tela de login com branding da clinica
 
@@ -119,6 +137,7 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 | WhatsApp Voz | `/docs/GUIA_DEPLOY_WHATSAPP_VOZ.md` | SIP + Asterisk + 360Dialog Calling |
 | Auto-resposta N8N | `/docs/GUIA_AUTORESPOSTA_N8N.md` | Workflow N8N para auto-reply chamadas |
 | Melhorias Fase 2 | `/docs/MELHORIAS_FASE2.md` | Roadmap original (parcialmente feito) |
+| Melhoria 9 Exames | `/MELHORIA_9_BUSCA_EXAMES.md` | Busca de exames via # (DONE) |
 
 ### Migracoes SQL
 
@@ -147,6 +166,15 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 
 | Commit | Descricao |
 |--------|-----------|
+| `db9d606` | fix: PDF com titulo no WhatsApp + finalizar remove conversa da caixa de entrada |
+| `895caa4` | fix: enviar filename no payload UAZAPI |
+| `69173ff` | feat: ultimo exame por paciente + download unificado laudo+tracado |
+| `f12ca05` | feat: download de laudo/tracado do NeuroSchappo e anexar na mensagem |
+| `bdf8a5c` | fix: corrigir Invalid Date na busca de exames |
+| `a62be31` | feat: busca de exames via # e melhorias de gestao de conversas |
+| `bcc8df1` | feat: atribuicao automatica, bloqueio de input e finalizar atendimento |
+| `2eb1cd8` | feat: submenu canais WhatsApp na Sidebar com filtros por canal |
+| `16b55a3` | feat: nome operador em negrito, busca unificada, grid 2 colunas |
 | `e5d9f52` | fix: page-not-loading + media error handling |
 | `c991a03` | feat: UX improvements — media streaming, lightbox, shared layout, contact modal, search, media input |
 | `8ca30c3` | fix: softphone visivel, paginacao contatos, validacao webhook |
@@ -165,10 +193,10 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 
 | Diretorio | Quantidade | Tipo |
 |-----------|------------|------|
-| `src/app/api/` | 21 route.ts | API Routes |
-| `src/components/` | 35 .tsx | React Components |
+| `src/app/api/` | 24 route.ts | API Routes |
+| `src/components/` | 36 .tsx | React Components |
 | `src/hooks/` | 6 .ts | Custom Hooks |
-| `src/lib/` | 10 .ts | Utilities |
+| `src/lib/` | 11 .ts | Utilities |
 | `src/contexts/` | 1 .tsx | React Context |
 | `sql/` | 6 .sql | Migracoes |
 | `config/` | 7 arquivos | Configs externos |

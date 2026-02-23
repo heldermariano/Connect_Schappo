@@ -1,177 +1,139 @@
-# Melhoria 9 (Futura): Busca de Resultados de Exames via #
+# Melhoria 9: Busca de Resultados de Exames via #
 
-> Status: 📋 Documentado — implementar após Melhorias 1-8
+> Status: DONE — Implementado em 23/02/2026
 
 ---
 
 ## Conceito
 
-Atendente digita `#nome-do-paciente` na caixa de busca ou na conversa e o sistema busca em um banco PostgreSQL externo se existe resultado de exame para aquele paciente. Se encontrar, retorna o link/PDF para o atendente colar no chat e enviar ao paciente.
+Atendente digita `#nome-do-paciente` no input de mensagem e o sistema busca no banco PostgreSQL externo (NeuroSchappo) o exame mais recente daquele paciente. Se encontrar, permite baixar os PDFs (laudo + tracado) e anexar na mensagem para enviar ao paciente via WhatsApp.
 
 ---
 
-## Fluxo
+## Fluxo Implementado
 
 ```
-1. Paciente envia: "Oi, gostaria de saber o resultado do meu exame"
+1. Paciente envia: "Oi, gostaria do resultado do meu exame"
 
-2. Atendente digita na barra de comandos: #Barbara Queiroz
+2. Atendente digita no input: #Barbara Queiroz
 
-3. Sistema busca no banco externo (PostgreSQL, rede interna)
+3. Sistema busca no banco externo (neuro_schappo em 10.150.77.77)
+   - Apenas o ULTIMO exame por paciente (DISTINCT ON p.id, ORDER BY exam_date DESC)
+   - Busca por name_normalized (LIKE case-insensitive)
 
-4. Resultado aparece como card no painel:
-   ┌─────────────────────────────────────────────┐
-   │ 🔍 Resultados para "Barbara Queiroz"        │
-   ├─────────────────────────────────────────────┤
-   │ 📋 Bárbara Queiroz Ignowsky                 │
-   │    EEG — 21/02/2026 — ✅ Pronto             │
-   │    🔗 https://resultados.clinica.../abc123   │
-   │    [📋 Copiar link]                          │
-   ├─────────────────────────────────────────────┤
-   │ 📋 Bárbara Queiroz Ignowsky                 │
-   │    EEG — 15/01/2026 — ✅ Pronto             │
-   │    🔗 https://resultados.clinica.../def456   │
-   │    [📋 Copiar link]                          │
-   ├─────────────────────────────────────────────┤
-   │ Nenhum outro resultado encontrado            │
-   └─────────────────────────────────────────────┘
+4. Popup aparece acima do input com resultados:
+   ┌─────────────────────────────────────────────────┐
+   │ Exames de "Barbara Queiroz"                   X │
+   ├─────────────────────────────────────────────────┤
+   │ Barbara Queiroz Ignowsky                        │
+   │ EEG · 21/02/2026 · Laudo Entregue              │
+   │ EEG - Barbara Queiroz 21.02.26.pdf             │
+   │ Tracado - Barbara Queiroz 21.02.26.pdf          │
+   │                              [Laudo + Tracado]  │
+   └─────────────────────────────────────────────────┘
 
-5. Atendente clica "Copiar link" → cola no chat → envia ao paciente
+5. Atendente clica "Laudo + Tracado":
+   - Sistema baixa TODOS os PDFs via proxy /api/exames/download
+   - Arquivos aparecem como attachments no input de mensagem
+   - Nomes originais dos arquivos sao preservados
+
+6. Atendente clica enviar → PDFs vao para o WhatsApp do paciente
+   - Cada arquivo enviado sequencialmente
+   - Nome do arquivo aparece como titulo no WhatsApp
 ```
 
 ---
 
-## Especificações Técnicas
+## Arquitetura
 
-### Banco externo
+### Banco Externo (NeuroSchappo)
 
-- **Tipo**: PostgreSQL
-- **Localização**: Rede interna da clínica (acessível via IP)
-- **Conexão**: Pool separado do banco principal (connect_schappo)
+- **Host**: 10.150.77.77
+- **Banco**: neuro_schappo
+- **Pool**: `src/lib/db-exames.ts` (max 5 conexoes, read-only)
 
-### Configuração (.env.local)
+### Tabelas consultadas
+
+| Tabela | Colunas relevantes |
+|--------|-------------------|
+| `patients` | id, name, name_normalized |
+| `exams` | id, patient_id, exam_type, exam_date, status, location_code |
+| `reports` | id, exam_id, report_type, filename, download_url, matched |
+| `clinical_reports` | id, exam_id, status (delivered/signed/reported/in_progress) |
+
+### Query Principal (CTE)
+
+```sql
+WITH latest_exams AS (
+  SELECT DISTINCT ON (p.id)
+    p.id AS patient_id, p.name AS paciente,
+    e.id AS exam_id, e.exam_type, e.exam_date, e.status, e.location_code
+  FROM patients p
+  JOIN exams e ON e.patient_id = p.id
+  WHERE LOWER(p.name_normalized) LIKE LOWER('%' || $1 || '%')
+  ORDER BY p.id, e.exam_date DESC
+)
+SELECT ...
+FROM latest_exams le
+LEFT JOIN clinical_reports cr ON cr.exam_id = le.exam_id
+LEFT JOIN reports r ON r.exam_id = le.exam_id
+  AND r.matched = true
+  AND r.report_type IN ('laudo', 'tracado', 'laudo_tracado')
+  AND r.download_url IS NOT NULL
+```
+
+### Download de PDFs
+
+- `reports.download_url` contem URLs com token HMAC:
+  `http://eeg.clinicaschappo.com/api/reports/{id}/download?token={hmac}`
+- Proxy `/api/exames/download` evita CORS e redireciona para IP interno:
+  `http://10.150.77.77:3000/api/reports/{id}/download?token={hmac}`
+- Validacao: apenas URLs de `eeg.clinicaschappo.com` ou `10.150.77.77`
+
+---
+
+## Arquivos
+
+| Arquivo | Funcao |
+|---------|--------|
+| `src/lib/db-exames.ts` | Pool PostgreSQL externo (neuro_schappo) |
+| `src/app/api/exames/buscar/route.ts` | GET: busca exames por nome, retorna ultimo por paciente |
+| `src/app/api/exames/download/route.ts` | GET: proxy download PDF (valida URL, reescreve para IP interno) |
+| `src/components/chat/ExameSearch.tsx` | Popup de resultados com botao download unificado |
+| `src/components/chat/MessageInput.tsx` | Suporte a multiplos attachments (File[]) |
+
+---
+
+## Variaveis de Ambiente
 
 ```env
-# Banco de resultados de exames (externo)
-EXAMES_DB_HOST=IP_DO_SERVIDOR
+EXAMES_DB_HOST=10.150.77.77
 EXAMES_DB_PORT=5432
-EXAMES_DB_NAME=nome_do_banco
-EXAMES_DB_USER=usuario_leitura
+EXAMES_DB_NAME=neuro_schappo
+EXAMES_DB_USER=neuro_schappo
 EXAMES_DB_PASSWORD=senha
 ```
 
-### Pool separado (src/lib/db-exames.ts)
+---
 
-```typescript
-import { Pool } from 'pg';
+## Permissoes
 
-const examesPool = new Pool({
-  host: process.env.EXAMES_DB_HOST,
-  port: parseInt(process.env.EXAMES_DB_PORT || '5432'),
-  database: process.env.EXAMES_DB_NAME,
-  user: process.env.EXAMES_DB_USER,
-  password: process.env.EXAMES_DB_PASSWORD,
-  max: 5,           // Poucas conexões (só leitura)
-  idleTimeoutMillis: 30000,
-});
-
-export default examesPool;
-```
-
-### API
-
-```
-GET /api/exames/buscar?nome=barbara+queiroz
-
-Resposta:
-{
-  "resultados": [
-    {
-      "paciente": "Bárbara Queiroz Ignowsky",
-      "tipo_exame": "EEG",
-      "data_exame": "2026-02-21",
-      "status": "pronto",
-      "link_resultado": "https://resultados.clinicaschappo.com/abc123"
-    }
-  ],
-  "total": 1
-}
-```
-
-### Permissões
-
-- Apenas atendentes com `grupo_atendimento` = 'recepcao', 'eeg' ou 'todos'
+- Grupos permitidos: `recepcao`, `eeg`, `todos`
 - Acesso somente leitura ao banco externo
 
-### Frontend
+---
 
-#### Componente: `src/components/chat/ExameSearch.tsx`
+## Status de Exames (mapeamento)
 
-- Input com prefixo `#` detectado automaticamente
-- Busca com debounce (300ms)
-- Resultados em card/popup abaixo do input
-- Botão "Copiar link" em cada resultado
-- Botão "Nenhum resultado" com sugestão de busca diferente
-
-#### Detecção do comando #
-
-```typescript
-// No input de mensagens (quando implementar envio — Fase 2+)
-// Ou numa barra de comandos dedicada no header da conversa
-
-const handleInput = (text: string) => {
-  if (text.startsWith('#') && text.length > 2) {
-    const searchTerm = text.slice(1).trim();
-    debouncedSearch(searchTerm);
-  }
-};
-```
+| Valor BD | Label no Frontend | Cor |
+|----------|-------------------|-----|
+| clinical_reports.status = 'delivered' | Laudo Entregue | verde |
+| clinical_reports.status = 'signed' | Laudo Assinado | verde claro |
+| clinical_reports.status = 'reported'/'in_progress' | Em Laudo | amarelo |
+| exams.status = 'delivered' | Realizado | azul |
+| (outros) | Registrado | cinza |
 
 ---
 
-## Query de exemplo (ajustar conforme schema real do banco externo)
-
-```sql
--- A query real depende do schema do banco de resultados
--- Exemplo genérico:
-SELECT 
-    paciente_nome,
-    tipo_exame,
-    data_exame,
-    status,
-    link_resultado
-FROM exames_resultados
-WHERE LOWER(paciente_nome) LIKE LOWER('%' || $1 || '%')
-  AND link_resultado IS NOT NULL
-ORDER BY data_exame DESC
-LIMIT 10;
-```
-
-⚠️ **IMPORTANTE**: Antes de implementar, será necessário:
-1. Obter o IP e credenciais do banco externo
-2. Mapear o schema real (tabelas, colunas, relações)
-3. Testar conexão da rede interna
-4. Criar um usuário READ-ONLY dedicado para o Connect Schappo
-
----
-
-## Implementação
-
-Quando for hora de implementar, criar comando no Claude Code:
-
-```
-/busca-exames
-```
-
-Com instruções para:
-1. Criar `src/lib/db-exames.ts` (pool separado)
-2. Criar `src/app/api/exames/buscar/route.ts`
-3. Criar `src/components/chat/ExameSearch.tsx`
-4. Integrar no painel de conversa
-5. Testar com dados reais
-
----
-
-*Documentado em: 22/02/2026*
-*Prioridade: após melhorias 1-8*
-*Dependência: Fase 2 (envio de mensagens) para fluxo completo*
+*Implementado em: 23/02/2026*
+*Commits: a62be31, bdf8a5c, f12ca05, 69173ff, 895caa4, db9d606*

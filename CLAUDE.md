@@ -55,7 +55,12 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Status de presenca (disponivel/pausa/ausente/offline) | DONE |
 | Envio de mensagens (texto) via UAZAPI e 360Dialog | DONE |
 | Envio de midia (imagens, documentos, audio, video) | DONE |
+| Envio de documentos com filename (UAZAPI endpoints especificos) | DONE |
 | Atribuicao de conversas a atendentes | DONE |
+| Finalizar atendimento (arquiva conversa, reaparece com nova msg) | DONE |
+| Busca de exames via # (banco externo NeuroSchappo) | DONE |
+| Download e envio de laudos/tracados PDF | DONE |
+| Exclusao de conversas e mensagens (admin) | DONE |
 | Mencoes (@) em grupos com notificacao sonora | DONE |
 | Softphone WebRTC (SIP.js + Issabel) | DONE |
 | Click-to-call via AMI | DONE |
@@ -205,8 +210,13 @@ connect-schappo/
     │       │
     │       ├── mensagens/
     │       │   ├── [conversaId]/route.ts        # GET: mensagens paginadas + mencoes
+    │       │   ├── [conversaId]/[msgId]/route.ts # DELETE: excluir mensagem
     │       │   ├── send/route.ts                # POST: enviar texto
-    │       │   └── send-media/route.ts          # POST: enviar midia (FormData)
+    │       │   └── send-media/route.ts          # POST: enviar midia (endpoints UAZAPI especificos)
+    │       │
+    │       ├── exames/
+    │       │   ├── buscar/route.ts              # GET: busca exames no banco externo (NeuroSchappo)
+    │       │   └── download/route.ts            # GET: proxy download PDFs (laudo/tracado)
     │       │
     │       ├── chamadas/route.ts                # GET: log chamadas com filtros
     │       ├── calls/originate/route.ts         # POST: click-to-call via AMI
@@ -236,10 +246,11 @@ connect-schappo/
     │   │   ├── ConversaItem.tsx          # Item conversa (avatar, nome, preview, badge)
     │   │   ├── MessageView.tsx           # Area de mensagens + header contato
     │   │   ├── MessageBubble.tsx         # Balao de mensagem (texto, midia, mencoes)
-    │   │   ├── MessageInput.tsx          # Input texto + attachment (16MB max)
+    │   │   ├── MessageInput.tsx          # Input texto + attachments multiplos (16MB max)
     │   │   ├── MediaPreview.tsx          # Preview: imagem, audio, video, documento, sticker
     │   │   ├── ImageLightbox.tsx         # Modal fullscreen para imagens
     │   │   ├── AttachmentPreview.tsx     # Preview arquivo antes de enviar
+    │   │   ├── ExameSearch.tsx           # Busca exames via # (popup, download PDFs)
     │   │   └── AtribuirDropdown.tsx      # Dropdown atribuir conversa a atendente
     │   │
     │   ├── calls/
@@ -286,6 +297,7 @@ connect-schappo/
     │
     ├── lib/
     │   ├── db.ts                         # pg.Pool (search_path = atd)
+    │   ├── db-exames.ts                  # pg.Pool externo (neuro_schappo, read-only, max 5)
     │   ├── auth.ts                       # NextAuth config (CredentialsProvider, JWT 12h)
     │   ├── types.ts                      # Interfaces: Conversa, Mensagem, Chamada, Contato, etc.
     │   ├── sse-manager.ts                # Broadcast SSE server-side
@@ -316,7 +328,7 @@ Schema: atd
 | Tabela | Descricao | Colunas-chave |
 |--------|-----------|---------------|
 | `atd.atendentes` | Operadores/atendentes | id, nome, username, password_hash, ramal, grupo_atendimento, role, status_presenca, sip_* |
-| `atd.conversas` | Chats WhatsApp | id, wa_chatid (UNIQUE), tipo, categoria, provider, telefone, nao_lida, atendente_id |
+| `atd.conversas` | Chats WhatsApp | id, wa_chatid (UNIQUE), tipo, categoria, provider, telefone, nao_lida, atendente_id, is_archived |
 | `atd.mensagens` | Mensagens | id, conversa_id (FK), wa_message_id (UNIQUE), from_me, tipo_mensagem, conteudo, media_*, mencoes[] |
 | `atd.chamadas` | Log chamadas | id, conversa_id, origem, direcao, caller/called_number, status, duracao_seg, asterisk_id |
 | `atd.contatos` | Contatos salvos | id, nome, telefone (UNIQUE), email, notas, chatwoot_id |
@@ -348,10 +360,19 @@ Schema: atd
 |------|--------|-----------|
 | `/api/conversas` | GET | Lista com filtros (categoria, tipo, busca) + JOIN contatos |
 | `/api/conversas/[id]/read` | PATCH | Marcar como lida |
-| `/api/conversas/[id]/atribuir` | PATCH | Atribuir a atendente |
+| `/api/conversas/[id]/atribuir` | PATCH | Atribuir atendente / finalizar (is_archived) |
+| `/api/conversas/[id]` | DELETE | Excluir conversa (admin) |
 | `/api/mensagens/[conversaId]` | GET | Mensagens paginadas (cursor) + mencoes resolvidas |
+| `/api/mensagens/[conversaId]/[msgId]` | DELETE | Excluir mensagem (admin) |
 | `/api/mensagens/send` | POST | Enviar texto via UAZAPI ou 360Dialog |
-| `/api/mensagens/send-media` | POST | Enviar midia (FormData: file + caption) |
+| `/api/mensagens/send-media` | POST | Enviar midia (endpoints UAZAPI especificos + 360Dialog) |
+
+### Exames (autenticado)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/exames/buscar` | GET | Busca exames por nome no banco externo (NeuroSchappo) |
+| `/api/exames/download` | GET | Proxy download PDF (laudo/tracado) com validacao de URL |
 
 ### Chamadas
 
@@ -387,7 +408,9 @@ Schema: atd
 ### UAZAPI (numeros EEG + Recepcao)
 
 - **Base URL**: `UAZAPI_URL` | **Auth**: Header `token`
-- Endpoints: `/send/text`, `/send/image`, `/send/document`, `/send/audio`, `/message/download`
+- Endpoints envio: `/send/text`, `/send/image`, `/send/document`, `/send/audio`, `/send/video`
+- **IMPORTANTE**: Usar endpoints especificos por tipo (nao `/send/media`) para que filename funcione
+- Campo `filename` no body de `/send/document` para titulo do PDF no WhatsApp
 - Webhook valida `payload.token` vs `WEBHOOK_SECRET`
 - Ver `docs/CORRECAO_PAYLOAD_UAZAPI.md` para mapeamento de campos
 
@@ -456,6 +479,13 @@ SIP_ENCRYPTION_KEY=chave_aes_256
 NEXTAUTH_SECRET=jwt_secret
 NEXTAUTH_URL=https://connect.clinicaschappo.com
 
+# Banco externo de exames (NeuroSchappo — somente leitura)
+EXAMES_DB_HOST=10.150.77.77
+EXAMES_DB_PORT=5432
+EXAMES_DB_NAME=neuro_schappo
+EXAMES_DB_USER=neuro_schappo
+EXAMES_DB_PASSWORD=senha
+
 # App
 NEXT_PUBLIC_APP_URL=http://10.150.77.78:3000
 NEXT_PUBLIC_APP_NAME=Connect Schappo
@@ -490,6 +520,8 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 4. **SSE com reconexao** — Auto-reconnect 3s no frontend
 5. **Idempotencia** — wa_message_id UNIQUE, ON CONFLICT DO NOTHING
 6. **Softphone sem SSR** — Sempre usar `dynamic()` com `ssr: false` para sip.js
+7. **Finalizar = arquivar** — `is_archived = TRUE` oculta da lista; webhooks resetam para `FALSE` ao receber nova msg
+8. **UAZAPI endpoints especificos** — Usar `/send/document`, `/send/image`, etc. (nao `/send/media`) para filename funcionar
 
 ---
 
@@ -513,7 +545,7 @@ Clinica Schappo realiza exames EEG (eletroencefalograma) em Brasilia. Tecnicos (
 
 | Sistema | Funcao |
 |---------|--------|
-| Neuro Schappo | Gestao equipamentos EEG (N8N + PG schema: public) |
+| Neuro Schappo | Gestao equipamentos EEG (PG: neuro_schappo em 10.150.77.77) — Connect consulta exames via db-exames.ts |
 | Bot EEG | Automacao WhatsApp (N8N webhook #1 UAZAPI) |
 | Chatwoot | Atendimento atual — sera desligado apos migracao |
 | Issabel PBX | Telefonia clinica (Asterisk bare metal) |
