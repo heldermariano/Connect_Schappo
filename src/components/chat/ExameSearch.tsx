@@ -85,6 +85,14 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
     setTimeout(() => setCopiedKey(null), 2000);
   }, []);
 
+  // Copia resumo do exame: "PACIENTE - TIPO - DATA - LOCAL - STATUS"
+  const copyExameInfo = useCallback((r: ExameResultado, key: string) => {
+    const parts = [r.paciente, r.tipo_exame, formatDate(r.data_exame)];
+    if (r.local) parts.push(r.local);
+    parts.push(statusLabel(r.status).text);
+    copyToClipboard(parts.join(' - '), key);
+  }, [copyToClipboard]);
+
   if (searchTerm.length < 2) return null;
 
   return (
@@ -136,8 +144,12 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
                     <div className="text-sm font-medium text-gray-900 truncate">{r.paciente}</div>
                     <div className="flex items-center gap-1.5 mt-0.5 text-xs text-gray-500 flex-wrap">
                       <span>{r.tipo_exame}</span>
-                      <span>&middot;</span>
-                      <span>{formatDate(r.data_exame)}</span>
+                      {r.data_exame && (
+                        <>
+                          <span>&middot;</span>
+                          <span>{formatDate(r.data_exame)}</span>
+                        </>
+                      )}
                       {r.local && (
                         <>
                           <span>&middot;</span>
@@ -149,10 +161,28 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
                       </span>
                     </div>
                   </div>
+                  {/* Botao copiar info do exame */}
+                  <button
+                    onClick={() => copyExameInfo(r, `info-${idx}`)}
+                    className="shrink-0 px-2 py-1.5 text-xs font-medium rounded-md border transition-colors
+                               text-schappo-600 border-schappo-200 bg-schappo-50 hover:bg-schappo-100"
+                    title="Copiar informacoes do exame"
+                  >
+                    {copiedKey === `info-${idx}` ? (
+                      <span className="text-green-600">Copiado!</span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        Copiar
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 {/* Arquivos PDF */}
-                {r.arquivos.length > 0 ? (
+                {r.arquivos.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {r.arquivos.map((arq, aidx) => {
                       const key = `${idx}-${aidx}`;
@@ -162,8 +192,8 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
                           key={aidx}
                           onClick={() => copyToClipboard(arq.nome, key)}
                           className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border transition-colors
-                                     text-schappo-600 border-schappo-200 bg-schappo-50 hover:bg-schappo-100"
-                          title={`Copiar nome: ${arq.nome}`}
+                                     text-gray-500 border-gray-200 bg-gray-50 hover:bg-gray-100"
+                          title={arq.nome}
                         >
                           {isCopied ? (
                             <span className="text-green-600">Copiado!</span>
@@ -178,10 +208,6 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
                         </button>
                       );
                     })}
-                  </div>
-                ) : (
-                  <div className="mt-1 text-[11px] text-gray-400 italic">
-                    Sem arquivos de laudo disponíveis
                   </div>
                 )}
               </div>
@@ -201,9 +227,14 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
 }
 
 function formatDate(dateStr: string): string {
+  if (!dateStr) return '';
   try {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('pt-BR');
+    // dateStr vem como "YYYY-MM-DD" da API
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
   } catch {
     return dateStr;
   }

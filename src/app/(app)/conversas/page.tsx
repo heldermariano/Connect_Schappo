@@ -248,15 +248,17 @@ export default function ConversasPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ atendente_id: null }),
         });
-        updateConversa(conversaId, { atendente_id: null });
+        updateConversa(conversaId, { atendente_id: null, atendente_nome: undefined } as Partial<Conversa>);
         setSelectedConversa((prev) =>
-          prev ? { ...prev, atendente_id: null } : null,
+          prev ? { ...prev, atendente_id: null, atendente_nome: undefined } : null,
         );
+        // Recarregar lista para refletir o estado atualizado
+        refresh();
       } catch (err) {
         console.error('[conversas] Erro ao finalizar atendimento:', err);
       }
     },
-    [updateConversa],
+    [updateConversa, refresh],
   );
 
   const handleDeleteConversa = useCallback(

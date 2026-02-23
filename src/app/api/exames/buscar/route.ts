@@ -83,10 +83,17 @@ export async function GET(request: NextRequest) {
           status = 'registrado';
         }
 
+        // Formatar data como string YYYY-MM-DD (pg retorna Date object)
+        let dataExame = '';
+        if (row.data_exame) {
+          const d = row.data_exame instanceof Date ? row.data_exame : new Date(row.data_exame);
+          dataExame = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
         examesMap.set(key, {
           paciente: row.paciente,
           tipo_exame: row.tipo_exame || 'EEG',
-          data_exame: row.data_exame,
+          data_exame: dataExame,
           status,
           local: row.local || null,
           arquivos: [],
