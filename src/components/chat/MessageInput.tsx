@@ -155,6 +155,14 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
         <ExameSearch
           searchTerm={exameSearch}
           onClose={() => setExameSearch(null)}
+          onAttachFile={(file: File) => {
+            setAttachment(file);
+            setExameSearch(null);
+            setText('');
+            if (textareaRef.current) {
+              textareaRef.current.style.height = 'auto';
+            }
+          }}
         />
       )}
 

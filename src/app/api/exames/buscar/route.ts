@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   try {
     // Busca exames do paciente com arquivos PDF (laudo, tracado, etc.)
     // Banco: neuro_schappo (schema public)
-    // Tabelas: patients -> exams -> reports (PDFs) + clinical_reports (status laudo)
+    // Tabelas: patients -> exams -> reports (PDFs com download_url) + clinical_reports (status laudo)
     const result = await examesPool.query(
       `SELECT * FROM (
          SELECT DISTINCT ON (e.id, COALESCE(r.filename, ''))
@@ -38,9 +38,10 @@ export async function GET(request: NextRequest) {
            e.status AS exam_status,
            e.location_code AS local,
            cr.status AS laudo_status,
+           r.id AS report_id,
            r.report_type AS arquivo_tipo,
            r.filename AS arquivo_nome,
-           r.dest_path AS arquivo_path
+           r.download_url
          FROM patients p
          JOIN exams e ON e.patient_id = p.id
          LEFT JOIN clinical_reports cr ON cr.exam_id = e.id
@@ -62,14 +63,13 @@ export async function GET(request: NextRequest) {
       data_exame: string;
       status: string;
       local: string | null;
-      arquivos: { tipo: string; nome: string; path: string }[];
+      arquivos: { tipo: string; nome: string; download_url: string | null }[];
     }>();
 
     for (const row of result.rows) {
       const key = row.exam_id;
 
       if (!examesMap.has(key)) {
-        // Determinar status para o atendente
         let status: string;
         if (row.laudo_status === 'delivered') {
           status = 'entregue';
@@ -101,11 +101,11 @@ export async function GET(request: NextRequest) {
       }
 
       // Adicionar arquivo se existir
-      if (row.arquivo_nome && row.arquivo_path) {
+      if (row.arquivo_nome) {
         examesMap.get(key)!.arquivos.push({
           tipo: row.arquivo_tipo,
           nome: row.arquivo_nome,
-          path: row.arquivo_path,
+          download_url: row.download_url || null,
         });
       }
     }

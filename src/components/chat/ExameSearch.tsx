@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 interface ArquivoExame {
   tipo: string;  // laudo, tracado, laudo_tracado
   nome: string;
-  path: string;
+  download_url: string | null;
 }
 
 interface ExameResultado {
@@ -20,13 +20,14 @@ interface ExameResultado {
 interface ExameSearchProps {
   searchTerm: string;
   onClose: () => void;
+  onAttachFile: (file: File) => void;
 }
 
-export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
+export default function ExameSearch({ searchTerm, onClose, onAttachFile }: ExameSearchProps) {
   const [resultados, setResultados] = useState<ExameResultado[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Fechar ao clicar fora
@@ -70,28 +71,27 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const copyToClipboard = useCallback(async (text: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
-  }, []);
+  // Baixar PDF e anexar na caixa de mensagem
+  const handleDownloadAndAttach = useCallback(async (arq: ArquivoExame, key: string) => {
+    if (!arq.download_url) return;
 
-  // Copia resumo do exame: "PACIENTE - TIPO - DATA - LOCAL - STATUS"
-  const copyExameInfo = useCallback((r: ExameResultado, key: string) => {
-    const parts = [r.paciente, r.tipo_exame, formatDate(r.data_exame)];
-    if (r.local) parts.push(r.local);
-    parts.push(statusLabel(r.status).text);
-    copyToClipboard(parts.join(' - '), key);
-  }, [copyToClipboard]);
+    setDownloadingKey(key);
+    try {
+      const res = await fetch(`/api/exames/download?url=${encodeURIComponent(arq.download_url)}`);
+      if (!res.ok) {
+        throw new Error(`Erro ao baixar: ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const file = new File([blob], arq.nome, { type: 'application/pdf' });
+      onAttachFile(file);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao baixar arquivo');
+    } finally {
+      setDownloadingKey(null);
+    }
+  }, [onAttachFile, onClose]);
 
   if (searchTerm.length < 2) return null;
 
@@ -161,46 +161,39 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
                       </span>
                     </div>
                   </div>
-                  {/* Botao copiar info do exame */}
-                  <button
-                    onClick={() => copyExameInfo(r, `info-${idx}`)}
-                    className="shrink-0 px-2 py-1.5 text-xs font-medium rounded-md border transition-colors
-                               text-schappo-600 border-schappo-200 bg-schappo-50 hover:bg-schappo-100"
-                    title="Copiar informacoes do exame"
-                  >
-                    {copiedKey === `info-${idx}` ? (
-                      <span className="text-green-600">Copiado!</span>
-                    ) : (
-                      <span className="flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                        Copiar
-                      </span>
-                    )}
-                  </button>
                 </div>
 
-                {/* Arquivos PDF */}
-                {r.arquivos.length > 0 && (
+                {/* Arquivos PDF - clique baixa e anexa */}
+                {r.arquivos.length > 0 ? (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {r.arquivos.map((arq, aidx) => {
                       const key = `${idx}-${aidx}`;
-                      const isCopied = copiedKey === key;
+                      const isDownloading = downloadingKey === key;
+                      const hasUrl = !!arq.download_url;
                       return (
                         <button
                           key={aidx}
-                          onClick={() => copyToClipboard(arq.nome, key)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border transition-colors
-                                     text-gray-500 border-gray-200 bg-gray-50 hover:bg-gray-100"
-                          title={arq.nome}
+                          onClick={() => handleDownloadAndAttach(arq, key)}
+                          disabled={!hasUrl || isDownloading}
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border transition-colors
+                            ${hasUrl
+                              ? 'text-schappo-600 border-schappo-200 bg-schappo-50 hover:bg-schappo-100 cursor-pointer'
+                              : 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed'
+                            }`}
+                          title={hasUrl ? `Anexar: ${arq.nome}` : 'Download nao disponivel'}
                         >
-                          {isCopied ? (
-                            <span className="text-green-600">Copiado!</span>
+                          {isDownloading ? (
+                            <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              Baixando...
+                            </>
                           ) : (
                             <>
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                               </svg>
                               {arquivoLabel(arq.tipo)}
                             </>
@@ -208,6 +201,10 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
                         </button>
                       );
                     })}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-[11px] text-gray-400 italic">
+                    Sem arquivos disponiveis
                   </div>
                 )}
               </div>
@@ -229,7 +226,6 @@ export default function ExameSearch({ searchTerm, onClose }: ExameSearchProps) {
 function formatDate(dateStr: string): string {
   if (!dateStr) return '';
   try {
-    // dateStr vem como "YYYY-MM-DD" da API
     const parts = dateStr.split('-');
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
