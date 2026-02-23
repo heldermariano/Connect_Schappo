@@ -157,9 +157,9 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete 
           />
         </div>
       )}
-      <div className="relative">
+      <div className="relative max-w-[70%] min-w-[80px]">
       <div
-        className={`max-w-[70%] rounded-lg px-3 py-2 ${
+        className={`rounded-lg px-3 py-2 ${
           isMe ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900 shadow-sm'
         }`}
       >
