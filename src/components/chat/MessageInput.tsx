@@ -16,7 +16,7 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [attachment, setAttachment] = useState<File | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [exameSearch, setExameSearch] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -24,31 +24,36 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
   const handleSend = useCallback(async () => {
     if (sending) return;
 
-    // Enviar midia se tem arquivo anexado
-    if (attachment && conversaId) {
+    // Enviar midia se tem arquivos anexados
+    if (attachments.length > 0 && conversaId) {
       setSending(true);
       setError(null);
 
       try {
-        const formData = new FormData();
-        formData.append('conversa_id', String(conversaId));
-        formData.append('file', attachment);
-        if (text.trim()) {
-          formData.append('caption', text.trim());
-        }
+        // Enviar cada arquivo sequencialmente
+        for (let i = 0; i < attachments.length; i++) {
+          const file = attachments[i];
+          const formData = new FormData();
+          formData.append('conversa_id', String(conversaId));
+          formData.append('file', file);
+          // Caption apenas no primeiro arquivo
+          if (i === 0 && text.trim()) {
+            formData.append('caption', text.trim());
+          }
 
-        const res = await fetch('/api/mensagens/send-media', {
-          method: 'POST',
-          body: formData,
-        });
+          const res = await fetch('/api/mensagens/send-media', {
+            method: 'POST',
+            body: formData,
+          });
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({ error: 'Erro ao enviar midia' }));
-          throw new Error(data.error || 'Erro ao enviar midia');
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({ error: 'Erro ao enviar midia' }));
+            throw new Error(data.error || `Erro ao enviar ${file.name}`);
+          }
         }
 
         setText('');
-        setAttachment(null);
+        setAttachments([]);
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
@@ -71,7 +76,6 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
     try {
       await onSend(trimmed);
       setText('');
-      // Resetar altura do textarea
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -79,10 +83,9 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
       setError(err instanceof Error ? err.message : 'Erro ao enviar mensagem');
     } finally {
       setSending(false);
-      // Focar no textarea apos envio
       textareaRef.current?.focus();
     }
-  }, [text, sending, onSend, attachment, conversaId]);
+  }, [text, sending, onSend, attachments, conversaId]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -102,7 +105,6 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 
-    // Detectar comando # para busca de exames
     if (value.startsWith('#') && value.length > 1) {
       setExameSearch(value.slice(1).trim());
     } else {
@@ -113,19 +115,21 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Limite de 16MB
       if (file.size > 16 * 1024 * 1024) {
         setError('Arquivo muito grande (max 16MB)');
         return;
       }
-      setAttachment(file);
+      setAttachments([file]);
       setError(null);
     }
-    // Resetar o input para permitir re-selecao do mesmo arquivo
     e.target.value = '';
   }, []);
 
-  const canSend = attachment ? true : text.trim().length > 0;
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const canSend = attachments.length > 0 || text.trim().length > 0;
 
   return (
     <div className="relative border-t border-gray-200 bg-white shrink-0">
@@ -143,10 +147,12 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
         </div>
       )}
 
-      {/* Preview do arquivo anexado */}
-      {attachment && (
-        <div className="pt-2">
-          <AttachmentPreview file={attachment} onRemove={() => setAttachment(null)} />
+      {/* Preview dos arquivos anexados */}
+      {attachments.length > 0 && (
+        <div className="pt-2 space-y-1">
+          {attachments.map((file, i) => (
+            <AttachmentPreview key={i} file={file} onRemove={() => removeAttachment(i)} />
+          ))}
         </div>
       )}
 
@@ -155,8 +161,8 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
         <ExameSearch
           searchTerm={exameSearch}
           onClose={() => setExameSearch(null)}
-          onAttachFile={(file: File) => {
-            setAttachment(file);
+          onAttachFiles={(files: File[]) => {
+            setAttachments(files);
             setExameSearch(null);
             setText('');
             if (textareaRef.current) {
@@ -167,7 +173,6 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
       )}
 
       <div className="flex items-end gap-2 px-4 py-2">
-        {/* Botao clipe - anexar arquivo */}
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled || sending}
@@ -194,7 +199,7 @@ export default function MessageInput({ onSend, conversaId, disabled }: MessageIn
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={attachment ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
+          placeholder={attachments.length > 0 ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
           disabled={disabled || sending}
           rows={1}
           className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm

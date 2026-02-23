@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface ArquivoExame {
-  tipo: string;  // laudo, tracado, laudo_tracado
+  tipo: string;
   nome: string;
-  download_url: string | null;
+  download_url: string;
 }
 
 interface ExameResultado {
@@ -20,17 +20,16 @@ interface ExameResultado {
 interface ExameSearchProps {
   searchTerm: string;
   onClose: () => void;
-  onAttachFile: (file: File) => void;
+  onAttachFiles: (files: File[]) => void;
 }
 
-export default function ExameSearch({ searchTerm, onClose, onAttachFile }: ExameSearchProps) {
+export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: ExameSearchProps) {
   const [resultados, setResultados] = useState<ExameResultado[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+  const [downloadingIdx, setDownloadingIdx] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Fechar ao clicar fora
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
@@ -41,7 +40,6 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFile }: Exame
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  // Buscar com debounce
   useEffect(() => {
     if (searchTerm.length < 2) {
       setResultados([]);
@@ -71,27 +69,30 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFile }: Exame
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Baixar PDF e anexar na caixa de mensagem
-  const handleDownloadAndAttach = useCallback(async (arq: ArquivoExame, key: string) => {
-    if (!arq.download_url) return;
+  // Baixar TODOS os arquivos do exame e anexar
+  const handleDownloadAll = useCallback(async (r: ExameResultado, idx: number) => {
+    if (r.arquivos.length === 0) return;
 
-    setDownloadingKey(key);
+    setDownloadingIdx(idx);
+    setError(null);
     try {
-      const res = await fetch(`/api/exames/download?url=${encodeURIComponent(arq.download_url)}`);
-      if (!res.ok) {
-        throw new Error(`Erro ao baixar: ${res.status}`);
+      const files: File[] = [];
+      for (const arq of r.arquivos) {
+        const res = await fetch(`/api/exames/download?url=${encodeURIComponent(arq.download_url)}`);
+        if (!res.ok) {
+          throw new Error(`Erro ao baixar ${arq.nome}: ${res.status}`);
+        }
+        const blob = await res.blob();
+        files.push(new File([blob], arq.nome, { type: 'application/pdf' }));
       }
-
-      const blob = await res.blob();
-      const file = new File([blob], arq.nome, { type: 'application/pdf' });
-      onAttachFile(file);
+      onAttachFiles(files);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao baixar arquivo');
+      setError(err instanceof Error ? err.message : 'Erro ao baixar arquivos');
     } finally {
-      setDownloadingKey(null);
+      setDownloadingIdx(null);
     }
-  }, [onAttachFile, onClose]);
+  }, [onAttachFiles, onClose]);
 
   if (searchTerm.length < 2) return null;
 
@@ -115,7 +116,6 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFile }: Exame
         </button>
       </div>
 
-      {/* Loading */}
       {loading && (
         <div className="px-3 py-4 text-center text-sm text-gray-400">
           <svg className="w-5 h-5 animate-spin mx-auto mb-1" fill="none" viewBox="0 0 24 24">
@@ -126,19 +126,21 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFile }: Exame
         </div>
       )}
 
-      {/* Erro */}
       {error && !loading && (
         <div className="px-3 py-3 text-sm text-red-500">{error}</div>
       )}
 
-      {/* Resultados */}
       {!loading && !error && resultados.length > 0 && (
         <div className="divide-y divide-gray-100">
           {resultados.map((r, idx) => {
             const st = statusLabel(r.status);
+            const isDownloading = downloadingIdx === idx;
+            const hasFiles = r.arquivos.length > 0;
+            // Listar tipos de arquivo disponiveis
+            const tiposArquivo = r.arquivos.map((a) => arquivoLabel(a.tipo));
+
             return (
               <div key={idx} className="px-3 py-2.5 hover:bg-gray-50/50">
-                {/* Info do exame */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium text-gray-900 truncate">{r.paciente}</div>
@@ -160,60 +162,55 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFile }: Exame
                         {st.text}
                       </span>
                     </div>
+                    {/* Nomes dos arquivos */}
+                    {hasFiles && (
+                      <div className="mt-1 text-[10px] text-gray-400 space-y-0.5">
+                        {r.arquivos.map((arq, i) => (
+                          <div key={i} className="truncate">{arq.nome}</div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                {/* Arquivos PDF - clique baixa e anexa */}
-                {r.arquivos.length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {r.arquivos.map((arq, aidx) => {
-                      const key = `${idx}-${aidx}`;
-                      const isDownloading = downloadingKey === key;
-                      const hasUrl = !!arq.download_url;
-                      return (
-                        <button
-                          key={aidx}
-                          onClick={() => handleDownloadAndAttach(arq, key)}
-                          disabled={!hasUrl || isDownloading}
-                          className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded border transition-colors
-                            ${hasUrl
-                              ? 'text-schappo-600 border-schappo-200 bg-schappo-50 hover:bg-schappo-100 cursor-pointer'
-                              : 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed'
-                            }`}
-                          title={hasUrl ? `Anexar: ${arq.nome}` : 'Download nao disponivel'}
-                        >
-                          {isDownloading ? (
-                            <>
-                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                              Baixando...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              {arquivoLabel(arq.tipo)}
-                            </>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="mt-1 text-[11px] text-gray-400 italic">
-                    Sem arquivos disponiveis
-                  </div>
-                )}
+                  {/* Botao unico: baixa todos os arquivos do exame */}
+                  {hasFiles ? (
+                    <button
+                      onClick={() => handleDownloadAll(r, idx)}
+                      disabled={isDownloading}
+                      className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md border transition-colors
+                                 text-schappo-600 border-schappo-200 bg-schappo-50 hover:bg-schappo-100
+                                 disabled:opacity-60 disabled:cursor-wait"
+                      title={`Anexar: ${tiposArquivo.join(' + ')}`}
+                    >
+                      {isDownloading ? (
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Baixando...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          {tiposArquivo.join(' + ')}
+                        </span>
+                      )}
+                    </button>
+                  ) : (
+                    <span className="shrink-0 px-2 py-1.5 text-[10px] text-gray-400 italic">
+                      Sem arquivos
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Sem resultados */}
       {!loading && !error && resultados.length === 0 && searchTerm.length >= 2 && (
         <div className="px-3 py-4 text-center text-sm text-gray-400">
           Nenhum exame encontrado para &quot;{searchTerm}&quot;
@@ -227,9 +224,7 @@ function formatDate(dateStr: string): string {
   if (!dateStr) return '';
   try {
     const parts = dateStr.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return dateStr;
   } catch {
     return dateStr;
@@ -238,18 +233,12 @@ function formatDate(dateStr: string): string {
 
 function statusLabel(status: string): { text: string; className: string } {
   switch (status) {
-    case 'entregue':
-      return { text: 'Laudo Entregue', className: 'text-green-700 bg-green-100' };
-    case 'assinado':
-      return { text: 'Laudo Assinado', className: 'text-green-600 bg-green-50' };
-    case 'em_laudo':
-      return { text: 'Em Laudo', className: 'text-yellow-700 bg-yellow-100' };
-    case 'realizado':
-      return { text: 'Realizado', className: 'text-blue-600 bg-blue-50' };
-    case 'registrado':
-      return { text: 'Registrado', className: 'text-gray-600 bg-gray-100' };
-    default:
-      return { text: status, className: 'text-gray-600 bg-gray-100' };
+    case 'entregue': return { text: 'Laudo Entregue', className: 'text-green-700 bg-green-100' };
+    case 'assinado': return { text: 'Laudo Assinado', className: 'text-green-600 bg-green-50' };
+    case 'em_laudo': return { text: 'Em Laudo', className: 'text-yellow-700 bg-yellow-100' };
+    case 'realizado': return { text: 'Realizado', className: 'text-blue-600 bg-blue-50' };
+    case 'registrado': return { text: 'Registrado', className: 'text-gray-600 bg-gray-100' };
+    default: return { text: status, className: 'text-gray-600 bg-gray-100' };
   }
 }
 

@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
   }
 
-  // Verificar permissao: apenas recepcao, eeg ou todos
   const grupo = session.user.grupo || 'todos';
   if (!['recepcao', 'eeg', 'todos'].includes(grupo)) {
     return NextResponse.json({ error: 'Sem permissao para buscar exames' }, { status: 403 });
@@ -25,45 +24,53 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Busca exames do paciente com arquivos PDF (laudo, tracado, etc.)
-    // Banco: neuro_schappo (schema public)
-    // Tabelas: patients -> exams -> reports (PDFs com download_url) + clinical_reports (status laudo)
+    // Busca apenas o ULTIMO exame por paciente + todos os arquivos desse exame
+    // 1) Subquery pega o exam mais recente de cada paciente
+    // 2) Join com reports para pegar os PDFs (laudo, tracado)
     const result = await examesPool.query(
-      `SELECT * FROM (
-         SELECT DISTINCT ON (e.id, COALESCE(r.filename, ''))
+      `WITH latest_exams AS (
+         SELECT DISTINCT ON (p.id)
+           p.id AS patient_id,
            p.name AS paciente,
            e.id AS exam_id,
            e.exam_type AS tipo_exame,
            e.exam_date AS data_exame,
            e.status AS exam_status,
-           e.location_code AS local,
-           cr.status AS laudo_status,
-           r.id AS report_id,
-           r.report_type AS arquivo_tipo,
-           r.filename AS arquivo_nome,
-           r.download_url
+           e.location_code AS local
          FROM patients p
          JOIN exams e ON e.patient_id = p.id
-         LEFT JOIN clinical_reports cr ON cr.exam_id = e.id
-         LEFT JOIN reports r ON r.exam_id = e.id
-           AND r.matched = true
-           AND r.report_type IN ('laudo', 'tracado', 'laudo_tracado')
          WHERE LOWER(p.name_normalized) LIKE LOWER('%' || $1 || '%')
-         ORDER BY e.id, COALESCE(r.filename, ''), r.created_at DESC
-       ) sub
-       ORDER BY data_exame DESC, arquivo_tipo ASC
-       LIMIT 50`,
+         ORDER BY p.id, e.exam_date DESC
+       )
+       SELECT DISTINCT ON (le.exam_id, COALESCE(r.filename, ''))
+         le.paciente,
+         le.exam_id,
+         le.tipo_exame,
+         le.data_exame,
+         le.exam_status,
+         le.local,
+         cr.status AS laudo_status,
+         r.report_type AS arquivo_tipo,
+         r.filename AS arquivo_nome,
+         r.download_url
+       FROM latest_exams le
+       LEFT JOIN clinical_reports cr ON cr.exam_id = le.exam_id
+       LEFT JOIN reports r ON r.exam_id = le.exam_id
+         AND r.matched = true
+         AND r.report_type IN ('laudo', 'tracado', 'laudo_tracado')
+         AND r.download_url IS NOT NULL
+       ORDER BY le.exam_id, COALESCE(r.filename, ''), r.created_at DESC`,
       [nome],
     );
 
-    // Agrupar por exame (exam_id)
+    // Agrupar por paciente (1 exame por paciente)
     const examesMap = new Map<string, {
       paciente: string;
       tipo_exame: string;
       data_exame: string;
       status: string;
       local: string | null;
-      arquivos: { tipo: string; nome: string; download_url: string | null }[];
+      arquivos: { tipo: string; nome: string; download_url: string }[];
     }>();
 
     for (const row of result.rows) {
@@ -83,7 +90,6 @@ export async function GET(request: NextRequest) {
           status = 'registrado';
         }
 
-        // Formatar data como string YYYY-MM-DD (pg retorna Date object)
         let dataExame = '';
         if (row.data_exame) {
           const d = row.data_exame instanceof Date ? row.data_exame : new Date(row.data_exame);
@@ -100,17 +106,16 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Adicionar arquivo se existir
-      if (row.arquivo_nome) {
+      if (row.arquivo_nome && row.download_url) {
         examesMap.get(key)!.arquivos.push({
           tipo: row.arquivo_tipo,
           nome: row.arquivo_nome,
-          download_url: row.download_url || null,
+          download_url: row.download_url,
         });
       }
     }
 
-    const resultados = Array.from(examesMap.values()).slice(0, 20);
+    const resultados = Array.from(examesMap.values());
     return NextResponse.json({ resultados, total: resultados.length });
   } catch (err) {
     console.error('[api/exames/buscar] Erro:', err);
