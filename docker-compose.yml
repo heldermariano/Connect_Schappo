@@ -1,7 +1,6 @@
 services:
   connect-schappo:
     build: .
-    container_name: connect-schappo
     restart: unless-stopped
     env_file: .env
     environment:
