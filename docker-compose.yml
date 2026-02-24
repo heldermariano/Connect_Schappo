@@ -6,6 +6,12 @@ services:
     env_file: .env
     environment:
       - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.connect.rule=Host(`connect.clinicaschappo.com`)"
@@ -13,6 +19,8 @@ services:
       - "traefik.http.routers.connect.tls=true"
       - "traefik.http.routers.connect.tls.certresolver=letsencrypt"
       - "traefik.http.services.connect.loadbalancer.server.port=3000"
+      - "traefik.http.services.connect.loadbalancer.healthcheck.path=/api/health"
+      - "traefik.http.services.connect.loadbalancer.healthcheck.interval=10s"
       # SSE: desabilitar buffering para eventos em tempo real
       - "traefik.http.middlewares.connect-sse.headers.customresponseheaders.Cache-Control=no-cache"
       - "traefik.http.middlewares.connect-sse.headers.customresponseheaders.X-Accel-Buffering=no"
