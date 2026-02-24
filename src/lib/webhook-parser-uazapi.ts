@@ -175,6 +175,16 @@ function extractConversationPhone(chat: WebhookPayloadUAZAPI['chat']): string {
 }
 
 /**
+ * Detecta se uma videoMessage eh na verdade um GIF (gifPlayback).
+ * WhatsApp envia GIFs como video/mp4 com gifPlayback: true no content.
+ */
+function isGifPlayback(message: WebhookPayloadUAZAPI['message']): boolean {
+  const content = message.content;
+  if (!content || typeof content !== 'object') return false;
+  return 'gifPlayback' in content && content.gifPlayback === true;
+}
+
+/**
  * Normaliza o tipo de mensagem.
  * UAZAPI envia messageType em PascalCase (ex: 'ExtendedTextMessage', 'ImageMessage').
  * Normalizar para tipos simples: text, image, audio, video, document, sticker, reaction, contact, location
@@ -203,7 +213,12 @@ function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string 
       liveLocation: 'location',
       livelocation: 'location',
     };
-    return MAP[base] || base;
+    const tipo = MAP[base] || base;
+    // GIF: WhatsApp envia como videoMessage com gifPlayback=true
+    if (tipo === 'video' && isGifPlayback(message)) {
+      return 'image'; // Tratar GIF como imagem para exibicao
+    }
+    return tipo;
   }
   return lower;
 }
@@ -281,7 +296,8 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
     tipo_mensagem: normalizeMessageType(message),
     conteudo: extractMessageText(message) || null,
     media_url: extractMediaUrl(message),
-    media_mimetype: extractMediaMimetype(message),
+    // GIF: sobrescrever mimetype para image/gif (WhatsApp envia como video/mp4)
+    media_mimetype: isGifPlayback(message) ? 'image/gif' : extractMediaMimetype(message),
     media_filename: extractMediaFilename(message),
     tipo: isGroup ? 'grupo' : 'individual',
     categoria,

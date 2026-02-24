@@ -19,9 +19,9 @@ export async function GET(
   }
 
   try {
-    // Buscar mensagem no banco
+    // Buscar mensagem no banco (incluir metadata para message_id_full)
     const result = await pool.query(
-      `SELECT wa_message_id, tipo_mensagem, media_mimetype, media_filename FROM atd.mensagens WHERE id = $1`,
+      `SELECT wa_message_id, tipo_mensagem, media_mimetype, media_filename, metadata FROM atd.mensagens WHERE id = $1`,
       [id],
     );
 
@@ -30,7 +30,10 @@ export async function GET(
     }
 
     const msg = result.rows[0];
-    const waMessageId = msg.wa_message_id;
+    // UAZAPI precisa do ID completo com prefixo owner (ex: 556192894339:MSG_ID)
+    // O ID completo esta em metadata.message_id_full, fallback para wa_message_id
+    const meta = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata) : (msg.metadata || {});
+    const waMessageId = meta.message_id_full || msg.wa_message_id;
 
     if (!waMessageId || !UAZAPI_URL || !UAZAPI_TOKEN) {
       return NextResponse.json({ error: 'media_unavailable' }, { status: 404 });
