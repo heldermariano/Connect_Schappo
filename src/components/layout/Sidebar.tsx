@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/chat-interno', label: 'Chat Interno', icon: 'chat-interno' },
   { href: '/chamadas', label: 'Chamadas', icon: 'phone' },
   { href: '/contatos', label: 'Contatos', icon: 'contacts' },
+  { href: '/respostas-prontas', label: 'Respostas', icon: 'replies' },
 ];
 
 function NavIcon({ icon, active }: { icon: string; active: boolean }) {
@@ -27,6 +28,13 @@ function NavIcon({ icon, active }: { icon: string; active: boolean }) {
     return (
       <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
+      </svg>
+    );
+  }
+  if (icon === 'replies') {
+    return (
+      <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
     );
   }

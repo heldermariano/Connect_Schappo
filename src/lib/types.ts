@@ -111,6 +111,17 @@ export interface Chamada {
   created_at: string;
 }
 
+// --- Respostas Prontas ---
+
+export interface RespostaPronta {
+  id: number;
+  atendente_id: number;
+  atalho: string;
+  conteudo: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Chat Interno ---
 
 export interface ChatInterno {

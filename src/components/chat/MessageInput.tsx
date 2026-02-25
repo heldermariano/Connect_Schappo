@@ -4,10 +4,11 @@ import { useState, useRef, useCallback, useEffect, KeyboardEvent } from 'react';
 import AttachmentPreview from './AttachmentPreview';
 import ExameSearch from './ExameSearch';
 import MentionAutocomplete, { Participant } from './MentionAutocomplete';
+import QuickReplyAutocomplete from './QuickReplyAutocomplete';
 import EmojiPickerButton from './EmojiPickerButton';
 import AudioRecorder from './AudioRecorder';
 import QuotedMessage from './QuotedMessage';
-import { Mensagem } from '@/lib/types';
+import { Mensagem, RespostaPronta } from '@/lib/types';
 
 interface MessageInputProps {
   onSend: (conteudo: string, mencoes?: string[], quotedMsgId?: string) => Promise<void>;
@@ -32,6 +33,9 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   const [mentionedLids, setMentionedLids] = useState<string[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [quickReplies, setQuickReplies] = useState<RespostaPronta[]>([]);
+  const quickRepliesLoadedRef = useRef(false);
   const mentionStartRef = useRef<number>(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,7 +60,18 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     setMentionedPhones([]);
     setMentionedLids([]);
     setMentionQuery(null);
+    setSlashQuery(null);
   }, [conversaId]);
+
+  // Carregar respostas prontas (1x, lazy)
+  const loadQuickReplies = useCallback(() => {
+    if (quickRepliesLoadedRef.current) return;
+    quickRepliesLoadedRef.current = true;
+    fetch('/api/respostas-prontas')
+      .then((r) => (r.ok ? r.json() : { respostas: [] }))
+      .then((data) => setQuickReplies(data.respostas || []))
+      .catch(() => {});
+  }, []);
 
   const handleSend = useCallback(async () => {
     if (sending) return;
@@ -135,10 +150,10 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Se autocomplete de mencao aberto, deixar ele tratar ArrowUp/Down/Enter/Esc
-      if (mentionQuery !== null) {
+      // Se autocomplete de mencao ou slash aberto, deixar ele tratar ArrowUp/Down/Enter/Esc
+      if (mentionQuery !== null || slashQuery !== null) {
         if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
-          return; // MentionAutocomplete captura via document listener
+          return;
         }
       }
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -146,7 +161,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         handleSend();
       }
     },
-    [handleSend, mentionQuery],
+    [handleSend, mentionQuery, slashQuery],
   );
 
   // Detectar @ no texto para autocomplete de mencao
@@ -196,8 +211,16 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       setExameSearch(null);
     }
 
+    // Detectar / no inicio para respostas prontas
+    if (value.startsWith('/')) {
+      loadQuickReplies();
+      setSlashQuery(value.slice(1));
+    } else {
+      setSlashQuery(null);
+    }
+
     detectMention(value, el.selectionStart);
-  }, [detectMention]);
+  }, [detectMention, loadQuickReplies]);
 
   const handleMentionSelect = useCallback((participant: Participant) => {
     const start = mentionStartRef.current;
@@ -234,6 +257,21 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       }
     });
   }, [text]);
+
+  const handleQuickReplySelect = useCallback((resposta: RespostaPronta) => {
+    setText(resposta.conteudo);
+    setSlashQuery(null);
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        // Cursor no final do texto
+        textarea.setSelectionRange(resposta.conteudo.length, resposta.conteudo.length);
+      }
+    });
+  }, []);
 
   const handleEmojiInsert = useCallback((emoji: string) => {
     const textarea = textareaRef.current;
@@ -357,6 +395,16 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
               textareaRef.current.style.height = 'auto';
             }
           }}
+        />
+      )}
+
+      {/* Autocomplete de respostas prontas (ativado por /) */}
+      {slashQuery !== null && quickReplies.length > 0 && (
+        <QuickReplyAutocomplete
+          query={slashQuery}
+          respostas={quickReplies}
+          onSelect={handleQuickReplySelect}
+          onClose={() => setSlashQuery(null)}
         />
       )}
 
