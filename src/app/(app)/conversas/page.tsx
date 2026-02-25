@@ -28,6 +28,10 @@ export default function ConversasPage() {
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
   // Set de conversa_ids com flash visual (nova msg recebida)
   const [flashingConversas, setFlashingConversas] = useState<Set<number>>(new Set());
+  // Set de conversa_ids urgentes (10+ min sem resposta)
+  const [urgentConversas, setUrgentConversas] = useState<Set<number>>(new Set());
+  // IDs já alertados via desktop notification (evita repetir)
+  const alertedIdsRef = useRef<Set<number>>(new Set());
   // Mapa de nomes de grupo por conversa_id (para toast)
   const groupNamesRef = useRef<Map<number, string>>(new Map());
   // Track se ja processou o query param ?id
@@ -329,6 +333,74 @@ export default function ConversasPage() {
 
   const userRole = (session?.user as { role?: string })?.role;
 
+  // Alerta de urgência: conversas individuais sem resposta há 10+ min
+  useEffect(() => {
+    const TEN_MINUTES = 10 * 60 * 1000;
+
+    const checkUrgent = () => {
+      const now = Date.now();
+      const newUrgent = new Set<number>();
+
+      for (const c of conversas) {
+        if (
+          c.tipo === 'individual' &&
+          c.nao_lida > 0 &&
+          !c.ultima_msg_from_me &&
+          c.ultima_msg_at
+        ) {
+          const elapsed = now - new Date(c.ultima_msg_at).getTime();
+          if (elapsed >= TEN_MINUTES) {
+            newUrgent.add(c.id);
+
+            // Desktop notification 1x por conversa
+            if (!alertedIdsRef.current.has(c.id)) {
+              alertedIdsRef.current.add(c.id);
+              const nome = c.nome_contato || c.telefone || 'Paciente';
+              const mins = Math.floor(elapsed / 60000);
+              showDesktopNotification(
+                `Atendimento urgente`,
+                `${nome} aguarda resposta há ${mins} minutos`,
+              );
+            }
+          }
+        }
+      }
+
+      setUrgentConversas(newUrgent);
+
+      // Limpar alertas de conversas que foram respondidas
+      alertedIdsRef.current.forEach((id) => {
+        if (!newUrgent.has(id)) {
+          alertedIdsRef.current.delete(id);
+        }
+      });
+    };
+
+    checkUrgent();
+    const interval = setInterval(checkUrgent, 30000);
+    return () => clearInterval(interval);
+  }, [conversas]);
+
+  // Empty state quando nenhum canal selecionado
+  if (!canal) {
+    return (
+      <>
+        <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
+        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="text-center max-w-sm">
+            <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Selecione um canal</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Passe o mouse sobre o icone de conversas na barra lateral para escolher um canal WhatsApp.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
@@ -344,6 +416,7 @@ export default function ConversasPage() {
             loading={loading}
             mencionadoEm={mencionadoEm}
             flashingConversas={flashingConversas}
+            urgentConversas={urgentConversas}
           />
         </div>
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/components/layout/Sidebar';
 import { AppProvider, useAppContext } from '@/contexts/AppContext';
+import { useSSE } from '@/hooks/useSSE';
 import { requestNotificationPermission } from '@/lib/desktop-notification';
 
 // Importar Softphone dinamicamente sem SSR (sip.js usa APIs do browser)
@@ -19,11 +20,23 @@ const Softphone = dynamic(() => import('@/components/softphone/Softphone'), {
 });
 
 function ShellInner({ children }: { children: React.ReactNode }) {
-  const { operatorStatus } = useAppContext();
+  const { operatorStatus, refreshUnreadCounts } = useAppContext();
 
   useEffect(() => {
     requestNotificationPermission();
   }, []);
+
+  // SSE global para atualizar badges de não-lidas
+  const handleGlobalSSE = useCallback(
+    (event: string) => {
+      if (event === 'nova_mensagem' || event === 'conversa_atualizada') {
+        refreshUnreadCounts();
+      }
+    },
+    [refreshUnreadCounts],
+  );
+
+  useSSE(handleGlobalSSE);
 
   return (
     <div className="flex h-screen">

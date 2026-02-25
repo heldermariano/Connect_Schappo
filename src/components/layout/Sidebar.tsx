@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
+import { useAppContext } from '@/contexts/AppContext';
 import Logo from '@/components/Logo';
 
 const NAV_ITEMS = [
@@ -78,6 +79,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { unreadCounts } = useAppContext();
   const userName = (session?.user as { nome?: string })?.nome;
   const userGrupo = (session?.user as { grupo?: string })?.grupo || 'todos';
   const initials = userName
@@ -93,6 +95,9 @@ export default function Sidebar() {
   // Canais permitidos para este operador
   const allowedChannelIds = GRUPO_CHANNELS[userGrupo] || GRUPO_CHANNELS.todos;
   const visibleChannels = WHATSAPP_CHANNELS.filter((ch) => allowedChannelIds.includes(ch.id));
+
+  // Total de não-lidas (soma dos canais visíveis)
+  const totalUnread = visibleChannels.reduce((sum, ch) => sum + (unreadCounts[ch.id] || 0), 0);
 
   const handleMouseEnter = useCallback(() => {
     if (closeTimeoutRef.current) {
@@ -126,7 +131,7 @@ export default function Sidebar() {
               onMouseLeave={handleMouseLeave}
             >
               <Link
-                href={`/conversas?canal=${visibleChannels[0]?.id || 'eeg'}`}
+                href="/conversas"
                 title={item.label}
                 className={`w-12 h-12 flex items-center justify-center rounded-xl transition-colors relative ${
                   active
@@ -135,8 +140,10 @@ export default function Sidebar() {
                 }`}
               >
                 <NavIcon icon={item.icon} active={active} />
-                {activeCanal && isConversasActive && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-green-400 rounded-full" />
+                {totalUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold shadow-sm">
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </span>
                 )}
               </Link>
 
@@ -148,6 +155,7 @@ export default function Sidebar() {
                   <div className="absolute left-[calc(100%+8px)] top-0 z-50 bg-gray-900 rounded-lg shadow-xl border border-gray-700 py-2 min-w-[200px]">
                     {visibleChannels.map((channel) => {
                       const isActive = activeCanal === channel.id;
+                      const channelUnread = unreadCounts[channel.id] || 0;
                       return (
                         <Link
                           key={channel.id}
@@ -160,10 +168,15 @@ export default function Sidebar() {
                           }`}
                         >
                           <WhatsAppIcon className={`w-4 h-4 ${isActive ? 'text-green-400' : 'text-green-600'}`} />
-                          <div className="flex flex-col">
+                          <div className="flex flex-col flex-1">
                             <span className="font-medium">{channel.label}</span>
                             <span className="text-[11px] text-gray-500">{formatPhone(channel.phone)}</span>
                           </div>
+                          {channelUnread > 0 && (
+                            <span className="min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                              {channelUnread > 99 ? '99+' : channelUnread}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}

@@ -10,9 +10,10 @@ interface ConversaListProps {
   loading: boolean;
   mencionadoEm?: Set<number>;
   flashingConversas?: Set<number>;
+  urgentConversas?: Set<number>;
 }
 
-export default function ConversaList({ conversas, activeId, onSelect, loading, mencionadoEm, flashingConversas }: ConversaListProps) {
+export default function ConversaList({ conversas, activeId, onSelect, loading, mencionadoEm, flashingConversas, urgentConversas }: ConversaListProps) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
@@ -39,6 +40,7 @@ export default function ConversaList({ conversas, activeId, onSelect, loading, m
           onClick={() => onSelect(conversa)}
           mencionado={mencionadoEm?.has(conversa.id)}
           flash={flashingConversas?.has(conversa.id)}
+          isUrgent={urgentConversas?.has(conversa.id)}
         />
       ))}
     </div>
