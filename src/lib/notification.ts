@@ -59,12 +59,82 @@ export function showMentionToast(senderName: string, groupName?: string): void {
   }, 4000);
 }
 
+/**
+ * Mostra toast de notificacao no canto superior direito.
+ * Avatar placeholder + nome + preview da mensagem.
+ * Auto-desaparece em 5s. Suporta multiplas toasts empilhadas.
+ */
+export function showToastNotification(
+  title: string,
+  body: string,
+  onClick?: () => void,
+): void {
+  const container = document.getElementById('toast-container') || createToastContainer();
+
+  const toast = document.createElement('div');
+  toast.className =
+    'mb-2 px-4 py-3 bg-gray-900 text-white rounded-xl shadow-2xl text-sm flex items-center gap-3 max-w-sm border border-gray-700/50 cursor-pointer';
+  toast.style.cssText = 'animation: toast-slide-in 0.3s ease forwards; opacity: 0; transform: translateX(100%);';
+
+  // Iniciais do remetente
+  const initials = title
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  toast.innerHTML = `
+    <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${escapeHtml(initials)}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
+      <div style="font-size:12px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${escapeHtml(body)}</div>
+    </div>
+  `;
+
+  if (onClick) {
+    toast.addEventListener('click', () => {
+      onClick();
+      toast.remove();
+    });
+  }
+
+  container.appendChild(toast);
+
+  // Injetar animacao CSS se nao existir
+  ensureToastStyles();
+
+  // Remover apos 5 segundos
+  setTimeout(() => {
+    toast.style.animation = 'toast-slide-out 0.3s ease forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+}
+
 function createToastContainer(): HTMLElement {
   const container = document.createElement('div');
   container.id = 'toast-container';
   container.className = 'fixed top-4 right-4 z-[9999]';
   document.body.appendChild(container);
   return container;
+}
+
+let stylesInjected = false;
+function ensureToastStyles(): void {
+  if (stylesInjected) return;
+  stylesInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes toast-slide-in {
+      from { opacity: 0; transform: translateX(100%); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes toast-slide-out {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(100%); }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 function escapeHtml(str: string): string {

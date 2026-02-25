@@ -10,7 +10,6 @@ import Logo from '@/components/Logo';
 
 const NAV_ITEMS = [
   { href: '/conversas', label: 'Conversas', icon: 'chat' },
-  { href: '/chat-interno', label: 'Chat Interno', icon: 'chat-interno' },
   { href: '/chamadas', label: 'Chamadas', icon: 'phone' },
   { href: '/contatos', label: 'Contatos', icon: 'contacts' },
   { href: '/respostas-prontas', label: 'Respostas', icon: 'replies' },
@@ -22,13 +21,6 @@ function NavIcon({ icon, active }: { icon: string; active: boolean }) {
     return (
       <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-      </svg>
-    );
-  }
-  if (icon === 'chat-interno') {
-    return (
-      <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
       </svg>
     );
   }
