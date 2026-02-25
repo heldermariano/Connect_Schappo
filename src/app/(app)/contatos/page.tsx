@@ -58,7 +58,7 @@ export default function ContatosPage() {
               <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              {syncing ? 'Sincronizando...' : 'Sincronizar Fotos'}
+              {syncing ? 'Sincronizando...' : 'Sincronizar Contatos'}
             </button>
             <button
               onClick={() => setShowAddModal(true)}
@@ -75,7 +75,7 @@ export default function ContatosPage() {
         {/* Resultado da sync */}
         {syncResult && (
           <div className="mb-3 px-3 py-2 bg-green-50 text-green-700 text-xs rounded-lg">
-            Sincronizados {syncResult.fetched} chats, {syncResult.updated} fotos atualizadas.
+            {syncResult.processed} contatos verificados, {syncResult.updated} atualizados{syncResult.errors > 0 ? `, ${syncResult.errors} erros` : ''}.
           </div>
         )}
 

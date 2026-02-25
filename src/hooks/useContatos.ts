@@ -15,7 +15,7 @@ interface UseContatosResult {
   loadMore: () => void;
   hasMore: boolean;
   syncing: boolean;
-  syncResult: { fetched: number; updated: number } | null;
+  syncResult: { processed: number; updated: number; errors: number } | null;
   sync: () => Promise<void>;
 }
 
@@ -28,7 +28,7 @@ export function useContatos(): UseContatosResult {
   const [busca, setBusca] = useState('');
   const [hasMore, setHasMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ fetched: number; updated: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{ processed: number; updated: number; errors: number } | null>(null);
   const pageRef = useRef(1);
 
   const fetchContatos = useCallback(async (page = 1, append = false) => {
