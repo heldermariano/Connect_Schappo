@@ -75,6 +75,7 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Layout compartilhado (Sidebar + Softphone em todas as telas) | DONE |
 | Sync de fotos de contato via UAZAPI | DONE |
 | Avatares de participantes em grupos | DONE |
+| Respostas prontas (quick replies) com autocomplete `/` | DONE |
 
 ### Pendente / Proximo
 
@@ -161,7 +162,8 @@ connect-schappo/
 │   ├── 003_participantes_grupo.sql     # participantes_grupo (sync nomes/avatares)
 │   ├── 004_mencoes_registrar_mensagem.sql  # Campo mencoes[] + trigger
 │   ├── 005_contatos_table.sql          # Tabela contatos (nome, telefone, email, notas)
-│   └── 006_softphone_sip_settings.sql  # Campos SIP em atendentes (server, password_encrypted)
+│   ├── 006_softphone_sip_settings.sql  # Campos SIP em atendentes (server, password_encrypted)
+│   └── 010_respostas_prontas.sql       # Respostas prontas (atalhos por operador)
 │
 ├── config/
 │   ├── pjsip-whatsapp.conf            # Config PJSIP para trunk WhatsApp Voz
@@ -194,7 +196,8 @@ connect-schappo/
     │   │   │   ├── page.tsx            # Lista conversas + mensagens (painel principal)
     │   │   │   └── [id]/page.tsx       # Redirect → /conversas
     │   │   ├── chamadas/page.tsx       # Log de chamadas + status ramais
-    │   │   └── contatos/page.tsx       # Lista contatos + modal detalhes
+    │   │   ├── contatos/page.tsx       # Lista contatos + modal detalhes
+    │   │   └── respostas-prontas/page.tsx # Gerenciamento respostas prontas (CRUD)
     │   │
     │   └── api/
     │       ├── auth/[...nextauth]/route.ts      # NextAuth handler
@@ -233,6 +236,10 @@ connect-schappo/
     │       │   ├── import-csv/route.ts          # POST: import CSV Chatwoot
     │       │   └── sync/route.ts                # POST: sync fotos UAZAPI
     │       │
+    │       ├── respostas-prontas/
+    │       │   ├── route.ts                     # GET: listar + POST: criar (por operador)
+    │       │   └── [id]/route.ts                # PUT: editar + DELETE: excluir
+    │       │
     │       └── atendentes/
     │           ├── sip/route.ts                 # GET/PUT: config SIP (encrypted)
     │           └── status/route.ts              # GET/PATCH: presenca operador
@@ -256,6 +263,7 @@ connect-schappo/
     │   │   ├── ImageLightbox.tsx         # Modal fullscreen para imagens
     │   │   ├── AttachmentPreview.tsx     # Preview arquivo antes de enviar
     │   │   ├── ExameSearch.tsx           # Busca exames via # (popup, download PDFs)
+    │   │   ├── QuickReplyAutocomplete.tsx # Autocomplete respostas prontas (ativado por /)
     │   │   └── AtribuirDropdown.tsx      # Dropdown atribuir conversa a atendente
     │   │
     │   ├── calls/
@@ -281,6 +289,9 @@ connect-schappo/
     │   │   ├── AddContatoModal.tsx        # Modal novo contato
     │   │   └── ImportCsvModal.tsx         # Import CSV Chatwoot
     │   │
+    │   ├── respostas-prontas/
+    │   │   └── RespostaProntaModal.tsx    # Modal criar/editar resposta pronta
+    │   │
     │   ├── filters/
     │   │   ├── CategoryFilter.tsx         # Filtro: Todos/Individual/Grupo EEG/Grupo Recepcao
     │   │   └── SearchBar.tsx              # Campo busca nome/telefone
@@ -296,6 +307,7 @@ connect-schappo/
     │   ├── useMensagens.ts               # Fetch + paginacao + envio mensagens
     │   ├── useChamadas.ts                # Fetch + filtro chamadas
     │   ├── useContatos.ts                # Fetch + busca + sync contatos
+    │   ├── useRespostasProntas.ts        # CRUD respostas prontas
     │   └── useSipPhone.ts                # SIP completo: register, call, hold, mute, DTMF
     │
     ├── contexts/
@@ -329,7 +341,7 @@ postgresql://connect_dev:SENHA@localhost:5432/connect_schappo
 Schema: atd
 ```
 
-### Tabelas (6)
+### Tabelas (7)
 
 | Tabela | Descricao | Colunas-chave |
 |--------|-----------|---------------|
@@ -339,6 +351,7 @@ Schema: atd
 | `atd.chamadas` | Log chamadas | id, conversa_id, origem, direcao, caller/called_number, status, duracao_seg, asterisk_id |
 | `atd.contatos` | Contatos salvos | id, nome, telefone (UNIQUE), email, notas, chatwoot_id |
 | `atd.participantes_grupo` | Membros de grupos | id, wa_phone + wa_chatid (UNIQUE), nome_whatsapp, avatar_url |
+| `atd.respostas_prontas` | Quick replies por operador | id, atendente_id (FK), atalho (UNIQUE c/ atendente), conteudo |
 
 ### Funcoes SQL
 
@@ -347,7 +360,7 @@ Schema: atd
 | `atd.upsert_conversa()` | Insert/update conversa por wa_chatid |
 | `atd.registrar_mensagem()` | Insert mensagem + update conversa (ultima_msg, nao_lida) |
 
-### Migracoes: `sql/001` a `sql/006` (executar em ordem)
+### Migracoes: `sql/001` a `sql/010` (executar em ordem)
 
 ---
 
@@ -397,6 +410,15 @@ Schema: atd
 | `/api/contatos/[id]` | GET/PUT | Detalhe/editar por telefone |
 | `/api/contatos/import-csv` | POST | Import CSV Chatwoot (batch upsert) |
 | `/api/contatos/sync` | POST | Sync fotos UAZAPI |
+
+### Respostas Prontas (autenticado)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/respostas-prontas` | GET | Lista respostas do operador logado |
+| `/api/respostas-prontas` | POST | Criar resposta (atalho + conteudo) |
+| `/api/respostas-prontas/[id]` | PUT | Editar resposta (valida ownership) |
+| `/api/respostas-prontas/[id]` | DELETE | Excluir resposta (valida ownership) |
 
 ### Outros
 
