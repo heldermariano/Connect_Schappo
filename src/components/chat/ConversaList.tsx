@@ -9,12 +9,13 @@ interface ConversaListProps {
   onSelect: (conversa: Conversa) => void;
   loading: boolean;
   mencionadoEm?: Set<number>;
+  flashingConversas?: Set<number>;
 }
 
-export default function ConversaList({ conversas, activeId, onSelect, loading, mencionadoEm }: ConversaListProps) {
+export default function ConversaList({ conversas, activeId, onSelect, loading, mencionadoEm, flashingConversas }: ConversaListProps) {
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+      <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm">
         Carregando...
       </div>
     );
@@ -22,7 +23,7 @@ export default function ConversaList({ conversas, activeId, onSelect, loading, m
 
   if (conversas.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-400 text-sm p-4 text-center">
+      <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm p-4 text-center">
         Nenhuma conversa encontrada
       </div>
     );
@@ -37,6 +38,7 @@ export default function ConversaList({ conversas, activeId, onSelect, loading, m
           active={conversa.id === activeId}
           onClick={() => onSelect(conversa)}
           mencionado={mencionadoEm?.has(conversa.id)}
+          flash={flashingConversas?.has(conversa.id)}
         />
       ))}
     </div>

@@ -192,7 +192,7 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
       <div className="relative max-w-[70%] min-w-[80px]">
       <div
         className={`rounded-lg px-3 py-2 ${
-          isMe ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900 shadow-sm'
+          isMe ? 'bg-green-100 dark:bg-green-900/40 text-gray-900 dark:text-gray-100' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm'
         }`}
       >
         {/* Nome do remetente em grupos (com cor unica por pessoa) */}

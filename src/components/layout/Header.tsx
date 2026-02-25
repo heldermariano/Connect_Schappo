@@ -9,6 +9,7 @@ import StatusBadge, { StatusPresenca } from '@/components/ui/StatusBadge';
 import StatusSelector from '@/components/ui/StatusSelector';
 import Avatar from '@/components/ui/Avatar';
 import { Contato } from '@/lib/types';
+import { useAppContext } from '@/contexts/AppContext';
 
 interface HeaderProps {
   busca: string;
@@ -32,6 +33,7 @@ function formatPhone(phone: string | null): string {
 export default function Header({ busca, onBuscaChange, presenca: presencaProp, onPresencaChange }: HeaderProps) {
   const { data: session } = useSession();
   const router = useRouter();
+  const { theme, setTheme } = useAppContext();
   const [menuOpen, setMenuOpen] = useState(false);
   const [presencaLocal, setPresencaLocal] = useState<StatusPresenca>('disponivel');
   const presenca = presencaProp ?? presencaLocal;
@@ -166,13 +168,13 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
 
   return (
     <header className="h-14 bg-schappo-500 flex items-center px-4 gap-4 shrink-0 shadow-sm">
-      <Logo variant="light" size="sm" />
+      <Logo variant="orange" size="md" />
       <div className="flex-1 relative" ref={dropdownRef}>
         <SearchBar value={busca} onChange={onBuscaChange} />
 
         {/* Dropdown de resultados de contatos */}
         {showDropdown && busca.trim().length >= 2 && (
-          <div className="absolute top-full left-0 right-0 mt-1 max-w-md bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+          <div className="absolute top-full left-0 right-0 mt-1 max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
             {buscaContatos && contatos.length === 0 && (
               <div className="px-4 py-3 text-sm text-gray-400 text-center">Buscando...</div>
             )}
@@ -181,8 +183,8 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
             )}
             {contatos.length > 0 && (
               <>
-                <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="text-xs font-semibold text-gray-500 uppercase">Contatos</span>
+                <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-600">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Contatos</span>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {contatos.map((contato, idx) => (
@@ -190,12 +192,12 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
                       key={`${contato.telefone}-${idx}`}
                       onClick={() => handleContatoClick(contato)}
                       disabled={criandoConversa === contato.telefone}
-                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0 disabled:opacity-50"
+                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-50 dark:border-gray-700 last:border-b-0 disabled:opacity-50"
                     >
                       <Avatar nome={contato.nome} avatarUrl={contato.avatar_url} size="sm" />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 truncate">{contato.nome}</div>
-                        <div className="text-xs text-gray-500">{formatPhone(contato.telefone)}</div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{contato.nome}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{formatPhone(contato.telefone)}</div>
                       </div>
                       {contato.conversa_id ? (
                         <span className="text-xs text-schappo-600 font-medium shrink-0">Abrir</span>
@@ -251,25 +253,42 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
 
             {/* Dropdown */}
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                 {/* Info do usuario */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                  <div className="text-sm font-medium text-gray-900">{user.nome}</div>
-                  <div className="text-xs text-gray-500">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.nome}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
                     {user.role === 'admin' ? 'Administrador' : 'Atendente'} &middot; {user.grupo.toUpperCase()}
                   </div>
                   {user.ramal && (
-                    <div className="text-xs text-gray-400 mt-0.5">Ramal {user.ramal}</div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Ramal {user.ramal}</div>
                   )}
                   <div className="flex items-center gap-1.5 mt-1">
                     <StatusBadge status={presenca} size="sm" showLabel />
                   </div>
                 </div>
 
+                {/* Toggle tema */}
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                >
+                  {theme === 'dark' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                  )}
+                  {theme === 'dark' ? 'Tema Claro' : 'Tema Escuro'}
+                </button>
+
                 {/* Sair */}
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />

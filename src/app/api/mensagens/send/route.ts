@@ -208,6 +208,7 @@ export async function POST(request: NextRequest) {
       `UPDATE atd.conversas SET
         ultima_mensagem = LEFT($1, 200),
         ultima_msg_at = NOW(),
+        ultima_msg_from_me = TRUE,
         nao_lida = 0,
         updated_at = NOW()
        WHERE id = $2`,

@@ -34,6 +34,7 @@ export interface Conversa {
   ultima_mensagem: string | null;
   ultima_msg_at: string | null;
   nao_lida: number;
+  ultima_msg_from_me: boolean;
   is_archived: boolean;
   is_muted: boolean;
   atendente_id: number | null;
@@ -110,6 +111,32 @@ export interface Chamada {
   created_at: string;
 }
 
+// --- Chat Interno ---
+
+export interface ChatInterno {
+  id: number;
+  participante1_id: number;
+  participante2_id: number;
+  ultima_mensagem: string | null;
+  ultima_msg_at: string | null;
+  created_at: string;
+  // Campos calculados (JOIN)
+  outro_nome?: string;
+  outro_status?: string;
+  nao_lidas?: number;
+}
+
+export interface ChatInternoMensagem {
+  id: number;
+  chat_id: number;
+  atendente_id: number;
+  conteudo: string;
+  lida: boolean;
+  created_at: string;
+  // JOIN
+  nome_remetente?: string;
+}
+
 // --- SIP / Softphone ---
 
 export interface SipSettings {
@@ -129,12 +156,13 @@ export type SipCallState = 'idle' | 'calling' | 'ringing' | 'in-call' | 'on-hold
 
 export type SSEEvent =
   | { type: 'nova_mensagem'; data: { conversa_id: number; mensagem: Mensagem } }
-  | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null } }
+  | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null; ultima_msg_from_me?: boolean } }
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
   | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }
   | { type: 'atendente_status'; data: { atendente_id: number; nome: string; status: string } }
-  | { type: 'softphone_incoming'; data: { caller_number: string; caller_name?: string } };
+  | { type: 'softphone_incoming'; data: { caller_number: string; caller_name?: string } }
+  | { type: 'chat_interno_mensagem'; data: { chat_id: number; mensagem: ChatInternoMensagem; destinatario_id: number } };
 
 // --- Webhook Payloads ---
 

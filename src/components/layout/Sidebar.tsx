@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
+import Logo from '@/components/Logo';
 
 const NAV_ITEMS = [
   { href: '/conversas', label: 'Conversas', icon: 'chat' },
+  { href: '/chat-interno', label: 'Chat Interno', icon: 'chat-interno' },
   { href: '/chamadas', label: 'Chamadas', icon: 'phone' },
   { href: '/contatos', label: 'Contatos', icon: 'contacts' },
 ];
@@ -18,6 +20,13 @@ function NavIcon({ icon, active }: { icon: string; active: boolean }) {
     return (
       <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    );
+  }
+  if (icon === 'chat-interno') {
+    return (
+      <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
       </svg>
     );
   }
@@ -54,22 +63,7 @@ function formatPhone(phone: string): string {
 }
 
 function SidebarLogo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="32" height="32" rx="6" fill="#F58220" />
-      <text
-        x="16"
-        y="22"
-        textAnchor="middle"
-        fontFamily="system-ui, sans-serif"
-        fontSize="16"
-        fontWeight="700"
-        fill="white"
-      >
-        CS
-      </text>
-    </svg>
-  );
+  return <Logo variant="icon" size="sm" />;
 }
 
 export default function Sidebar() {
@@ -124,7 +118,7 @@ export default function Sidebar() {
               onMouseLeave={handleMouseLeave}
             >
               <Link
-                href={item.href}
+                href={`/conversas?canal=${visibleChannels[0]?.id || 'eeg'}`}
                 title={item.label}
                 className={`w-12 h-12 flex items-center justify-center rounded-xl transition-colors relative ${
                   active
@@ -138,28 +132,12 @@ export default function Sidebar() {
                 )}
               </Link>
 
-              {/* Flyout submenu */}
+              {/* Flyout submenu — apenas canais */}
               {flyoutOpen && (
                 <>
                   {/* Ponte invisivel entre sidebar e flyout */}
                   <div className="absolute left-full top-0 w-2 h-full" />
                   <div className="absolute left-[calc(100%+8px)] top-0 z-50 bg-gray-900 rounded-lg shadow-xl border border-gray-700 py-2 min-w-[200px]">
-                    <Link
-                      href="/conversas"
-                      onClick={() => setFlyoutOpen(false)}
-                      className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                        isConversasActive && !activeCanal
-                          ? 'text-schappo-400 bg-schappo-500/10'
-                          : 'text-gray-300 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <NavIcon icon="chat" active={isConversasActive && !activeCanal} />
-                      <span className="font-medium">Todas as conversas</span>
-                    </Link>
-                    <div className="border-t border-gray-700 my-1" />
-                    <div className="px-4 py-1.5">
-                      <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Canais</span>
-                    </div>
                     {visibleChannels.map((channel) => {
                       const isActive = activeCanal === channel.id;
                       return (

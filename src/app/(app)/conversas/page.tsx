@@ -14,6 +14,7 @@ import { useConversas } from '@/hooks/useConversas';
 import { useMensagens } from '@/hooks/useMensagens';
 import { useAppContext } from '@/contexts/AppContext';
 import { playNotificationBeep, showMentionToast } from '@/lib/notification';
+import { showDesktopNotification } from '@/lib/desktop-notification';
 
 export default function ConversasPage() {
   const { data: session } = useSession();
@@ -25,6 +26,8 @@ export default function ConversasPage() {
   const [activeCalls, setActiveCalls] = useState<Chamada[]>([]);
   // Set de conversa_ids onde o atendente foi mencionado (nao lidas)
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
+  // Set de conversa_ids com flash visual (nova msg recebida)
+  const [flashingConversas, setFlashingConversas] = useState<Set<number>>(new Set());
   // Mapa de nomes de grupo por conversa_id (para toast)
   const groupNamesRef = useRef<Map<number, string>>(new Map());
   // Track se ja processou o query param ?id
@@ -140,6 +143,30 @@ export default function ConversasPage() {
           addMensagem(d.mensagem);
         }
 
+        // Notificacao para mensagens recebidas (nao enviadas pelo atendente)
+        if (!d.mensagem.from_me) {
+          // Pular notificacao se a conversa esta selecionada E pagina tem foco
+          const isActiveAndFocused = selectedConversa && d.conversa_id === selectedConversa.id && document.hasFocus();
+          if (!isActiveAndFocused) {
+            playNotificationBeep();
+            const senderName = d.mensagem.sender_name || 'Paciente';
+            const groupName = groupNamesRef.current.get(d.conversa_id);
+            const notifTitle = groupName ? `${senderName} em ${groupName}` : senderName;
+            const notifBody = d.mensagem.conteudo || 'Nova mensagem';
+            showDesktopNotification(notifTitle, notifBody);
+
+            // Flash visual na conversa
+            setFlashingConversas((prev) => new Set(prev).add(d.conversa_id));
+            setTimeout(() => {
+              setFlashingConversas((prev) => {
+                const next = new Set(prev);
+                next.delete(d.conversa_id);
+                return next;
+              });
+            }, 2000);
+          }
+        }
+
         // Verificar mencoes
         const mencoes = d.mensagem.mencoes || [];
         if (isMentioned(mencoes)) {
@@ -151,7 +178,7 @@ export default function ConversasPage() {
         }
       }
       if (event === 'conversa_atualizada') {
-        const d = data as { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null };
+        const d = data as { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null; ultima_msg_from_me?: boolean };
         const updates: Partial<Conversa> = {
           ultima_mensagem: d.ultima_msg,
           nao_lida: d.nao_lida,
@@ -159,6 +186,9 @@ export default function ConversasPage() {
         };
         if (d.atendente_id !== undefined) {
           updates.atendente_id = d.atendente_id;
+        }
+        if (d.ultima_msg_from_me !== undefined) {
+          updates.ultima_msg_from_me = d.ultima_msg_from_me;
         }
         updateConversa(d.conversa_id, updates);
         // Atualizar conversa selecionada se for a mesma
@@ -224,6 +254,7 @@ export default function ConversasPage() {
       updateConversa(conversaId, {
         ultima_mensagem: conteudo.substring(0, 200),
         ultima_msg_at: new Date().toISOString(),
+        ultima_msg_from_me: true,
         nao_lida: 0,
       });
     },
@@ -304,7 +335,7 @@ export default function ConversasPage() {
       <CallAlert chamadas={activeCalls} />
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}
-        <div className="w-80 border-r border-gray-200 flex flex-col shrink-0 bg-white">
+        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 bg-white dark:bg-gray-800">
           <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} canal={canal} />
           <ConversaList
             conversas={conversas}
@@ -312,6 +343,7 @@ export default function ConversasPage() {
             onSelect={handleSelectConversa}
             loading={loading}
             mencionadoEm={mencionadoEm}
+            flashingConversas={flashingConversas}
           />
         </div>
 

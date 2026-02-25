@@ -84,7 +84,7 @@ export default function AtribuirDropdown({
       <button
         onClick={handleOpen}
         className="flex items-center gap-1 text-xs px-2 py-1 rounded-md
-                   border border-gray-200 hover:bg-gray-50 text-gray-600
+                   border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400
                    transition-colors"
         title="Atribuir atendente"
       >
@@ -100,7 +100,7 @@ export default function AtribuirDropdown({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-1">
+        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1">
           {loading ? (
             <div className="px-3 py-2 text-xs text-gray-400">Carregando...</div>
           ) : (
@@ -119,8 +119,8 @@ export default function AtribuirDropdown({
                   <button
                     key={a.id}
                     onClick={() => handleSelect(a.id)}
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors
-                      ${a.id === atendenteId ? 'text-schappo-600 font-medium bg-schappo-50' : 'text-gray-700'}`}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors
+                      ${a.id === atendenteId ? 'text-schappo-600 font-medium bg-schappo-50' : 'text-gray-700 dark:text-gray-300'}`}
                   >
                     {a.nome}
                     {a.ramal && <span className="text-gray-400 ml-1">({a.ramal})</span>}

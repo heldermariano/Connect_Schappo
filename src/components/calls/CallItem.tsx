@@ -69,7 +69,7 @@ export default function CallItem({ chamada }: CallItemProps) {
   const showRedial = rediscNumber && rediscNumber.length >= 8 && chamada.status !== 'ringing';
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors">
+    <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
       {/* Icone direcao */}
       <div className="shrink-0">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
@@ -94,10 +94,10 @@ export default function CallItem({ chamada }: CallItemProps) {
       {/* Info principal */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-900 truncate">
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
             {chamada.caller_number || 'Desconhecido'}
           </span>
-          <span className="text-[11px] text-gray-400">
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">
             {isIncoming ? '\u2192' : '\u2190'} {chamada.called_number || '--'}
           </span>
         </div>

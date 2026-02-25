@@ -48,7 +48,7 @@ export default function StatusSelector({ currentStatus, onStatusChange }: Status
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
           {STATUS_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -59,7 +59,7 @@ export default function StatusSelector({ currentStatus, onStatusChange }: Status
               className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
                 option.value === currentStatus
                   ? 'bg-schappo-50 text-schappo-700 font-medium'
-                  : 'text-gray-700 hover:bg-gray-50'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
             >
               <span className={`text-lg leading-none ${option.color}`}>{option.icon}</span>

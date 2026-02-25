@@ -72,7 +72,7 @@ export default function ChamadasPage() {
       <RamalStatus ramais={ramais} />
 
       {/* Filtros */}
-      <div className="flex gap-1 px-4 py-2 border-b border-gray-200 bg-white">
+      <div className="flex gap-1 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         {[
           { value: '', label: 'Todas' },
           { value: 'telefone', label: 'Telefone' },
@@ -85,7 +85,7 @@ export default function ChamadasPage() {
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
               filtroOrigem === f.value
                 ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             {f.label}

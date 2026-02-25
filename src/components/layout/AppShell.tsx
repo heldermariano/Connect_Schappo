@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/components/layout/Sidebar';
 import { AppProvider, useAppContext } from '@/contexts/AppContext';
+import { requestNotificationPermission } from '@/lib/desktop-notification';
 
 // Importar Softphone dinamicamente sem SSR (sip.js usa APIs do browser)
 const Softphone = dynamic(() => import('@/components/softphone/Softphone'), {
@@ -18,6 +20,10 @@ const Softphone = dynamic(() => import('@/components/softphone/Softphone'), {
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const { operatorStatus } = useAppContext();
+
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
 
   return (
     <div className="flex h-screen">

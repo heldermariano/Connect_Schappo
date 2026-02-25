@@ -25,6 +25,7 @@ export function useSSE(onEvent: SSEHandler) {
       'chamada_atualizada',
       'ramal_status',
       'atendente_status',
+      'chat_interno_mensagem',
     ];
 
     for (const type of eventTypes) {

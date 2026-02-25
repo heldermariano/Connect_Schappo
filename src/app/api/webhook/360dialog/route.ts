@@ -74,11 +74,11 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
 
     if (msgId === 0) continue; // Duplicada
 
-    // Quando cliente envia mensagem: resetar atribuicao + desarquivar (reaparecer na caixa de entrada)
+    // Quando cliente envia mensagem: resetar atribuicao + desarquivar + marcar ultima_msg_from_me
     if (!parsed.from_me) {
       await pool.query(
-        `UPDATE atd.conversas SET atendente_id = NULL, is_archived = FALSE
-         WHERE id = $1 AND (atendente_id IS NOT NULL OR is_archived = TRUE)`,
+        `UPDATE atd.conversas SET atendente_id = NULL, is_archived = FALSE, ultima_msg_from_me = FALSE
+         WHERE id = $1 AND (atendente_id IS NOT NULL OR is_archived = TRUE OR ultima_msg_from_me = TRUE)`,
         [conversaId],
       );
     }
@@ -93,7 +93,7 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
     });
 
     const convData = await pool.query(
-      `SELECT ultima_mensagem, nao_lida, atendente_id FROM atd.conversas WHERE id = $1`,
+      `SELECT ultima_mensagem, nao_lida, atendente_id, ultima_msg_from_me FROM atd.conversas WHERE id = $1`,
       [conversaId],
     );
     if (convData.rows[0]) {
@@ -104,6 +104,7 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
           ultima_msg: convData.rows[0].ultima_mensagem || '',
           nao_lida: convData.rows[0].nao_lida,
           atendente_id: convData.rows[0].atendente_id,
+          ultima_msg_from_me: convData.rows[0].ultima_msg_from_me,
         },
       });
     }

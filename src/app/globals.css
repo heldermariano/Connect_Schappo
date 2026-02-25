@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme inline {
   --color-background: #ffffff;
   --color-foreground: #171717;
@@ -21,6 +23,23 @@
   /* Cores auxiliares da identidade */
   --color-schappo-black: #1A1A1A;
   --color-schappo-gray:  #6B6B6B;
+}
+
+[data-theme="dark"] {
+  --color-background: #111827;
+  --color-foreground: #F9FAFB;
+}
+
+@keyframes pulse-once {
+  0% { background-color: transparent; }
+  25% { background-color: rgb(254 215 170 / 0.6); }
+  50% { background-color: transparent; }
+  75% { background-color: rgb(254 215 170 / 0.4); }
+  100% { background-color: transparent; }
+}
+
+.animate-pulse-once {
+  animation: pulse-once 2s ease-in-out;
 }
 
 html, body {

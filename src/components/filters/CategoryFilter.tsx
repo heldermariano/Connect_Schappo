@@ -33,19 +33,14 @@ const GRUPO_FILTERS: Record<string, string[]> = {
 };
 
 export default function CategoryFilter({ selected, onChange, grupo = 'todos', canal }: CategoryFilterProps) {
-  // Com canal selecionado: filtros simplificados
+  // Com canal selecionado: apenas botões Individual/Grupo (sem badge)
   if (canal) {
     const channelInfo = WHATSAPP_CHANNELS.find((ch) => ch.id === canal);
-    const channelLabel = channelInfo?.label || canal;
     const is360 = channelInfo?.provider === '360dialog';
     const filters = is360 ? CHANNEL_FILTERS_360 : CHANNEL_FILTERS_UAZAPI;
 
     return (
-      <div className="flex items-center justify-center gap-1 px-3 py-2 border-b border-gray-200 bg-white">
-        <span className="text-xs font-semibold text-schappo-600 bg-schappo-50 px-2 py-1 rounded-md border border-schappo-200 mr-1">
-          {channelLabel}
-        </span>
-        <span className="text-gray-300 mr-1">|</span>
+      <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         {filters.map((f) => (
           <button
             key={f.value}
@@ -53,7 +48,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
               selected === f.value
                 ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
-                : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-transparent'
             }`}
           >
             {f.label}
@@ -71,7 +66,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
   const filters = ALL_FILTERS.filter((f) => allowedValues.includes(f.value));
 
   return (
-    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 bg-white">
+    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
       {filters.map((f) => (
         <button
           key={f.value}
@@ -79,7 +74,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
           className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
             selected === f.value
               ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
-              : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-transparent'
           }`}
         >
           {f.label}

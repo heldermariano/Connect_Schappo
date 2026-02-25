@@ -30,13 +30,13 @@ export default function ContatoItem({ contato, onClick }: ContatoItemProps) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left p-3 rounded-lg border border-gray-100 flex items-center gap-3 hover:bg-gray-50 hover:border-gray-200 transition-colors"
+      className="w-full text-left p-3 rounded-lg border border-gray-100 dark:border-gray-700 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-600 transition-colors"
     >
       <Avatar nome={contato.nome} avatarUrl={contato.avatar_url} size="md" />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium text-gray-900 truncate">
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
             {contato.nome}
           </span>
           {contato.categoria && (
@@ -45,7 +45,7 @@ export default function ContatoItem({ contato, onClick }: ContatoItemProps) {
             </span>
           )}
         </div>
-        <span className="text-xs text-gray-500 block truncate">
+        <span className="text-xs text-gray-500 dark:text-gray-400 block truncate">
           {formatPhone(contato.telefone)}
         </span>
       </div>
