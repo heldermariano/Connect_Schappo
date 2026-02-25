@@ -66,7 +66,7 @@ export default function LocationModal({ open, onClose, onSend, sending }: Locati
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className="bg-white dark:bg-black rounded-xl shadow-2xl w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Enviar Localizacao</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,7 +136,7 @@ export default function LocationModal({ open, onClose, onSend, sending }: Locati
           {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
           <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
             Cancelar
           </button>

@@ -55,7 +55,7 @@ export default function ChatInternoView({ chat, mensagens, loading, currentUserI
   return (
     <div className="flex-1 flex flex-col bg-white dark:bg-black">
       {/* Header */}
-      <div className="h-14 border-b border-gray-200 dark:border-gray-700 flex items-center px-4 gap-3 bg-white dark:bg-black shrink-0">
+      <div className="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 bg-white dark:bg-black shrink-0">
         <div className="w-8 h-8 rounded-full bg-schappo-100 flex items-center justify-center text-xs font-bold text-schappo-700">
           {chat.outro_nome?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?'}
         </div>
@@ -86,7 +86,7 @@ export default function ChatInternoView({ chat, mensagens, loading, currentUserI
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-3 flex gap-2">
+      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-800 p-3 flex gap-2">
         <input
           type="text"
           value={texto}

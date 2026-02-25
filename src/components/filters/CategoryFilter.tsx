@@ -42,15 +42,15 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
     const filters = is360 ? CHANNEL_FILTERS_360 : CHANNEL_FILTERS_UAZAPI;
 
     return (
-      <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
+      <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-black">
         {filters.map((f) => (
           <button
             key={f.value}
             onClick={() => onChange(f.value)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
               selected === f.value
-                ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-transparent'
+                ? 'bg-schappo-50 dark:bg-schappo-500/15 text-schappo-700 dark:text-schappo-400 border border-schappo-200 dark:border-schappo-500/30'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 border border-transparent'
             }`}
           >
             {f.label}
@@ -68,15 +68,15 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
   const filters = ALL_FILTERS.filter((f) => allowedValues.includes(f.value));
 
   return (
-    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
+    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-black">
       {filters.map((f) => (
         <button
           key={f.value}
           onClick={() => onChange(f.value)}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
             selected === f.value
-              ? 'bg-schappo-50 text-schappo-700 border border-schappo-200'
-              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 border border-transparent'
+              ? 'bg-schappo-50 dark:bg-schappo-500/15 text-schappo-700 dark:text-schappo-400 border border-schappo-200 dark:border-schappo-500/30'
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 border border-transparent'
           }`}
         >
           {f.label}

@@ -48,7 +48,7 @@ export default function StatusSelector({ currentStatus, onStatusChange }: Status
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-black rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-black rounded-lg shadow-lg border border-gray-200 dark:border-gray-800 py-1 z-50">
           {STATUS_OPTIONS.map((option) => (
             <button
               key={option.value}

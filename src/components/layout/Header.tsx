@@ -170,7 +170,7 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
 
         {/* Dropdown de resultados de contatos */}
         {showDropdown && busca.trim().length >= 2 && (
-          <div className="absolute top-full left-0 right-0 mt-1 max-w-md bg-white dark:bg-black rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+          <div className="absolute top-full left-0 right-0 mt-1 max-w-md bg-white dark:bg-black rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 z-50 overflow-hidden">
             {buscaContatos && contatos.length === 0 && (
               <div className="px-4 py-3 text-sm text-gray-400 text-center">Buscando...</div>
             )}
@@ -188,7 +188,7 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
                       key={`${contato.telefone}-${idx}`}
                       onClick={() => handleContatoClick(contato)}
                       disabled={criandoConversa === contato.telefone}
-                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-50 dark:border-gray-700 last:border-b-0 disabled:opacity-50"
+                      className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-50 dark:border-gray-800 last:border-b-0 disabled:opacity-50"
                     >
                       <Avatar nome={contato.nome} avatarUrl={contato.avatar_url} size="sm" />
                       <div className="flex-1 min-w-0">

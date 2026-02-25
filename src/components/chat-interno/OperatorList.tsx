@@ -57,7 +57,7 @@ export default function OperatorList({ currentUserId, onSelect }: OperatorListPr
         <button
           key={a.id}
           onClick={() => onSelect(a)}
-          className="w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          className="w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
         >
           <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 shrink-0">
             {a.nome.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}

@@ -18,9 +18,9 @@ function formatElapsed(ms: number): string {
 
 function getTimerColor(ms: number): string {
   const min = ms / 60000;
-  if (min < 2) return 'text-green-600 bg-green-50';
-  if (min < 5) return 'text-yellow-600 bg-yellow-50';
-  return 'text-red-600 bg-red-50';
+  if (min < 2) return 'text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400';
+  if (min < 5) return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400';
+  return 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400';
 }
 
 export default function WaitTimer({ since }: WaitTimerProps) {

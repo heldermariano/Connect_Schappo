@@ -48,8 +48,8 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-3 py-3 border-b border-gray-100 dark:border-gray-700 flex gap-3 transition-colors ${
-        active ? 'bg-schappo-50 dark:bg-schappo-500/15 border-l-2 border-l-schappo-500' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+      className={`w-full text-left px-3 py-3 border-b border-gray-100 dark:border-gray-800 flex gap-3 transition-colors ${
+        active ? 'bg-schappo-50 dark:bg-schappo-500/15 border-l-2 border-l-schappo-500' : 'hover:bg-gray-50 dark:hover:bg-white/5'
       }${flash ? ' animate-pulse-once' : ''}${isUrgent ? ' border-l-2 border-l-red-500 bg-red-50 dark:bg-red-900/15 animate-pulse' : ''}`}
     >
       <Avatar nome={name} avatarUrl={conversa.avatar_url} size="md" isGroup={isGroup} />
@@ -57,7 +57,7 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate flex items-center gap-1">
+          <span className="text-sm font-medium text-gray-900 dark:text-white truncate flex items-center gap-1">
             {isUrgent && (
               <svg className="w-4 h-4 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -65,7 +65,7 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
             )}
             {name}
             {badge && (
-              <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-schappo-100 text-schappo-700">
+              <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-schappo-100 dark:bg-schappo-500/20 text-schappo-700 dark:text-schappo-400">
                 {badge}
               </span>
             )}
@@ -74,7 +74,7 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
             {conversa.nao_lida > 0 && !conversa.ultima_msg_from_me && conversa.ultima_msg_at && (
               <WaitTimer since={conversa.ultima_msg_at} />
             )}
-            <span className={`text-[11px] ${conversa.nao_lida > 0 ? 'text-schappo-600 font-medium' : 'text-gray-400'}`}>
+            <span className={`text-[11px] ${conversa.nao_lida > 0 ? 'text-schappo-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
               {formatTime(conversa.ultima_msg_at)}
             </span>
           </div>
@@ -85,7 +85,7 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
           </span>
           <div className="flex items-center gap-1 shrink-0 ml-2">
             {mencionado && (
-              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-schappo-100 text-schappo-600">
+              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-schappo-100 dark:bg-schappo-500/20 text-schappo-600 dark:text-schappo-400">
                 @ Mencionado
               </span>
             )}

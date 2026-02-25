@@ -30,8 +30,8 @@ export default function ChatInternoList({ chats, activeId, onSelect }: ChatInter
         <button
           key={chat.id}
           onClick={() => onSelect(chat)}
-          className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors border-b border-gray-100 dark:border-gray-700 ${
-            activeId === chat.id ? 'bg-schappo-50 dark:bg-schappo-500/15 border-l-2 border-l-schappo-500' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
+          className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors border-b border-gray-100 dark:border-gray-800 ${
+            activeId === chat.id ? 'bg-schappo-50 dark:bg-schappo-500/15 border-l-2 border-l-schappo-500' : 'hover:bg-gray-50 dark:hover:bg-white/5'
           }`}
         >
           <div className="w-8 h-8 rounded-full bg-schappo-100 flex items-center justify-center text-xs font-bold text-schappo-700 shrink-0">

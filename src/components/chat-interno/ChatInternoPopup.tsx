@@ -125,7 +125,7 @@ export default function ChatInternoPopup({ onClose, sseMessage }: ChatInternoPop
             currentUserId={userId}
             onSelect={handleSelectOperador}
           />
-          <div className="border-t border-gray-200 dark:border-gray-700">
+          <div className="border-t border-gray-200 dark:border-gray-800">
             <ChatInternoList
               chats={chats}
               activeId={null}

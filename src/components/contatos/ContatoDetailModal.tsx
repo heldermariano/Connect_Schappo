@@ -273,7 +273,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-end gap-2">
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"

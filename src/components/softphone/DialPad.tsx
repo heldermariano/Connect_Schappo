@@ -120,7 +120,7 @@ export default function DialPad({
             value={number}
             onChange={(e) => onNumberChange(e.target.value.replace(/[^0-9*#]/g, ''))}
             placeholder="Digite o numero"
-            className="w-full text-center text-lg font-mono py-2 px-8 bg-gray-50 dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent text-gray-900 dark:text-white"
+            className="w-full text-center text-lg font-mono py-2 px-8 bg-gray-50 dark:bg-black border border-gray-200 dark:border-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent text-gray-900 dark:text-white"
           />
           {number && (
             <button
@@ -143,7 +143,7 @@ export default function DialPad({
               key={key}
               onClick={() => handleKeyPress(key)}
               disabled={disabled}
-              className="flex flex-col items-center justify-center h-12 rounded-lg bg-gray-100 dark:bg-black hover:bg-gray-200 dark:hover:bg-gray-800 active:bg-gray-300 dark:active:bg-gray-700 transition-colors disabled:opacity-50"
+              className="flex flex-col items-center justify-center h-12 rounded-lg bg-gray-100 dark:bg-black hover:bg-gray-200 dark:hover:bg-white/5 active:bg-gray-300 dark:active:bg-gray-700 transition-colors disabled:opacity-50"
             >
               <span className="text-lg font-medium text-gray-800 dark:text-white">{key}</span>
               {KEY_LABELS[key] && (

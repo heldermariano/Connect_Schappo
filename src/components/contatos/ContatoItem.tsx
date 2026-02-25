@@ -30,7 +30,7 @@ export default function ContatoItem({ contato, onClick }: ContatoItemProps) {
   return (
     <button
       onClick={onClick}
-      className="w-full text-left p-3 rounded-lg border border-gray-100 dark:border-gray-700 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-200 dark:hover:border-gray-600 transition-colors"
+      className="w-full text-left p-3 rounded-lg border border-gray-100 dark:border-gray-800 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-200 dark:hover:border-gray-600 transition-colors"
     >
       <Avatar nome={contato.nome} avatarUrl={contato.avatar_url} size="md" />
 

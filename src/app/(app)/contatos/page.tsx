@@ -34,7 +34,7 @@ export default function ContatosPage() {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-black">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Contatos

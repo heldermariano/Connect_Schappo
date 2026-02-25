@@ -413,7 +413,7 @@ export default function ConversasPage() {
       <CallAlert chamadas={activeCalls} />
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}
-        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 bg-white dark:bg-black">
+        <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 bg-white dark:bg-black">
           <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} canal={canal} />
           <ConversaList
             conversas={conversas}

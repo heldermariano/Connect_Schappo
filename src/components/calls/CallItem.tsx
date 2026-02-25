@@ -69,7 +69,7 @@ export default function CallItem({ chamada }: CallItemProps) {
   const showRedial = rediscNumber && rediscNumber.length >= 8 && chamada.status !== 'ringing';
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+    <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
       {/* Icone direcao */}
       <div className="shrink-0">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${

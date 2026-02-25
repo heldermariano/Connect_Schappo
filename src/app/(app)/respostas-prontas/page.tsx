@@ -48,7 +48,7 @@ export default function RespostasProntasPage() {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-black">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Respostas Prontas
@@ -114,7 +114,7 @@ export default function RespostasProntasPage() {
           {filtered.map((r) => (
             <div
               key={r.id}
-              className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+              className="border border-gray-200 dark:border-gray-800 rounded-lg p-4 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">

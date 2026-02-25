@@ -79,12 +79,12 @@ export default function ChatInternoPage() {
       <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: operadores + chats */}
-        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 bg-white dark:bg-black overflow-y-auto">
+        <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 bg-white dark:bg-black overflow-y-auto">
           <OperatorList
             currentUserId={userId}
             onSelect={handleSelectOperador}
           />
-          <div className="border-t border-gray-200 dark:border-gray-700">
+          <div className="border-t border-gray-200 dark:border-gray-800">
             <ChatInternoList
               chats={chats}
               activeId={selectedChat?.id ?? null}
