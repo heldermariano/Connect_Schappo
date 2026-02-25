@@ -29,6 +29,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   const [exameSearch, setExameSearch] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionedPhones, setMentionedPhones] = useState<string[]>([]);
+  const [mentionedLids, setMentionedLids] = useState<string[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const mentionStartRef = useRef<number>(-1);
@@ -53,6 +54,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   // Limpar mencoes ao mudar de conversa
   useEffect(() => {
     setMentionedPhones([]);
+    setMentionedLids([]);
     setMentionQuery(null);
   }, [conversaId]);
 
@@ -90,6 +92,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         setText('');
         setAttachments([]);
         setMentionedPhones([]);
+        setMentionedLids([]);
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
@@ -110,11 +113,15 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     setError(null);
 
     try {
-      const mencoes = mentionedPhones.length > 0 ? [...mentionedPhones] : undefined;
+      // Enviar LIDs se disponiveis (UAZAPI precisa de LID para notificar corretamente)
+      const mencoes = mentionedLids.length > 0
+        ? [...mentionedLids]
+        : mentionedPhones.length > 0 ? [...mentionedPhones] : undefined;
       const quotedMsgId = replyingTo?.wa_message_id || undefined;
       await onSend(trimmed, mencoes, quotedMsgId);
       setText('');
       setMentionedPhones([]);
+      setMentionedLids([]);
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -124,7 +131,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       setSending(false);
       textareaRef.current?.focus();
     }
-  }, [text, sending, onSend, attachments, conversaId, mentionedPhones, replyingTo]);
+  }, [text, sending, onSend, attachments, conversaId, mentionedPhones, mentionedLids, replyingTo]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -210,6 +217,13 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     setMentionedPhones((prev) =>
       prev.includes(participant.phone) ? prev : [...prev, participant.phone],
     );
+
+    // Adicionar LID se disponivel (UAZAPI usa LID para notificar o usuario)
+    if (participant.lid) {
+      setMentionedLids((prev) =>
+        prev.includes(participant.lid!) ? prev : [...prev, participant.lid!],
+      );
+    }
 
     // Reposicionar cursor apos o nome inserido
     const newCursorPos = start + participant.nome.length + 2; // @Nome + espaco

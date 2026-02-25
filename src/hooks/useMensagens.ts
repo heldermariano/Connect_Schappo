@@ -64,7 +64,13 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     setMensagens((prev) => {
       // Evitar duplicata
       if (prev.some((m) => m.id === msg.id)) return prev;
-      return [...prev, msg];
+      // Inserir na posicao correta por id (manter ordem cronologica)
+      const newList = [...prev, msg];
+      // Se a nova mensagem tem id maior que a ultima, ja esta no lugar certo
+      if (prev.length === 0 || msg.id > prev[prev.length - 1].id) return newList;
+      // Caso contrario, ordenar por id
+      newList.sort((a, b) => a.id - b.id);
+      return newList;
     });
   }, []);
 

@@ -7,6 +7,7 @@ export interface Participant {
   phone: string;
   nome: string;
   avatar_url?: string | null;
+  lid?: string | null; // WhatsApp Linked ID (para mentionedJid)
 }
 
 interface MentionAutocompleteProps {

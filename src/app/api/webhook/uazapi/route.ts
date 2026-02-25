@@ -117,7 +117,8 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
 
   // Cache de participante de grupo (nao bloqueia o fluxo)
   if (parsed.tipo === 'grupo' && parsed.sender_phone && parsed.sender_name) {
-    upsertParticipant(parsed.sender_phone, parsed.wa_chatid, parsed.sender_name).catch((err) =>
+    const senderLid = parsed.metadata?.sender_lid as string | undefined;
+    upsertParticipant(parsed.sender_phone, parsed.wa_chatid, parsed.sender_name, null, senderLid).catch((err) =>
       console.error('[webhook/uazapi] Erro ao cachear participante:', err),
     );
   }

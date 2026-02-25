@@ -2,24 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
 /**
- * Resolve mencoes (telefones) para nomes via atd.participantes_grupo.
- * Retorna mapa { telefone: nome } para cada telefone mencionado.
+ * Resolve mencoes (telefones ou LIDs) para nomes via atd.participantes_grupo.
+ * Busca tanto por wa_phone quanto por wa_lid, pois o WhatsApp pode usar
+ * Linked IDs (LIDs) em vez de telefones reais nas mencoes.
+ * Retorna mapa { identificador: nome } para cada id mencionado.
  */
-async function resolveMencoes(phones: string[]): Promise<Record<string, string>> {
-  if (phones.length === 0) return {};
+async function resolveMencoes(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
 
   try {
     const result = await pool.query(
-      `SELECT wa_phone, COALESCE(nome_salvo, nome_whatsapp) as nome
-       FROM atd.participantes_grupo
-       WHERE wa_phone = ANY($1) AND COALESCE(nome_salvo, nome_whatsapp) IS NOT NULL`,
-      [phones],
+      `SELECT DISTINCT ON (match_id) match_id, nome FROM (
+         SELECT wa_phone as match_id, COALESCE(nome_salvo, nome_whatsapp) as nome
+         FROM atd.participantes_grupo
+         WHERE wa_phone = ANY($1) AND COALESCE(nome_salvo, nome_whatsapp) IS NOT NULL
+         UNION ALL
+         SELECT wa_lid as match_id, COALESCE(nome_salvo, nome_whatsapp) as nome
+         FROM atd.participantes_grupo
+         WHERE wa_lid = ANY($1) AND wa_lid IS NOT NULL AND COALESCE(nome_salvo, nome_whatsapp) IS NOT NULL
+       ) sub
+       ORDER BY match_id, nome`,
+      [ids],
     );
 
     const map: Record<string, string> = {};
     for (const row of result.rows) {
       if (row.nome) {
-        map[row.wa_phone] = row.nome;
+        map[row.match_id] = row.nome;
       }
     }
     return map;

@@ -224,8 +224,10 @@ function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string 
 }
 
 /**
- * Extrai telefones mencionados do payload.
- * UAZAPI envia mentionedJid como array de JIDs (@s.whatsapp.net)
+ * Extrai identificadores mencionados do payload.
+ * UAZAPI envia mentionedJid como array de JIDs — podem ser:
+ *   - Telefones: "5561999999999@s.whatsapp.net"
+ *   - LIDs: "125786891759786@lid"
  * Tambem tenta extrair do contextInfo dentro de content (objeto)
  */
 function extractMentions(message: WebhookPayloadUAZAPI['message']): string[] {
@@ -244,9 +246,9 @@ function extractMentions(message: WebhookPayloadUAZAPI['message']): string[] {
     }
   }
 
-  // Normalizar: remover @s.whatsapp.net, deduplicar
-  const phones = [...new Set(jids.map((j) => j.replace('@s.whatsapp.net', '')))];
-  return phones;
+  // Normalizar: remover @s.whatsapp.net e @lid, deduplicar
+  const ids = [...new Set(jids.map((j) => j.replace('@s.whatsapp.net', '').replace('@lid', '')))];
+  return ids;
 }
 
 export function isMessageEvent(payload: WebhookPayloadUAZAPI): boolean {

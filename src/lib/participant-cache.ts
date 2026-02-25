@@ -3,21 +3,26 @@ import pool from './db';
 /**
  * Faz upsert de um participante de grupo no cache.
  * Chamado quando recebemos uma mensagem de grupo com sender_phone e senderName.
+ * waLid = Linked ID do WhatsApp (usado para resolver mencoes em vez de telefone real)
  */
 export async function upsertParticipant(
   waPhone: string,
   waChatid: string,
   nomeWhatsapp: string | null,
   avatarUrl?: string | null,
+  waLid?: string | null,
 ): Promise<void> {
   if (!waPhone || !waChatid) return;
 
   // So salvar se tem nome real (nao vazio, nao eh apenas numeros)
   const hasRealName = nomeWhatsapp && nomeWhatsapp.trim() && !/^\d+$/.test(nomeWhatsapp.trim());
 
+  // Normalizar LID: remover sufixo @lid se presente
+  const lidClean = waLid ? waLid.replace('@lid', '') : null;
+
   await pool.query(
-    `INSERT INTO atd.participantes_grupo (wa_phone, wa_chatid, nome_whatsapp, avatar_url, atualizado_at)
-     VALUES ($1, $2, $3, $4, NOW())
+    `INSERT INTO atd.participantes_grupo (wa_phone, wa_chatid, nome_whatsapp, avatar_url, wa_lid, atualizado_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (wa_phone, wa_chatid) DO UPDATE SET
        nome_whatsapp = CASE
          WHEN $3 IS NOT NULL AND $3 != '' THEN $3
@@ -27,8 +32,12 @@ export async function upsertParticipant(
          WHEN $4 IS NOT NULL AND $4 != '' THEN $4
          ELSE atd.participantes_grupo.avatar_url
        END,
+       wa_lid = CASE
+         WHEN $5 IS NOT NULL AND $5 != '' THEN $5
+         ELSE atd.participantes_grupo.wa_lid
+       END,
        atualizado_at = NOW()`,
-    [waPhone, waChatid, hasRealName ? nomeWhatsapp!.trim() : null, avatarUrl || null],
+    [waPhone, waChatid, hasRealName ? nomeWhatsapp!.trim() : null, avatarUrl || null, lidClean],
   );
 }
 

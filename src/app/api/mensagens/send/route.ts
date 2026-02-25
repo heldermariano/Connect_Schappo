@@ -153,11 +153,16 @@ export async function POST(request: NextRequest) {
     const nomeOperador = session.user.nome;
     const textToSend = `*${nomeOperador}:*\n${conteudo.trim()}`;
 
-    // Converter telefones em JIDs do WhatsApp para mencoes
+    // Converter identificadores em JIDs do WhatsApp para mencoes
+    // Podem ser telefones (5561...) ou LIDs (125786891759786)
     const mentionedJid = mencoesArray.length > 0
-      ? mencoesArray.map((phone) => {
-          const clean = phone.replace(/\D/g, '');
-          return clean.includes('@') ? clean : `${clean}@s.whatsapp.net`;
+      ? mencoesArray.map((id) => {
+          if (id.includes('@')) return id; // Ja eh JID completo
+          const clean = id.replace(/\D/g, '');
+          // LIDs sao tipicamente >13 digitos e nao comecam com 55 (DDI Brasil)
+          // Telefones brasileiros tem 12-13 digitos e comecam com 55
+          const isLikelyLid = clean.length >= 10 && !clean.startsWith('55');
+          return isLikelyLid ? `${clean}@lid` : `${clean}@s.whatsapp.net`;
         })
       : undefined;
 

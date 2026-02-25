@@ -15,7 +15,8 @@ export async function GET(
     const result = await pool.query(
       `SELECT wa_phone AS phone,
               COALESCE(nome_salvo, nome_whatsapp, wa_phone) AS nome,
-              avatar_url
+              avatar_url,
+              wa_lid AS lid
        FROM atd.participantes_grupo
        WHERE wa_chatid = $1
        ORDER BY COALESCE(nome_salvo, nome_whatsapp, wa_phone) ASC`,
