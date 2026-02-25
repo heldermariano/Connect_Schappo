@@ -2,116 +2,200 @@ import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
 
 const UAZAPI_URL = process.env.UAZAPI_URL;
-const UAZAPI_TOKEN = process.env.UAZAPI_TOKEN;
 
-// Owners UAZAPI para sincronizar
-const UAZAPI_OWNERS = [
-  process.env.OWNER_EEG || '556192894339',
-  process.env.OWNER_RECEPCAO || '556183008973',
-];
+// Mapeamento owner → token da instância UAZAPI
+const OWNER_TOKENS: Record<string, string> = {};
+const instanceTokens = (process.env.UAZAPI_INSTANCE_TOKENS || '').split(',').map(t => t.trim()).filter(Boolean);
+const defaultToken = process.env.UAZAPI_TOKEN || '';
 
-interface UazapiChat {
-  wa_chatid?: string;
-  phone?: string;
+// Mapear tokens por owner (EEG=token1, Recepcao=token2)
+const OWNER_EEG = process.env.OWNER_EEG || '556192894339';
+const OWNER_RECEPCAO = process.env.OWNER_RECEPCAO || '556183008973';
+if (instanceTokens.length >= 2) {
+  OWNER_TOKENS[OWNER_EEG] = instanceTokens[0];
+  OWNER_TOKENS[OWNER_RECEPCAO] = instanceTokens[1];
+} else {
+  OWNER_TOKENS[OWNER_EEG] = defaultToken;
+  OWNER_TOKENS[OWNER_RECEPCAO] = defaultToken;
+}
+
+// Mapeamento categoria → owner
+const CATEGORIA_OWNER: Record<string, string> = {
+  eeg: OWNER_EEG,
+  recepcao: OWNER_RECEPCAO,
+};
+
+interface ChatDetails {
   name?: string;
   wa_name?: string;
   wa_contactName?: string;
+  image?: string;
   imagePreview?: string;
-  wa_isGroup?: boolean;
+  phone?: string;
+  wa_chatid?: string;
 }
 
 /**
- * POST /api/contatos/sync — Sincroniza fotos de contato via UAZAPI /chat/find.
- * Para cada owner UAZAPI, busca chats com paginacao e atualiza avatar_url
- * em atd.conversas e atd.participantes_grupo.
+ * Busca detalhes de um contato via UAZAPI /chat/details
  */
-export async function POST() {
-  if (!UAZAPI_URL || !UAZAPI_TOKEN) {
-    return NextResponse.json(
-      { error: 'UAZAPI nao configurada' },
-      { status: 500 },
-    );
+async function fetchChatDetails(phone: string, token: string): Promise<ChatDetails | null> {
+  try {
+    const res = await fetch(`${UAZAPI_URL}/chat/details`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        token,
+      },
+      body: JSON.stringify({ number: phone, preview: true }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * POST /api/contatos/sync — Sincroniza nome e foto de contatos via UAZAPI /chat/details.
+ * Para cada conversa individual, busca detalhes do contato e atualiza nome_contato e avatar_url.
+ *
+ * Query params:
+ *   force=true — atualiza mesmo quem já tem nome/foto
+ *   categoria=eeg|recepcao — sincronizar apenas um canal
+ */
+export async function POST(request: Request) {
+  if (!UAZAPI_URL) {
+    return NextResponse.json({ error: 'UAZAPI nao configurada' }, { status: 500 });
   }
 
-  let totalFetched = 0;
+  const url = new URL(request.url);
+  const force = url.searchParams.get('force') === 'true';
+  const categoriaFilter = url.searchParams.get('categoria');
+
+  let totalProcessed = 0;
   let totalUpdated = 0;
+  let totalErrors = 0;
 
   try {
-    for (const owner of UAZAPI_OWNERS) {
-      let page = 1;
-      let hasMore = true;
+    // Buscar conversas individuais que precisam de atualização
+    const conditions = ['c.is_archived = FALSE'];
+    const values: string[] = [];
+    let paramIdx = 1;
 
-      while (hasMore) {
-        const url = `${UAZAPI_URL}/chat/find?token=${UAZAPI_TOKEN}&owner=${owner}&page=${page}&limit=100`;
-
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: { token: UAZAPI_TOKEN },
-        });
-
-        if (!res.ok) {
-          console.error(`[sync] Erro ao buscar chats owner=${owner} page=${page}: ${res.status}`);
-          break;
-        }
-
-        const data = await res.json();
-        const chats: UazapiChat[] = Array.isArray(data) ? data : (data.chats || data.data || []);
-
-        if (chats.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        totalFetched += chats.length;
-
-        for (const chat of chats) {
-          const avatarUrl = chat.imagePreview;
-          if (!avatarUrl || !avatarUrl.startsWith('http')) continue;
-
-          const waChatid = chat.wa_chatid;
-          const phone = chat.phone;
-          const nome = chat.name || chat.wa_name || chat.wa_contactName || null;
-
-          // Atualizar avatar em conversas
-          if (waChatid) {
-            const convResult = await pool.query(
-              `UPDATE atd.conversas SET avatar_url = $1, updated_at = NOW()
-               WHERE wa_chatid = $2 AND (avatar_url IS NULL OR avatar_url = '')
-               RETURNING id`,
-              [avatarUrl, waChatid],
-            );
-            totalUpdated += convResult.rowCount || 0;
-          }
-
-          // Atualizar avatar em participantes_grupo (por telefone)
-          if (phone && phone.length > 5) {
-            const phoneWa = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
-            const partResult = await pool.query(
-              `UPDATE atd.participantes_grupo SET
-                avatar_url = $1,
-                nome_whatsapp = CASE
-                  WHEN $3 IS NOT NULL AND $3 != '' AND (nome_whatsapp IS NULL OR nome_whatsapp = '')
-                  THEN $3 ELSE nome_whatsapp
-                END,
-                atualizado_at = NOW()
-               WHERE wa_phone = $2 AND (avatar_url IS NULL OR avatar_url = '')
-               RETURNING id`,
-              [avatarUrl, phoneWa, nome],
-            );
-            totalUpdated += partResult.rowCount || 0;
-          }
-        }
-
-        // Se retornou menos que o limit, nao tem mais paginas
-        if (chats.length < 100) {
-          hasMore = false;
-        } else {
-          page++;
-        }
-      }
+    if (categoriaFilter) {
+      conditions.push(`c.categoria = $${paramIdx++}`);
+      values.push(categoriaFilter);
+    } else {
+      conditions.push(`c.categoria IN ('eeg', 'recepcao')`);
     }
 
-    return NextResponse.json({ fetched: totalFetched, updated: totalUpdated });
+    if (!force) {
+      conditions.push(`(c.nome_contato IS NULL OR c.nome_contato = '' OR c.nome_grupo IS NULL OR c.nome_grupo = '' OR c.avatar_url IS NULL OR c.avatar_url = '')`);
+    }
+
+    const result = await pool.query(
+      `SELECT c.id, c.wa_chatid, c.telefone, c.categoria, c.tipo, c.nome_contato, c.nome_grupo, c.avatar_url
+       FROM atd.conversas c
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY c.ultima_msg_at DESC NULLS LAST`,
+      values,
+    );
+
+    const conversas = result.rows;
+    console.log(`[sync] Iniciando sync de ${conversas.length} conversas (force=${force})`);
+
+    for (const conv of conversas) {
+      const isGroup = conv.tipo === 'grupo';
+
+      // Para grupos: usar wa_chatid (ex: 556191495059-1566600219@g.us)
+      // Para individuais: usar telefone limpo
+      let lookupNumber: string;
+      if (isGroup) {
+        lookupNumber = (conv.wa_chatid || '').replace('@g.us', '');
+        if (!lookupNumber) continue;
+      } else {
+        lookupNumber = (conv.telefone || conv.wa_chatid || '').replace('@s.whatsapp.net', '').replace(/\D/g, '');
+        if (!lookupNumber || lookupNumber.length < 8) continue;
+      }
+
+      const owner = CATEGORIA_OWNER[conv.categoria];
+      const token = OWNER_TOKENS[owner];
+      if (!token) continue;
+
+      const details = await fetchChatDetails(lookupNumber, token);
+      totalProcessed++;
+
+      if (!details) {
+        totalErrors++;
+        continue;
+      }
+
+      const newName = details.name || details.wa_name || details.wa_contactName || null;
+      const newAvatar = details.imagePreview || details.image || null;
+      const newPhone = details.phone || null;
+
+      const updates: string[] = [];
+      const updateValues: (string | null)[] = [];
+      let idx = 1;
+
+      if (isGroup) {
+        // Grupos: atualizar nome_grupo
+        if (newName && (force || !conv.nome_grupo)) {
+          updates.push(`nome_grupo = $${idx++}`);
+          updateValues.push(newName);
+        }
+      } else {
+        // Individuais: atualizar nome_contato
+        if (newName && (force || !conv.nome_contato)) {
+          updates.push(`nome_contato = $${idx++}`);
+          updateValues.push(newName);
+        }
+        // Atualizar telefone formatado se disponível
+        if (newPhone && newPhone.length > 5) {
+          updates.push(`telefone = $${idx++}`);
+          updateValues.push(newPhone);
+        }
+      }
+
+      // Avatar para ambos
+      if (newAvatar && newAvatar.startsWith('http') && (force || !conv.avatar_url)) {
+        updates.push(`avatar_url = $${idx++}`);
+        updateValues.push(newAvatar);
+      }
+
+      if (updates.length === 0) continue;
+
+      updates.push('updated_at = NOW()');
+      updateValues.push(String(conv.id));
+
+      await pool.query(
+        `UPDATE atd.conversas SET ${updates.join(', ')} WHERE id = $${idx}`,
+        updateValues,
+      );
+      totalUpdated++;
+
+      // Atualizar tabela contatos se existir registro com mesmo telefone (individuais)
+      if (!isGroup && newName) {
+        const phoneClean = (conv.telefone || '').replace(/\D/g, '');
+        if (phoneClean) {
+          await pool.query(
+            `UPDATE atd.contatos SET nome = $1 WHERE telefone = $2 AND (nome IS NULL OR nome = '')`,
+            [newName, phoneClean],
+          );
+        }
+      }
+
+      // Rate limit: 100ms entre requisições
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    console.log(`[sync] Concluido: ${totalProcessed} processados, ${totalUpdated} atualizados, ${totalErrors} erros`);
+
+    return NextResponse.json({
+      processed: totalProcessed,
+      updated: totalUpdated,
+      errors: totalErrors,
+    });
   } catch (err) {
     console.error('[api/contatos/sync] Erro:', err);
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
