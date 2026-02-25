@@ -52,8 +52,9 @@ export default function ConversasPage() {
   // Derivar filtros do seletor
   const filterParams = useMemo(() => {
     if (canal) {
-      // Canal selecionado: categoria fixa, tipo pelo filtro
-      // Sem "Todos" — filtro sempre tem tipo definido
+      if (filtro === 'pendentes') {
+        return { categoria: canal, pendentes: 'true' };
+      }
       const tipo = filtro === 'grupo' ? 'grupo' : 'individual';
       return { categoria: canal, tipo };
     }

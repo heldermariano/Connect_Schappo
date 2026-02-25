@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   const idParam = params.get('id'); // Buscar conversa por ID direto
   const categoria = params.get('categoria'); // 'eeg', 'recepcao', 'geral'
   const tipo = params.get('tipo'); // 'individual', 'grupo'
+  const pendentes = params.get('pendentes'); // 'true' — filtrar não respondidas
   const busca = params.get('busca'); // Busca por nome/telefone
   const limit = Math.min(parseInt(params.get('limit') || '50'), 100);
   const offset = parseInt(params.get('offset') || '0');
@@ -75,6 +76,12 @@ export async function GET(request: NextRequest) {
     values.push(tipo);
   }
 
+  // Filtro de pendentes: não lidas + não respondidas pelo atendente
+  if (pendentes === 'true') {
+    conditions.push('c.nao_lida > 0');
+    conditions.push('c.ultima_msg_from_me = FALSE');
+  }
+
   if (busca) {
     conditions.push(
       `(c.nome_contato ILIKE $${paramIndex} OR c.nome_grupo ILIKE $${paramIndex} OR c.telefone ILIKE $${paramIndex} OR ct.nome ILIKE $${paramIndex})`,
@@ -84,6 +91,10 @@ export async function GET(request: NextRequest) {
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  // Pendentes: ordenar por mais tempo de espera (mais antiga primeiro)
+  const orderClause = pendentes === 'true'
+    ? 'ORDER BY c.ultima_msg_at ASC NULLS LAST'
+    : 'ORDER BY c.ultima_msg_at DESC NULLS LAST';
 
   try {
     const countResult = await pool.query(
@@ -102,7 +113,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN atd.atendentes a ON a.id = c.atendente_id
        LEFT JOIN atd.contatos ct ON ct.telefone = c.telefone AND ct.telefone IS NOT NULL AND ct.telefone != ''
        ${whereClause}
-       ORDER BY c.ultima_msg_at DESC NULLS LAST
+       ${orderClause}
        LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
       [...values, limit, offset],
     );

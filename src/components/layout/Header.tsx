@@ -8,7 +8,7 @@ import SearchBar from '@/components/filters/SearchBar';
 import StatusBadge, { StatusPresenca } from '@/components/ui/StatusBadge';
 import StatusSelector from '@/components/ui/StatusSelector';
 import Avatar from '@/components/ui/Avatar';
-import { Contato } from '@/lib/types';
+import { Contato, WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
 import { useAppContext } from '@/contexts/AppContext';
 
 interface HeaderProps {
@@ -44,8 +44,15 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
   const [buscaContatos, setBuscaContatos] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [criandoConversa, setCriandoConversa] = useState<string | null>(null);
+  // Seletor de canal ao criar conversa nova
+  const [channelSelectContato, setChannelSelectContato] = useState<Contato | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Canais visíveis para este operador
+  const userGrupo = (session?.user as { grupo?: string })?.grupo || 'todos';
+  const allowedChannelIds = GRUPO_CHANNELS[userGrupo] || GRUPO_CHANNELS.todos;
+  const visibleChannels = WHATSAPP_CHANNELS.filter((ch) => allowedChannelIds.includes(ch.id));
 
   // Buscar contatos quando busca muda
   useEffect(() => {
@@ -131,28 +138,35 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
     signOut({ callbackUrl: '/login' });
   }, []);
 
-  const handleContatoClick = useCallback(async (contato: Contato) => {
+  const handleContatoClick = useCallback((contato: Contato) => {
     if (contato.conversa_id) {
       setShowDropdown(false);
       onBuscaChange('');
-      router.push(`/conversas?id=${contato.conversa_id}`);
+      // Redirecionar para o canal correto
+      const canal = contato.categoria || '';
+      router.push(`/conversas?canal=${canal}&id=${contato.conversa_id}`);
       return;
     }
 
-    // Criar conversa nova
+    // Sem conversa: mostrar seletor de canal
     if (!contato.telefone) return;
+    setChannelSelectContato(contato);
+  }, [router, onBuscaChange]);
+
+  const handleChannelSelect = useCallback(async (contato: Contato, categoria: string) => {
+    setChannelSelectContato(null);
     setCriandoConversa(contato.telefone);
     try {
       const res = await fetch('/api/conversas/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telefone: contato.telefone, nome: contato.nome }),
+        body: JSON.stringify({ telefone: contato.telefone, nome: contato.nome, categoria }),
       });
       if (res.ok) {
         const data = await res.json();
         setShowDropdown(false);
         onBuscaChange('');
-        router.push(`/conversas?id=${data.conversa.id}`);
+        router.push(`/conversas?canal=${categoria}&id=${data.conversa.id}`);
       }
     } catch (err) {
       console.error('Erro ao criar conversa:', err);
@@ -201,18 +215,26 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
                       </div>
                       {contato.conversa_id ? (
                         <span className="text-xs text-schappo-600 font-medium shrink-0">Abrir</span>
+                      ) : criandoConversa === contato.telefone ? (
+                        <span className="text-xs text-gray-400 font-medium shrink-0">Criando...</span>
+                      ) : channelSelectContato?.telefone === contato.telefone ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {visibleChannels.map((ch) => (
+                            <button
+                              key={ch.id}
+                              onClick={(e) => { e.stopPropagation(); handleChannelSelect(contato, ch.id); }}
+                              className="px-2 py-1 text-[10px] font-semibold rounded bg-green-50 text-green-700 hover:bg-green-100 transition-colors border border-green-200"
+                            >
+                              {ch.label}
+                            </button>
+                          ))}
+                        </div>
                       ) : (
                         <span className="text-xs text-green-600 font-medium shrink-0 flex items-center gap-1">
-                          {criandoConversa === contato.telefone ? (
-                            'Criando...'
-                          ) : (
-                            <>
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                              </svg>
-                              Conversar
-                            </>
-                          )}
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Conversar
                         </span>
                       )}
                     </button>

@@ -6,6 +6,7 @@ import { Conversa } from '@/lib/types';
 interface UseConversasParams {
   categoria?: string;
   tipo?: string;
+  pendentes?: string;
   busca?: string;
 }
 
@@ -31,6 +32,7 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
       const query = new URLSearchParams();
       if (params.categoria) query.set('categoria', params.categoria);
       if (params.tipo) query.set('tipo', params.tipo);
+      if (params.pendentes) query.set('pendentes', params.pendentes);
       if (params.busca) query.set('busca', params.busca);
 
       const res = await fetch(`/api/conversas?${query.toString()}`);
@@ -45,7 +47,7 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
     } finally {
       setLoading(false);
     }
-  }, [params.categoria, params.tipo, params.busca]);
+  }, [params.categoria, params.tipo, params.pendentes, params.busca]);
 
   useEffect(() => {
     fetchConversas();

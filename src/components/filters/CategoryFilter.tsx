@@ -19,10 +19,12 @@ const ALL_FILTERS = [
 const CHANNEL_FILTERS_UAZAPI = [
   { value: 'individual', label: 'Individual' },
   { value: 'grupo', label: 'Grupo' },
+  { value: 'pendentes', label: 'Pendentes' },
 ];
 
 const CHANNEL_FILTERS_360 = [
   { value: 'individual', label: 'Individual' },
+  { value: 'pendentes', label: 'Pendentes' },
 ];
 
 // Filtros permitidos por grupo de atendimento (modo sem canal)

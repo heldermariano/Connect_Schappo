@@ -7,6 +7,7 @@ import pool from '@/lib/db';
 const GRUPO_CONFIG: Record<string, { categoria: string; provider: string; owner: string }> = {
   recepcao: { categoria: 'recepcao', provider: 'uazapi', owner: '556183008973' },
   eeg: { categoria: 'eeg', provider: 'uazapi', owner: '556192894339' },
+  geral: { categoria: 'geral', provider: '360dialog', owner: '556133455701' },
   todos: { categoria: 'geral', provider: '360dialog', owner: '556133455701' },
 };
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { telefone, nome } = await request.json();
+    const { telefone, nome, categoria: categoriaParam } = await request.json();
 
     if (!telefone || typeof telefone !== 'string') {
       return NextResponse.json({ error: 'telefone e obrigatorio' }, { status: 400 });
@@ -32,12 +33,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'telefone invalido' }, { status: 400 });
     }
 
-    // Verificar se ja existe conversa para este telefone
+    // Determinar configuração do canal
+    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
+    const config = categoriaParam && GRUPO_CONFIG[categoriaParam]
+      ? GRUPO_CONFIG[categoriaParam]
+      : (GRUPO_CONFIG[grupo] || GRUPO_CONFIG.todos);
+
+    // Verificar se ja existe conversa para este telefone + categoria
     const existente = await pool.query(
       `SELECT id, wa_chatid, tipo, categoria, provider, telefone, nome_contato, nome_grupo, avatar_url,
               ultima_mensagem, ultima_msg_at, nao_lida, atendente_id
-       FROM atd.conversas WHERE telefone = $1 AND tipo = 'individual' LIMIT 1`,
-      [tel],
+       FROM atd.conversas WHERE telefone = $1 AND tipo = 'individual' AND categoria = $2 LIMIT 1`,
+      [tel, config.categoria],
     );
 
     if (existente.rows.length > 0) {
@@ -45,8 +52,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar nova conversa usando upsert_conversa
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-    const config = GRUPO_CONFIG[grupo] || GRUPO_CONFIG.todos;
     const waChatId = `${tel}@s.whatsapp.net`;
 
     const result = await pool.query(
