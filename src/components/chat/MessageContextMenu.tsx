@@ -129,7 +129,7 @@ export default function MessageContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 bg-white dark:bg-black rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
       style={{ left: x, top: y }}
     >
       {visibleOptions.map((option) => (

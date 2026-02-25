@@ -99,7 +99,7 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: Exam
   return (
     <div
       ref={panelRef}
-      className="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+      className="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
     >
       {/* Header */}
       <div className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-t-lg">

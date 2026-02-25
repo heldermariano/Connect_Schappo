@@ -44,7 +44,7 @@ export default function AddContatoModal({ open, onClose, onAdd }: AddContatoModa
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+      <div className="relative bg-white dark:bg-black rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Adicionar Contato</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">

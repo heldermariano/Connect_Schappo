@@ -60,10 +60,10 @@ export default function SipSettings({
   return (
     <>
       {/* Botao toggle no softphone */}
-      <div className="border-t border-gray-200">
+      <div className="border-t border-gray-200 dark:border-gray-800">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
         >
           <div className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

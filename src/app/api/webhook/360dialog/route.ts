@@ -89,7 +89,7 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
     // 4. Broadcast SSE
     sseManager.broadcast({
       type: 'nova_mensagem',
-      data: { conversa_id: conversaId, mensagem: fullMsg.rows[0] },
+      data: { conversa_id: conversaId, mensagem: fullMsg.rows[0], categoria: parsed.categoria },
     });
 
     const convData = await pool.query(

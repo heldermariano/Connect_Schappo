@@ -100,7 +100,7 @@ export default function AtribuirDropdown({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1">
+        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-black rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1">
           {loading ? (
             <div className="px-3 py-2 text-xs text-gray-400">Carregando...</div>
           ) : (

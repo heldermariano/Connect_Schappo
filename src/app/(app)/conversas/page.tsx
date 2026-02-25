@@ -153,14 +153,17 @@ export default function ConversasPage() {
           // Pular notificacao se a conversa esta selecionada E pagina tem foco
           const isActiveAndFocused = selectedConversa && d.conversa_id === selectedConversa.id && document.hasFocus();
           if (!isActiveAndFocused) {
-            playNotificationBeep();
-            const senderName = d.mensagem.sender_name || 'Paciente';
-            const groupName = groupNamesRef.current.get(d.conversa_id);
-            const notifTitle = groupName ? `${senderName} em ${groupName}` : senderName;
-            const notifBody = d.mensagem.conteudo || 'Nova mensagem';
-            showDesktopNotification(notifTitle, notifBody);
+            // So notificar se operador estiver disponivel
+            if (operatorStatus === 'disponivel') {
+              playNotificationBeep();
+              const senderName = d.mensagem.sender_name || 'Paciente';
+              const groupName = groupNamesRef.current.get(d.conversa_id);
+              const notifTitle = groupName ? `${senderName} em ${groupName}` : senderName;
+              const notifBody = d.mensagem.conteudo || 'Nova mensagem';
+              showDesktopNotification(notifTitle, notifBody);
+            }
 
-            // Flash visual na conversa
+            // Flash visual na conversa (sempre, para nao perder indicacao)
             setFlashingConversas((prev) => new Set(prev).add(d.conversa_id));
             setTimeout(() => {
               setFlashingConversas((prev) => {
@@ -176,10 +179,12 @@ export default function ConversasPage() {
         const mencoes = d.mensagem.mencoes || [];
         if (isMentioned(mencoes)) {
           setMencionadoEm((prev) => new Set(prev).add(d.conversa_id));
-          playNotificationBeep();
-          const senderName = d.mensagem.sender_name || 'Alguem';
-          const groupName = groupNamesRef.current.get(d.conversa_id);
-          showMentionToast(senderName, groupName);
+          if (operatorStatus === 'disponivel') {
+            playNotificationBeep();
+            const senderName = d.mensagem.sender_name || 'Alguem';
+            const groupName = groupNamesRef.current.get(d.conversa_id);
+            showMentionToast(senderName, groupName);
+          }
         }
       }
       if (event === 'conversa_atualizada') {
@@ -214,7 +219,7 @@ export default function ConversasPage() {
         refresh();
       }
     },
-    [selectedConversa, addMensagem, updateConversa, refresh, isMentioned],
+    [selectedConversa, addMensagem, updateConversa, refresh, isMentioned, operatorStatus],
   );
 
   useSSE(handleSSE);
@@ -387,7 +392,7 @@ export default function ConversasPage() {
     return (
       <>
         <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
-        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black">
           <div className="text-center max-w-sm">
             <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -408,7 +413,7 @@ export default function ConversasPage() {
       <CallAlert chamadas={activeCalls} />
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}
-        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 bg-white dark:bg-gray-800">
+        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0 bg-white dark:bg-black">
           <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} canal={canal} />
           <ConversaList
             conversas={conversas}

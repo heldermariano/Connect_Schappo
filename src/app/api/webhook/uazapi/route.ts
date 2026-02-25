@@ -129,7 +129,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
   // 4. Broadcast via SSE
   sseManager.broadcast({
     type: 'nova_mensagem',
-    data: { conversa_id: conversaId, mensagem: fullMsg.rows[0] },
+    data: { conversa_id: conversaId, mensagem: fullMsg.rows[0], categoria: parsed.categoria },
   });
 
   // 5. Broadcast conversa atualizada

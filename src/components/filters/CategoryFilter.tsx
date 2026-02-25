@@ -42,7 +42,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
     const filters = is360 ? CHANNEL_FILTERS_360 : CHANNEL_FILTERS_UAZAPI;
 
     return (
-      <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
         {filters.map((f) => (
           <button
             key={f.value}
@@ -68,7 +68,7 @@ export default function CategoryFilter({ selected, onChange, grupo = 'todos', ca
   const filters = ALL_FILTERS.filter((f) => allowedValues.includes(f.value));
 
   return (
-    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <div className="flex justify-center gap-1 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
       {filters.map((f) => (
         <button
           key={f.value}

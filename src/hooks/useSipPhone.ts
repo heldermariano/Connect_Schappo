@@ -12,7 +12,7 @@ import {
 } from 'sip.js';
 import type { SipSettings, SipRegistrationState, SipCallState } from '@/lib/types';
 
-interface UseSipPhoneReturn {
+export interface UseSipPhoneReturn {
   // Registration
   registrationState: SipRegistrationState;
   register: () => Promise<void>;

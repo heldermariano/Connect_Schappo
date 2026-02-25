@@ -19,7 +19,7 @@ export default function ChatInternoMessage({ mensagem, isOwn }: ChatInternoMessa
         className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${
           isOwn
             ? 'bg-schappo-500 text-white rounded-br-none'
-            : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none'
+            : 'bg-gray-100 dark:bg-black text-gray-900 dark:text-gray-100 rounded-bl-none'
         }`}
       >
         {!isOwn && mensagem.nome_remetente && (

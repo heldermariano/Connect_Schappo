@@ -5,6 +5,7 @@ import type { SipRegistrationState } from '@/lib/types';
 interface SipStatusProps {
   state: SipRegistrationState;
   error: string | null;
+  inline?: boolean;
 }
 
 const STATUS_CONFIG: Record<SipRegistrationState, { color: string; bg: string; label: string }> = {
@@ -14,8 +15,17 @@ const STATUS_CONFIG: Record<SipRegistrationState, { color: string; bg: string; l
   unregistered: { color: 'bg-gray-400', bg: 'bg-gray-50', label: 'Offline' },
 };
 
-export default function SipStatus({ state, error }: SipStatusProps) {
+export default function SipStatus({ state, error, inline }: SipStatusProps) {
   const config = STATUS_CONFIG[state];
+
+  if (inline) {
+    return (
+      <span className="flex items-center gap-1 ml-1">
+        <span className={`w-2 h-2 rounded-full ${config.color} ${state === 'registering' ? 'animate-pulse' : ''}`} />
+        <span className="text-[10px] font-medium text-white/60">{config.label}</span>
+      </span>
+    );
+  }
 
   return (
     <div className={`px-3 py-2 ${config.bg} border-b border-gray-200`}>

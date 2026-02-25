@@ -20,15 +20,36 @@ function formatTime(dateStr: string): string {
 }
 
 function StatusIcon({ status }: { status: string }) {
+  // Check unico (enviada)
+  const singleCheck = (
+    <svg className="w-4 h-3.5" viewBox="0 0 16 11" fill="none">
+      <path d="M11.071 0.929L5 7l-2.071-2.071L1.515 6.343 5 9.828l7.485-7.485L11.071 0.929z" fill="currentColor"/>
+    </svg>
+  );
+  // Check duplo (entregue/lida)
+  const doubleCheck = (
+    <svg className="w-5 h-3.5" viewBox="0 0 20 11" fill="none">
+      <path d="M15.071 0.929L9 7l-0.071-0.071L7.515 8.343 9 9.828l7.485-7.485L15.071 0.929z" fill="currentColor"/>
+      <path d="M11.071 0.929L5 7l-2.071-2.071L1.515 6.343 5 9.828l7.485-7.485L11.071 0.929z" fill="currentColor"/>
+    </svg>
+  );
+
   switch (status) {
     case 'sent':
-      return <span className="text-gray-400" title="Enviada">&#10003;</span>;
+      return <span className="text-gray-400 inline-flex" title="Enviada">{singleCheck}</span>;
     case 'delivered':
-      return <span className="text-gray-400" title="Entregue">&#10003;&#10003;</span>;
+      return <span className="text-gray-400 inline-flex" title="Entregue">{doubleCheck}</span>;
     case 'read':
-      return <span className="text-schappo-500" title="Lida">&#10003;&#10003;</span>;
+      return <span className="text-blue-500 inline-flex" title="Lida">{doubleCheck}</span>;
     case 'failed':
-      return <span className="text-red-500" title="Falha">!</span>;
+      return (
+        <span className="text-red-500 inline-flex" title="Falha">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M8 4v5M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </span>
+      );
     default:
       return null;
   }
@@ -192,7 +213,7 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
       <div className="relative max-w-[70%] min-w-[80px]">
       <div
         className={`rounded-lg px-3 py-2 ${
-          isMe ? 'bg-green-100 dark:bg-green-900/40 text-gray-900 dark:text-gray-100' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm'
+          isMe ? 'bg-green-100 dark:bg-green-900/40 text-gray-900 dark:text-gray-100' : 'bg-white dark:bg-black text-gray-900 dark:text-gray-100 shadow-sm'
         }`}
       >
         {/* Nome do remetente em grupos (com cor unica por pessoa) */}

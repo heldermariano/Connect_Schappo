@@ -59,22 +59,28 @@ export function showMentionToast(senderName: string, groupName?: string): void {
   }, 4000);
 }
 
+// Labels dos canais
+const CANAL_LABELS: Record<string, string> = {
+  eeg: 'EEG',
+  recepcao: 'Recepção',
+  geral: 'Geral',
+};
+
 /**
  * Mostra toast de notificacao no canto superior direito.
- * Avatar placeholder + nome + preview da mensagem.
+ * Fundo preto, nome do remetente, preview da mensagem e badge do canal.
  * Auto-desaparece em 5s. Suporta multiplas toasts empilhadas.
  */
 export function showToastNotification(
   title: string,
   body: string,
   onClick?: () => void,
+  canal?: string,
 ): void {
   const container = document.getElementById('toast-container') || createToastContainer();
 
   const toast = document.createElement('div');
-  toast.className =
-    'mb-2 px-4 py-3 bg-gray-900 text-white rounded-xl shadow-2xl text-sm flex items-center gap-3 max-w-sm border border-gray-700/50 cursor-pointer';
-  toast.style.cssText = 'animation: toast-slide-in 0.3s ease forwards; opacity: 0; transform: translateX(100%);';
+  toast.style.cssText = 'animation: toast-slide-in 0.3s ease forwards; opacity: 0; transform: translateX(100%); background:#000; color:#fff; border-radius:12px; padding:12px 16px; margin-bottom:8px; max-width:360px; cursor:pointer; box-shadow:0 8px 30px rgba(0,0,0,0.4); display:flex; align-items:flex-start; gap:10px;';
 
   // Iniciais do remetente
   const initials = title
@@ -84,11 +90,16 @@ export function showToastNotification(
     .slice(0, 2)
     .toUpperCase();
 
+  const canalLabel = canal ? (CANAL_LABELS[canal] || canal.toUpperCase()) : '';
+  const canalBadge = canalLabel
+    ? `<span style="display:inline-block;font-size:10px;font-weight:600;background:#F58220;color:#fff;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">${escapeHtml(canalLabel)}</span>`
+    : '';
+
   toast.innerHTML = `
-    <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${escapeHtml(initials)}</div>
+    <div style="width:36px;height:36px;border-radius:50%;background:#F58220;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;color:#fff">${escapeHtml(initials)}</div>
     <div style="flex:1;min-width:0">
-      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}</div>
-      <div style="font-size:12px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${escapeHtml(body)}</div>
+      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}${canalBadge}</div>
+      <div style="font-size:12px;color:#a3a3a3;overflow:hidden;text-overflow:ellipsis;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escapeHtml(body)}</div>
     </div>
   `;
 
@@ -114,7 +125,7 @@ export function showToastNotification(
 function createToastContainer(): HTMLElement {
   const container = document.createElement('div');
   container.id = 'toast-container';
-  container.className = 'fixed top-4 right-4 z-[9999]';
+  container.className = 'fixed top-16 right-4 z-[9999]';
   document.body.appendChild(container);
   return container;
 }

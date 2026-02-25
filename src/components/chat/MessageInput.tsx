@@ -8,6 +8,8 @@ import QuickReplyAutocomplete from './QuickReplyAutocomplete';
 import EmojiPickerButton from './EmojiPickerButton';
 import AudioRecorder from './AudioRecorder';
 import QuotedMessage from './QuotedMessage';
+import LocationModal from './LocationModal';
+import SendContactModal from './SendContactModal';
 import { Mensagem, RespostaPronta } from '@/lib/types';
 
 interface MessageInputProps {
@@ -33,6 +35,9 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   const [mentionedLids, setMentionedLids] = useState<string[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [sendingSpecial, setSendingSpecial] = useState(false);
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [quickReplies, setQuickReplies] = useState<RespostaPronta[]>([]);
   const quickRepliesLoadedRef = useRef(false);
@@ -337,12 +342,56 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     }
   }, [conversaId]);
 
+  const handleSendLocation = useCallback(async (data: { latitude: number; longitude: number; name?: string; address?: string }) => {
+    if (!conversaId) return;
+    setSendingSpecial(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/mensagens/send-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conversaId, ...data }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: 'Erro ao enviar localizacao' }));
+        throw new Error(d.error || 'Erro ao enviar localizacao');
+      }
+      setLocationModalOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar localizacao');
+    } finally {
+      setSendingSpecial(false);
+    }
+  }, [conversaId]);
+
+  const handleSendContact = useCallback(async (data: { contact_name: string; contact_phone: string }) => {
+    if (!conversaId) return;
+    setSendingSpecial(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/mensagens/send-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conversaId, ...data }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: 'Erro ao enviar contato' }));
+        throw new Error(d.error || 'Erro ao enviar contato');
+      }
+      setContactModalOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar contato');
+    } finally {
+      setSendingSpecial(false);
+    }
+  }, [conversaId]);
+
   const canSend = attachments.length > 0 || text.trim().length > 0;
 
   // Se gravando, mostrar AudioRecorder em vez do input normal
   if (isRecording) {
     return (
-      <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+      <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-black shrink-0">
         <AudioRecorder
           onRecordingComplete={handleSendAudio}
           onCancel={() => setIsRecording(false)}
@@ -353,7 +402,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   }
 
   return (
-    <div className="relative border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+    <div className="relative border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-black shrink-0">
       {error && (
         <div className="mx-4 mt-2 px-3 py-1.5 bg-red-50 text-red-600 text-xs rounded-md flex items-center gap-2">
           <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -457,6 +506,37 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
           </button>
         )}
 
+        {/* Botao localizacao */}
+        <button
+          onClick={() => setLocationModalOpen(true)}
+          disabled={disabled || sending || !conversaId}
+          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
+                     text-gray-400 hover:text-green-600 hover:bg-gray-100
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     transition-colors"
+          title="Enviar localizacao"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+
+        {/* Botao enviar contato */}
+        <button
+          onClick={() => setContactModalOpen(true)}
+          disabled={disabled || sending || !conversaId}
+          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
+                     text-gray-400 hover:text-blue-600 hover:bg-gray-100
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     transition-colors"
+          title="Enviar contato"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </button>
+
         <textarea
           ref={textareaRef}
           value={text}
@@ -499,6 +579,22 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       <div className="text-[10px] text-gray-300 dark:text-gray-600 px-4 pb-1 text-right">
         Enter para enviar &middot; Shift+Enter para quebra de linha
       </div>
+
+      {/* Modal de localizacao */}
+      <LocationModal
+        open={locationModalOpen}
+        onClose={() => setLocationModalOpen(false)}
+        onSend={handleSendLocation}
+        sending={sendingSpecial}
+      />
+
+      {/* Modal de enviar contato */}
+      <SendContactModal
+        open={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
+        onSend={handleSendContact}
+        sending={sendingSpecial}
+      />
     </div>
   );
 }

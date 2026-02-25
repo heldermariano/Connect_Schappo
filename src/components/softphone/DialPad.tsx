@@ -120,12 +120,12 @@ export default function DialPad({
             value={number}
             onChange={(e) => onNumberChange(e.target.value.replace(/[^0-9*#]/g, ''))}
             placeholder="Digite o numero"
-            className="w-full text-center text-lg font-mono py-2 px-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent"
+            className="w-full text-center text-lg font-mono py-2 px-8 bg-gray-50 dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent text-gray-900 dark:text-white"
           />
           {number && (
             <button
               onClick={handleBackspace}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414-6.414a2 2 0 011.414-.586H19a2 2 0 012 2v10a2 2 0 01-2 2h-8.172a2 2 0 01-1.414-.586L3 12z" />
@@ -143,9 +143,9 @@ export default function DialPad({
               key={key}
               onClick={() => handleKeyPress(key)}
               disabled={disabled}
-              className="flex flex-col items-center justify-center h-12 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors disabled:opacity-50"
+              className="flex flex-col items-center justify-center h-12 rounded-lg bg-gray-100 dark:bg-black hover:bg-gray-200 dark:hover:bg-gray-800 active:bg-gray-300 dark:active:bg-gray-700 transition-colors disabled:opacity-50"
             >
-              <span className="text-lg font-medium text-gray-800">{key}</span>
+              <span className="text-lg font-medium text-gray-800 dark:text-white">{key}</span>
               {KEY_LABELS[key] && (
                 <span className="text-[8px] text-gray-400 leading-none">{KEY_LABELS[key]}</span>
               )}

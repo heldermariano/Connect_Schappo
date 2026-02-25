@@ -76,7 +76,7 @@ export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[80vh]">
+      <div className="bg-white dark:bg-black rounded-xl shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Encaminhar mensagem</h3>

@@ -72,7 +72,7 @@ export default function ChamadasPage() {
       <RamalStatus ramais={ramais} />
 
       {/* Filtros */}
-      <div className="flex gap-1 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div className="flex gap-1 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-black">
         {[
           { value: '', label: 'Todas' },
           { value: 'telefone', label: 'Telefone' },

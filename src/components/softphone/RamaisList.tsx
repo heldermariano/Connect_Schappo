@@ -41,10 +41,10 @@ export default function RamaisList({ onDial, disabled }: RamaisListProps) {
   }, [isOpen, fetchRamais]);
 
   return (
-    <div className="border-t border-gray-200">
+    <div className="border-t border-gray-200 dark:border-gray-800">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
       >
         <div className="flex items-center gap-1.5">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -76,11 +76,11 @@ export default function RamaisList({ onDial, disabled }: RamaisListProps) {
               {ramais.map((r) => (
                 <div
                   key={r.ramal}
-                  className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50 group"
+                  className="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-900 group"
                 >
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className="text-xs font-mono text-gray-700">{r.ramal}</span>
+                    <span className="text-xs font-mono text-gray-700 dark:text-gray-300">{r.ramal}</span>
                   </div>
                   <button
                     onClick={() => onDial(r.ramal)}

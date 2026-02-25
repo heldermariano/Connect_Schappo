@@ -74,7 +74,7 @@ export default function QuickReplyAutocomplete({
 
   if (filtered.length === 0) {
     return (
-      <div className="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 z-50">
+      <div className="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 z-50">
         <span className="text-sm text-gray-400">Nenhuma resposta encontrada</span>
       </div>
     );
@@ -83,7 +83,7 @@ export default function QuickReplyAutocomplete({
   return (
     <div
       ref={listRef}
-      className="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-y-auto z-50"
+      className="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white dark:bg-black border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-y-auto z-50"
       style={{ maxHeight: '280px' }}
     >
       <div className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-700">

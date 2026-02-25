@@ -79,30 +79,30 @@ export default function ChatInternoPopup({ onClose, sseMessage }: ChatInternoPop
   }, []);
 
   return (
-    <div className="fixed bottom-20 right-6 z-[9998] w-[380px] h-[520px] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+    <div className="absolute top-0 left-0 right-0 bottom-16 z-[9998] bg-white dark:bg-black shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="h-12 bg-schappo-500 flex items-center justify-between px-4 shrink-0">
+      <div className="h-12 bg-gray-900 dark:bg-white flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-2">
           {selectedChat && (
             <button
               onClick={handleBack}
-              className="text-white/80 hover:text-white transition-colors mr-1"
+              className="text-white/80 dark:text-gray-400 hover:text-white dark:hover:text-gray-900 transition-colors mr-1"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
           )}
-          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-white dark:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
           </svg>
-          <span className="text-white font-semibold text-sm">
+          <span className="text-white dark:text-gray-900 font-semibold text-sm">
             {selectedChat ? selectedChat.outro_nome : 'Chat Interno'}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="text-white/80 hover:text-white transition-colors"
+          className="text-white/80 dark:text-gray-400 hover:text-white dark:hover:text-gray-900 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

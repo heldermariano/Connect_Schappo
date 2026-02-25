@@ -31,7 +31,7 @@ export default function CallLog({ chamadas, loading }: CallLogProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+    <div className="flex-1 overflow-y-auto bg-white dark:bg-black">
       {chamadas.map((chamada) => (
         <CallItem key={chamada.id} chamada={chamada} />
       ))}
