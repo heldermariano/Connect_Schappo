@@ -178,22 +178,71 @@ export default function MessageView({
   }
 
   const isGroup = conversa.tipo === 'grupo';
-  const displayName = isGroup
+  const [syncedName, setSyncedName] = useState<string | null>(null);
+  const [syncedAvatar, setSyncedAvatar] = useState<string | null>(null);
+  const [syncedMemberCount, setSyncedMemberCount] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // Resetar dados sincronizados ao mudar de conversa
+  useEffect(() => {
+    setSyncedName(null);
+    setSyncedAvatar(null);
+    setSyncedMemberCount(null);
+  }, [conversa?.id]);
+
+  const displayName = syncedName || (isGroup
     ? conversa.nome_grupo || 'Grupo'
-    : conversa.nome_contato || conversa.telefone || 'Desconhecido';
+    : conversa.nome_contato || conversa.telefone || 'Desconhecido');
+
+  const displayAvatar = syncedAvatar || conversa.avatar_url;
+
+  const handleSync = useCallback(async () => {
+    if (!conversa || syncing) return;
+    const identifier = conversa.telefone || conversa.wa_chatid;
+    if (!identifier) return;
+
+    setSyncing(true);
+    try {
+      const res = await fetch(`/api/contatos/${encodeURIComponent(identifier)}/sync`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nome) setSyncedName(data.nome);
+        if (data.avatar_url) setSyncedAvatar(data.avatar_url);
+        if (data.member_count) setSyncedMemberCount(data.member_count);
+      }
+    } catch (err) {
+      console.error('[sync] Erro:', err);
+    } finally {
+      setSyncing(false);
+    }
+  }, [conversa, syncing]);
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-black">
       {/* Header da conversa */}
       <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
-        <Avatar nome={displayName} avatarUrl={conversa.avatar_url} size="sm" isGroup={isGroup} />
+        <Avatar nome={displayName} avatarUrl={displayAvatar} size="sm" isGroup={isGroup} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{displayName}</div>
           <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
             <span className="text-schappo-600 font-medium">{conversa.categoria.toUpperCase()}</span> &middot; {conversa.provider}
             {conversa.telefone && ` \u00B7 ${conversa.telefone}`}
+            {isGroup && syncedMemberCount && ` \u00B7 ${syncedMemberCount} membros`}
           </div>
         </div>
+        {/* Botao sync contato/grupo via UAZAPI */}
+        {conversa.provider === 'uazapi' && (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="p-2 text-gray-400 hover:text-schappo-600 transition-colors disabled:opacity-50"
+            title="Atualizar dados do WhatsApp"
+          >
+            <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        )}
         <AtribuirDropdown
           conversaId={conversa.id}
           atendenteId={conversa.atendente_id}

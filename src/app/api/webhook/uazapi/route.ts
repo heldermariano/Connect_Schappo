@@ -67,6 +67,48 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
   const parsed = parseUAZAPIMessage(payload);
   if (!parsed) return;
 
+  // Edicao recebida: atualizar mensagem existente ao inves de inserir nova
+  if (parsed.edited_message_id) {
+    const editedWaId = parsed.edited_message_id;
+    const novoConteudo = parsed.conteudo || '';
+
+    const updated = await pool.query(
+      `UPDATE atd.mensagens
+       SET conteudo = $1, is_edited = true, edited_at = NOW()
+       WHERE wa_message_id = $2
+       RETURNING id, conversa_id`,
+      [novoConteudo, editedWaId],
+    );
+
+    if (updated.rowCount === 0) {
+      console.log(`[webhook/uazapi] Edicao ignorada: msg original ${editedWaId} nao encontrada`);
+      return;
+    }
+
+    const { id: editedMsgId, conversa_id: editedConversaId } = updated.rows[0];
+
+    // Atualizar ultima_mensagem da conversa se for a msg mais recente
+    await pool.query(
+      `UPDATE atd.conversas
+       SET ultima_mensagem = LEFT($1, 200), updated_at = NOW()
+       WHERE id = $2
+         AND ultima_msg_at <= (SELECT created_at FROM atd.mensagens WHERE id = $3)`,
+      [novoConteudo, editedConversaId, editedMsgId],
+    );
+
+    // Buscar mensagem completa para SSE
+    const fullEditedMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [editedMsgId]);
+
+    // Broadcast SSE com mesmo formato do PATCH existente
+    sseManager.broadcast({
+      type: 'mensagem_editada' as 'conversa_atualizada',
+      data: { conversa_id: editedConversaId, mensagem: fullEditedMsg.rows[0] } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+    });
+
+    console.log(`[webhook/uazapi] Edicao recebida: msg ${editedWaId} atualizada (id=${editedMsgId})`);
+    return;
+  }
+
   // 1. Upsert conversa
   const conversaResult = await pool.query(
     `SELECT atd.upsert_conversa($1, $2, $3, $4, $5, $6, $7, $8) AS id`,

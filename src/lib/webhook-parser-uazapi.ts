@@ -22,6 +22,8 @@ export interface ParsedUAZAPIMessage {
   avatar_url: string | null;
   mencoes: string[];
   metadata: Record<string, unknown>;
+  // Edicao recebida: ID da mensagem original que foi editada
+  edited_message_id?: string;
 }
 
 export interface ParsedUAZAPICall {
@@ -279,8 +281,11 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
   const { chat, message, owner } = payload;
   if (!chat?.wa_chatid) return null;
 
-  // Ignorar mensagens enviadas pela API (evitar loop)
-  if (message.wasSentByApi) return null;
+  // Detectar edicao recebida: message.edited contem o ID da mensagem original
+  const isEdit = !!(message.edited && typeof message.edited === 'string' && message.edited.length > 0);
+
+  // Ignorar mensagens enviadas pela API (evitar loop) — mas permitir edicoes
+  if (message.wasSentByApi && !isEdit) return null;
 
   const wa_chatid = chat.wa_chatid;
   const isGroup = chat.wa_isGroup === true || wa_chatid.includes('@g.us');
@@ -318,6 +323,8 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
       message_id_full: message.id, // ID completo com owner prefix para download de midia
       ...(message.reaction ? { reacted_to: message.reaction } : {}),
     },
+    // Edicao: ID da mensagem original que foi editada
+    ...(isEdit ? { edited_message_id: message.edited } : {}),
   };
 }
 

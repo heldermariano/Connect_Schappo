@@ -24,6 +24,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
   const [success, setSuccess] = useState(false);
   const [criandoConversa, setCriandoConversa] = useState(false);
   const [showChannelPicker, setShowChannelPicker] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (contato) {
@@ -83,6 +84,27 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
   const grupo = (session?.user as { grupo?: string })?.grupo || 'todos';
   const allowedChannelIds = GRUPO_CHANNELS[grupo] || GRUPO_CHANNELS.todos;
   const availableChannels = WHATSAPP_CHANNELS.filter((ch) => allowedChannelIds.includes(ch.id));
+
+  const handleSyncWhatsApp = useCallback(async () => {
+    if (!contato?.telefone || syncing) return;
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/contatos/${encodeURIComponent(contato.telefone)}/sync`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nome) setNome(data.nome);
+        onSaved?.();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Nao foi possivel sincronizar');
+      }
+    } catch {
+      setError('Erro ao sincronizar com WhatsApp');
+    } finally {
+      setSyncing(false);
+    }
+  }, [contato, syncing, onSaved]);
 
   const criarConversaNoCanal = useCallback(async (categoria: string) => {
     if (!contato?.telefone) return;
@@ -149,6 +171,18 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
             <div className="text-white font-semibold truncate">{contato.nome}</div>
             <div className="text-white/70 text-sm">{contato.telefone || 'Sem telefone'}</div>
           </div>
+          {contato.telefone && (
+            <button
+              onClick={handleSyncWhatsApp}
+              disabled={syncing}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors disabled:opacity-50"
+              title="Atualizar do WhatsApp"
+            >
+              <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors"
