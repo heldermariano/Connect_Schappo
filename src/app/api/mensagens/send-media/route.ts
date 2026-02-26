@@ -4,6 +4,72 @@ import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
+import { execFileSync } from 'child_process';
+import { writeFileSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+
+// Resolver path do ffmpeg-static (Turbopack reescreve require() com path errado)
+function getFfmpegPath(): string {
+  // Tentar ffmpeg do sistema primeiro
+  try {
+    execFileSync('ffmpeg', ['-version'], { timeout: 5000, stdio: 'ignore' });
+    return 'ffmpeg';
+  } catch { /* ffmpeg do sistema nao disponivel */ }
+
+  // Tentar path relativo ao projeto (node_modules)
+  const localPath = join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg');
+  try {
+    execFileSync(localPath, ['-version'], { timeout: 5000, stdio: 'ignore' });
+    return localPath;
+  } catch { /* nao encontrado */ }
+
+  // Ultimo recurso: require
+  try {
+    const reqPath = require('ffmpeg-static') as string;
+    return reqPath;
+  } catch {
+    throw new Error('ffmpeg nao encontrado (sistema, node_modules, nem ffmpeg-static)');
+  }
+}
+
+// Converter audio (webm/mp4/etc) → ogg usando ffmpeg (remux opus codec)
+function convertToOgg(buffer: Buffer): Buffer {
+  const ffmpegPath = getFfmpegPath();
+
+  const tmp = join(tmpdir(), 'connect-audio');
+  try { mkdirSync(tmp, { recursive: true }); } catch { /* ok */ }
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const inputPath = join(tmp, `${id}.input`);
+  const outputPath = join(tmp, `${id}.ogg`);
+
+  try {
+    writeFileSync(inputPath, buffer);
+    // Tentar remux primeiro (rapido, sem re-encoding: opus→opus)
+    // Se falhar (codec incompativel), re-encode com libopus
+    try {
+      execFileSync(ffmpegPath, [
+        '-i', inputPath,
+        '-c:a', 'copy',
+        '-f', 'ogg',
+        '-y', outputPath,
+      ], { timeout: 15000 });
+    } catch {
+      // Remux falhou — re-encode
+      execFileSync(ffmpegPath, [
+        '-i', inputPath,
+        '-c:a', 'libopus',
+        '-b:a', '48k',
+        '-f', 'ogg',
+        '-y', outputPath,
+      ], { timeout: 30000 });
+    }
+    return readFileSync(outputPath);
+  } finally {
+    try { unlinkSync(inputPath); } catch { /* ok */ }
+    try { unlinkSync(outputPath); } catch { /* ok */ }
+  }
+}
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -91,18 +157,30 @@ async function sendMediaVia360Dialog(
 
   try {
     // Primeiro, upload da midia
-    // Campo 'type' deve ser o MIME type real (ex: audio/ogg), nao a categoria (ex: audio)
-    // 360Dialog (Meta Cloud API) nao aceita audio/webm — converter para audio/ogg
-    // mediaType pode ser 'audio' ou 'ptt' (voice recording)
-    let uploadMimetype = mimetype;
+    // 360Dialog (Meta Cloud API) aceita: audio/ogg, audio/aac, audio/mp4, audio/mpeg, audio/amr
+    // NAO aceita: audio/webm. audio/mp4 do MediaRecorder tambem nao entrega (aceita upload mas nao envia).
+    // Solucao: converter qualquer audio nao-ogg para ogg via ffmpeg (remux opus codec)
+    // Limpar MIME: remover parametros de codecs (ex: audio/ogg;codecs=opus → audio/ogg)
+    let uploadMimetype = mimetype.split(';')[0].trim();
     let uploadFilename = filename;
-    if (mimetype.includes('webm') && (mediaType === 'audio' || mediaType === 'ptt')) {
-      uploadMimetype = 'audio/ogg';
-      uploadFilename = filename.replace(/\.webm$/, '.ogg');
+    let uploadBuffer = fileBuffer;
+    const isAudioUpload = mediaType === 'audio' || mediaType === 'ptt';
+    const isAlreadyOgg = uploadMimetype === 'audio/ogg';
+    if (isAudioUpload && !isAlreadyOgg) {
+      // Converter webm/mp4/qualquer formato para ogg via ffmpeg
+      try {
+        uploadBuffer = convertToOgg(fileBuffer);
+        uploadMimetype = 'audio/ogg';
+        uploadFilename = filename.replace(/\.\w+$/, '.ogg');
+        console.log(`[send-media/360dialog] Convertido ${mimetype}→ogg: ${fileBuffer.length}→${uploadBuffer.length} bytes`);
+      } catch (convErr) {
+        console.error('[send-media/360dialog] Erro na conversao para ogg:', convErr);
+        // Se falhar conversao, enviar como esta (melhor tentar do que nao enviar)
+      }
     }
 
     const formData = new FormData();
-    const blob = new Blob([new Uint8Array(fileBuffer)], { type: uploadMimetype });
+    const blob = new Blob([new Uint8Array(uploadBuffer)], { type: uploadMimetype });
     formData.append('file', blob, uploadFilename);
     formData.append('messaging_product', 'whatsapp');
     formData.append('type', uploadMimetype);
@@ -146,6 +224,7 @@ async function sendMediaVia360Dialog(
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
+        recipient_type: 'individual',
         to,
         type: sendType,
         [sendType]: mediaPayload,

@@ -16,6 +16,24 @@ function formatTimer(seconds: number): string {
   return `${m}:${s}`;
 }
 
+// Formato de gravacao: priorizar ogg (aceito nativamente pelo WhatsApp)
+// Firefox suporta ogg. Chrome suporta webm (convertido no server via ffmpeg).
+// MP4 do MediaRecorder NAO e compativel com WhatsApp (aceita upload mas nao entrega).
+function getBestMimeType(): { mimeType: string; ext: string } {
+  const candidates = [
+    { mime: 'audio/ogg;codecs=opus', ext: 'ogg' },
+    { mime: 'audio/ogg', ext: 'ogg' },
+    { mime: 'audio/webm;codecs=opus', ext: 'webm' },
+    { mime: 'audio/webm', ext: 'webm' },
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c.mime)) {
+      return { mimeType: c.mime, ext: c.ext };
+    }
+  }
+  return { mimeType: '', ext: 'webm' };
+}
+
 export default function AudioRecorder({ onRecordingComplete, onCancel, disabled }: AudioRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -24,6 +42,7 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(false);
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -41,15 +60,7 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Preferir ogg/opus (compativel com WhatsApp/Meta Cloud API)
-      // Fallback para webm/opus se ogg nao suportado
-      let mimeType = '';
-      for (const mime of ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm']) {
-        if (MediaRecorder.isTypeSupported(mime)) {
-          mimeType = mime;
-          break;
-        }
-      }
+      const { mimeType, ext } = getBestMimeType();
 
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
@@ -60,16 +71,15 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
       };
 
       recorder.onstop = () => {
-        const actualMime = recorder.mimeType || 'audio/ogg';
+        const actualMime = recorder.mimeType || mimeType || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type: actualMime });
-        const ext = actualMime.includes('webm') ? 'webm' : 'ogg';
         const now = new Date();
         const ts = now.toISOString().replace(/[-:T]/g, '').slice(0, 15);
         const file = new File([blob], `audio_${ts}.${ext}`, { type: actualMime });
         onRecordingComplete(file);
       };
 
-      recorder.start(1000); // chunks de 1s
+      recorder.start(1000);
       setRecording(true);
       setElapsed(0);
       setError(null);
@@ -77,10 +87,7 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
       timerRef.current = setInterval(() => {
         setElapsed((prev) => {
           if (prev + 1 >= MAX_DURATION) {
-            // Auto-stop
             recorder.stop();
-            stopStream();
-            setRecording(false);
             return prev + 1;
           }
           return prev + 1;
@@ -89,12 +96,18 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
     } catch {
       setError('Permissao de microfone negada');
     }
-  }, [onRecordingComplete, stopStream]);
+  }, [onRecordingComplete]);
 
-  // Iniciar gravacao ao montar
+  // Iniciar gravacao ao montar — guard contra React Strict Mode (double mount)
   useEffect(() => {
+    if (mountedRef.current) return; // Ja iniciou na primeira montagem
+    mountedRef.current = true;
+
     if (!disabled) startRecording();
-    return () => stopStream();
+
+    return () => {
+      stopStream();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStop = useCallback(() => {
@@ -107,7 +120,6 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
 
   const handleCancel = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      // Remover onstop para nao enviar
       mediaRecorderRef.current.onstop = null;
       mediaRecorderRef.current.stop();
     }
