@@ -163,6 +163,37 @@ export async function GET(
       }
     }
 
+    // Batch-query reacoes (mensagens tipo 'reaction' que apontam para mensagens desta conversa)
+    // Coletar wa_message_ids das mensagens normais para buscar reacoes que apontem para elas
+    const msgWaIds = mensagens
+      .filter((m: { wa_message_id: string | null }) => m.wa_message_id)
+      .map((m: { wa_message_id: string }) => m.wa_message_id);
+    let reactionsMap: Record<string, Array<{ emoji: string; sender_name: string | null; from_me: boolean }>> = {};
+    if (msgWaIds.length > 0) {
+      try {
+        const reactionsResult = await pool.query(
+          `SELECT conteudo as emoji, metadata->>'reacted_to' as reacted_to, sender_name, from_me
+           FROM atd.mensagens
+           WHERE tipo_mensagem = 'reaction'
+             AND conversa_id = $1
+             AND metadata->>'reacted_to' = ANY($2)
+             AND conteudo IS NOT NULL AND conteudo != ''`,
+          [id, msgWaIds],
+        );
+        for (const row of reactionsResult.rows) {
+          const target = row.reacted_to;
+          if (!reactionsMap[target]) reactionsMap[target] = [];
+          reactionsMap[target].push({
+            emoji: row.emoji,
+            sender_name: row.sender_name,
+            from_me: row.from_me,
+          });
+        }
+      } catch {
+        // metadata pode nao ter reacted_to — ignorar
+      }
+    }
+
     // Adicionar mencoes_resolvidas e sender_avatar_url a cada mensagem
     const mensagensEnriquecidas = mensagens.map((msg) => {
       const enriched = { ...msg } as Record<string, unknown>;
@@ -197,6 +228,11 @@ export async function GET(
       // Mensagem citada (quoted)
       if (msg.quoted_msg_id && quotedMap[msg.quoted_msg_id]) {
         enriched.quoted_message = quotedMap[msg.quoted_msg_id];
+      }
+
+      // Reacoes
+      if (msg.wa_message_id && reactionsMap[msg.wa_message_id]) {
+        enriched.reactions = reactionsMap[msg.wa_message_id];
       }
 
       return enriched;

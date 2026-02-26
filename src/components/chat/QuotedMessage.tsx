@@ -30,14 +30,14 @@ function getPreviewText(msg: Mensagem): string {
 }
 
 export default function QuotedMessage({ mensagem, onCancel, inline }: QuotedMessageProps) {
-  const senderName = mensagem.sender_name || (mensagem.from_me ? 'Voce' : mensagem.sender_phone || '');
+  const senderName = mensagem.from_me ? 'Você' : (mensagem.sender_name || mensagem.sender_phone || '');
   const preview = getPreviewText(mensagem);
 
   if (inline) {
     return (
-      <div className="border-l-2 border-schappo-400 bg-black/5 rounded-r px-2 py-1 mb-1 cursor-pointer">
-        <div className="text-xs font-semibold text-schappo-600 truncate">{senderName}</div>
-        <div className="text-xs text-gray-500 truncate">{preview}</div>
+      <div className="border-l-3 border-schappo-400 bg-gray-100 dark:bg-gray-800/60 rounded-r px-2 py-1 mb-1 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700/60 transition-colors">
+        <div className="text-xs font-semibold text-schappo-600 dark:text-schappo-400 truncate">{senderName}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{preview}</div>
       </div>
     );
   }

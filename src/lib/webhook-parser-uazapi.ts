@@ -316,6 +316,7 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
       chat_source: payload.chatSource,
       timestamp: message.messageTimestamp,
       message_id_full: message.id, // ID completo com owner prefix para download de midia
+      ...(message.reaction ? { reacted_to: message.reaction } : {}),
     },
   };
 }

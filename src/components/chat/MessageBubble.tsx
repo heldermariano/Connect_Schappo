@@ -187,8 +187,13 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
 
   const mencoesResolvidas = mensagem.mencoes_resolvidas;
 
-  // Reacoes: exibir inline compacto
+  // Reacoes: nao sao balaos, exibidas como badge nas mensagens alvo
   if (isReaction) return null;
+
+  // Agregar emojis unicos de reacoes
+  const reactions = mensagem.reactions || [];
+  const hasReactions = reactions.length > 0;
+  const uniqueEmojis = hasReactions ? [...new Set(reactions.map(r => r.emoji))] : [];
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -210,7 +215,7 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
           />
         </div>
       )}
-      <div className="relative max-w-[70%] min-w-[80px]">
+      <div className={`relative max-w-[70%] min-w-[80px] ${hasReactions ? 'mb-3' : ''}`}>
       <div
         className={`rounded-lg px-3 py-2 ${
           isMe ? 'bg-green-100 dark:bg-green-900/40 text-gray-900 dark:text-gray-100' : 'bg-white dark:bg-black text-gray-900 dark:text-gray-100 shadow-sm'
@@ -259,6 +264,9 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
           {mensagem.is_forwarded && (
             <span className="text-[10px] text-gray-400 italic mr-1">Encaminhada</span>
           )}
+          {mensagem.is_edited && (
+            <span className="text-[10px] text-gray-400 italic mr-1">editada</span>
+          )}
           <span className="text-[10px] text-gray-400">{formatTime(mensagem.created_at)}</span>
           {isMe && <StatusIcon status={mensagem.status} />}
         </div>
@@ -278,6 +286,15 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
+      )}
+      {/* Badge de reacoes — posicionado sobre o canto inferior do balao */}
+      {hasReactions && (
+        <div className={`absolute -bottom-3 ${isMe ? 'right-2' : 'left-2'} flex gap-0.5 bg-white dark:bg-gray-800 rounded-full px-1.5 py-0.5 shadow-sm border border-gray-200 dark:border-gray-700 text-xs`}>
+          {uniqueEmojis.map(emoji => (
+            <span key={emoji}>{emoji}</span>
+          ))}
+          {reactions.length > 1 && <span className="text-gray-500 text-[10px] ml-0.5">{reactions.length}</span>}
+        </div>
       )}
       </div>
     </div>

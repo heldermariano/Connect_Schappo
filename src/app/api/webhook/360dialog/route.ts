@@ -67,7 +67,7 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
         parsed.media_url,
         parsed.media_mimetype,
         parsed.media_filename,
-        JSON.stringify({}),
+        JSON.stringify(parsed.metadata || {}),
       ],
     );
     const msgId = msgResult.rows[0].id;

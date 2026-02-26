@@ -72,6 +72,9 @@ export interface Mensagem {
     conteudo: string | null;
     media_filename: string | null;
   } | null;
+  reactions?: Array<{ emoji: string; sender_name: string | null; from_me: boolean }>;
+  is_edited?: boolean;
+  edited_at?: string;
   metadata: Record<string, unknown>;
   created_at: string;
 }
@@ -273,6 +276,38 @@ export const OWNER_CATEGORY_MAP: Record<string, string> = {
   '556183008973': 'recepcao',
   '556133455701': 'geral',
 };
+
+// Mapeamento Categoria -> Owner (numero que envia)
+export const CATEGORIA_OWNER: Record<string, string> = {
+  eeg: '556192894339',
+  recepcao: '556183008973',
+  geral: '556133455701',
+};
+
+// Mapeamento Owner -> Token UAZAPI (seleciona instancia correta)
+// UAZAPI_INSTANCE_TOKENS: token_eeg,token_recepcao (mesma ordem dos owners)
+const OWNER_TOKEN_MAP: Record<string, number> = {
+  '556192894339': 0, // eeg = primeiro token
+  '556183008973': 1, // recepcao = segundo token
+};
+
+/**
+ * Retorna o token UAZAPI correto para a categoria da conversa.
+ * Cada instancia UAZAPI (EEG, Recepcao) tem seu proprio token.
+ * Enviar com token errado causa 500 em grupos (instancia nao participa do grupo).
+ */
+export function getUazapiToken(categoria: string): string {
+  const tokens = (process.env.UAZAPI_INSTANCE_TOKENS || '').split(',').map(t => t.trim()).filter(Boolean);
+  const owner = CATEGORIA_OWNER[categoria];
+  if (owner && tokens.length > 1) {
+    const idx = OWNER_TOKEN_MAP[owner];
+    if (idx !== undefined && tokens[idx]) {
+      return tokens[idx];
+    }
+  }
+  // Fallback: token padrao
+  return process.env.UAZAPI_TOKEN || '';
+}
 
 // --- Canais WhatsApp ---
 

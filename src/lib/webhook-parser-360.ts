@@ -18,6 +18,7 @@ export interface Parsed360Message {
   provider: '360dialog';
   nome_contato: string | null;
   telefone: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface Parsed360Status {
@@ -93,6 +94,12 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
               break;
           }
 
+          // Metadata: incluir reacted_to para reacoes
+          const metadata: Record<string, unknown> = {};
+          if (msg.type === 'reaction' && msg.reaction?.message_id) {
+            metadata.reacted_to = msg.reaction.message_id;
+          }
+
           messages.push({
             wa_chatid,
             wa_message_id: msg.id,
@@ -109,6 +116,7 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             provider: '360dialog',
             nome_contato: senderName,
             telefone: msg.from,
+            metadata,
           });
         }
       }
