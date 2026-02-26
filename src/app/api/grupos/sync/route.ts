@@ -6,7 +6,7 @@ import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 /**
  * POST /api/grupos/sync — Sincroniza lista de grupos das instancias UAZAPI.
- * Chama GET {url}/group/list para cada instancia e faz upsert em atd.conversas.
+ * Chama POST {url}/group/list para cada instancia e faz upsert em atd.conversas.
  */
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -31,7 +31,16 @@ export async function POST() {
 
       try {
         const res = await fetch(`${url}/group/list`, {
-          headers: { token },
+          method: 'POST',
+          headers: {
+            token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            force: true,
+            noParticipants: true,
+            pageSize: 1000,
+          }),
         });
 
         if (!res.ok) {
@@ -40,7 +49,7 @@ export async function POST() {
         }
 
         const data = await res.json();
-        const groups = Array.isArray(data) ? data : data.groups || data.data || [];
+        const groups = Array.isArray(data) ? data : data.groups || data.data || data.results || [];
 
         for (const group of groups) {
           const waChatId = group.id || group.jid || group.chatid;

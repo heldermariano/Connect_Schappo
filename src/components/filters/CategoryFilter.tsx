@@ -51,7 +51,7 @@ export default function CategoryFilter({
   if (canal) {
     const channelInfo = WHATSAPP_CHANNELS.find((ch) => ch.id === canal);
     const is360 = channelInfo?.provider === '360dialog';
-    const isGrupoTab = selected === 'grupo';
+    const isGrupoTab = selected === 'grupo' || selected === 'pendentes-grupo';
 
     const tabs = is360
       ? [{ value: 'individual', label: 'Individual' }]
@@ -66,9 +66,11 @@ export default function CategoryFilter({
         setPendentesAtivo(false);
         onChange(prevFilterRef.current || 'individual');
       } else {
-        // Ativar pendentes
+        // Ativar pendentes preservando o tipo da tab ativa
+        const currentTab = prevFilterRef.current || selected;
+        const tipoTab = currentTab === 'grupo' ? 'grupo' : 'individual';
         setPendentesAtivo(true);
-        onChange('pendentes');
+        onChange(`pendentes-${tipoTab}`);
       }
     };
 
@@ -82,7 +84,10 @@ export default function CategoryFilter({
         {/* Linha 1: Tabs */}
         <div className="flex items-center gap-1 px-3 pt-2 pb-1">
           {tabs.map((t) => {
-            const isActive = !pendentesAtivo && selected === t.value;
+            // Tab fica ativa mesmo com pendentes, baseado no tipo
+            const isActive = pendentesAtivo
+              ? selected === `pendentes-${t.value}`
+              : selected === t.value;
             return (
               <button
                 key={t.value}
