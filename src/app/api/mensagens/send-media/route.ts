@@ -91,11 +91,19 @@ async function sendMediaVia360Dialog(
   try {
     // Primeiro, upload da midia
     // Campo 'type' deve ser o MIME type real (ex: audio/ogg), nao a categoria (ex: audio)
+    // 360Dialog (Meta Cloud API) nao aceita audio/webm — converter para audio/ogg
+    let uploadMimetype = mimetype;
+    let uploadFilename = filename;
+    if (mimetype.includes('webm') && mediaType === 'audio') {
+      uploadMimetype = 'audio/ogg; codecs=opus';
+      uploadFilename = filename.replace(/\.webm$/, '.ogg');
+    }
+
     const formData = new FormData();
-    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimetype });
-    formData.append('file', blob, filename);
+    const blob = new Blob([new Uint8Array(fileBuffer)], { type: uploadMimetype });
+    formData.append('file', blob, uploadFilename);
     formData.append('messaging_product', 'whatsapp');
-    formData.append('type', mimetype);
+    formData.append('type', uploadMimetype);
 
     const uploadRes = await fetch(`${apiUrl}/media`, {
       method: 'POST',
