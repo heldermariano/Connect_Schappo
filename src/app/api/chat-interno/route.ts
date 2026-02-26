@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
     // Buscar nome do outro participante
     const outroId = chat.participante1_id === userId ? chat.participante2_id : chat.participante1_id;
     const outroResult = await pool.query('SELECT nome, status_presenca FROM atd.atendentes WHERE id = $1', [outroId]);
+    chat.outro_id = outroId;
     chat.outro_nome = outroResult.rows[0]?.nome;
     chat.outro_status = outroResult.rows[0]?.status_presenca;
     chat.nao_lidas = 0;

@@ -135,6 +135,7 @@ export interface ChatInterno {
   ultima_msg_at: string | null;
   created_at: string;
   // Campos calculados (JOIN)
+  outro_id?: number;
   outro_nome?: string;
   outro_status?: string;
   nao_lidas?: number;
@@ -180,8 +181,16 @@ export interface EegAlertaFicha {
   corrigido: boolean;
   corrigido_at: string | null;
   notificado_correcao: boolean;
+  paciente_nome: string | null;
+  data_exame: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TecnicoAlertasSummary {
+  total: number;
+  pendentes: number;
+  corrigidos: number;
 }
 
 // --- SIP / Softphone ---

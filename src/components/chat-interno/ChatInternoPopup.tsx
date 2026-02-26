@@ -16,12 +16,20 @@ export interface ChatInternoSSEData {
   destinatario_id: number;
 }
 
+interface AutoOpenChat {
+  chat_id: number;
+  sender_id: number;
+  sender_name: string;
+}
+
 interface ChatInternoPopupProps {
   onClose: () => void;
   sseMessage?: ChatInternoSSEData | null;
+  autoOpenChat?: AutoOpenChat | null;
+  onAutoOpenHandled?: () => void;
 }
 
-export default function ChatInternoPopup({ onClose, sseMessage }: ChatInternoPopupProps) {
+export default function ChatInternoPopup({ onClose, sseMessage, autoOpenChat, onAutoOpenHandled }: ChatInternoPopupProps) {
   const { data: session } = useSession();
   const { refreshChatInternoUnread } = useAppContext();
   const [selectedChat, setSelectedChat] = useState<ChatInterno | null>(null);
@@ -32,6 +40,30 @@ export default function ChatInternoPopup({ onClose, sseMessage }: ChatInternoPop
 
   const selectedChatRef = useRef<ChatInterno | null>(null);
   useEffect(() => { selectedChatRef.current = selectedChat; }, [selectedChat]);
+
+  // Auto-abrir na conversa quando recebe autoOpenChat do AppShell
+  const autoOpenHandledRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!autoOpenChat || autoOpenChat.sender_id === autoOpenHandledRef.current) return;
+    autoOpenHandledRef.current = autoOpenChat.sender_id;
+
+    // Verificar se ja existe um chat com esse sender nos chats carregados
+    const existing = chats.find((c) => c.outro_id === autoOpenChat.sender_id);
+    if (existing) {
+      setSelectedChat(existing);
+      refreshChatInternoUnread();
+      onAutoOpenHandled?.();
+    } else {
+      // Criar/buscar chat via API
+      criarChat(autoOpenChat.sender_id).then((chat) => {
+        if (chat) {
+          setSelectedChat(chat);
+          refreshChatInternoUnread();
+        }
+        onAutoOpenHandled?.();
+      });
+    }
+  }, [autoOpenChat, chats, criarChat, refreshChatInternoUnread, onAutoOpenHandled]);
 
   // Processar mensagens SSE repassadas pelo AppShell
   const lastProcessedRef = useRef<number>(0);

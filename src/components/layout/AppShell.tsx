@@ -28,6 +28,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const [softphoneOpen, setSoftphoneOpen] = useState(false);
   const chatInternoOpenRef = useRef(false);
   const [chatInternoSSE, setChatInternoSSE] = useState<ChatInternoSSEData | null>(null);
+  const [autoOpenChat, setAutoOpenChat] = useState<{ chat_id: number; sender_id: number; sender_name: string } | null>(null);
   const router = useRouter();
   const userId = session?.user?.id ? parseInt(session.user.id as string) : 0;
   const operatorStatusRef = useRef(operatorStatus);
@@ -80,13 +81,17 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             // Repassar ao popup para atualizar mensagens em tempo real
             setChatInternoSSE({ ...d });
           } else if (operatorStatusRef.current === 'disponivel') {
-            // Toast apenas se popup nao estiver aberto e operador disponivel
-            const senderName = d.mensagem.nome_remetente || 'Operador';
-            const preview = d.mensagem.conteudo?.substring(0, 80) || 'Nova mensagem';
+            // Auto-abrir popup direto na conversa do remetente
             playNotificationBeep();
-            showToastNotification(senderName, preview, () => {
-              setChatInternoOpen(true);
+            setAutoOpenChat({
+              chat_id: d.chat_id,
+              sender_id: d.mensagem.atendente_id,
+              sender_name: d.mensagem.nome_remetente || 'Operador',
             });
+            setSoftphoneOpen(false);
+            setChatInternoOpen(true);
+            // Repassar SSE para o popup processar a mensagem
+            setChatInternoSSE({ ...d });
           }
         }
       }
@@ -163,7 +168,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
           {/* Popup do chat interno */}
           {chatInternoOpen && (
-            <ChatInternoPopup onClose={() => setChatInternoOpen(false)} sseMessage={chatInternoSSE} />
+            <ChatInternoPopup
+              onClose={() => setChatInternoOpen(false)}
+              sseMessage={chatInternoSSE}
+              autoOpenChat={autoOpenChat}
+              onAutoOpenHandled={() => setAutoOpenChat(null)}
+            />
           )}
         </div>
       </div>

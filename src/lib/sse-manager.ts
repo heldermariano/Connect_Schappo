@@ -3,6 +3,7 @@ import { SSEEvent } from './types';
 type SSEClient = {
   id: string;
   controller: ReadableStreamDefaultController;
+  atendenteId: number | null;
 };
 
 // Singleton que gerencia conexoes SSE ativas
@@ -10,11 +11,69 @@ class SSEManager {
   private clients: Map<string, SSEClient> = new Map();
 
   addClient(id: string, controller: ReadableStreamDefaultController): void {
-    this.clients.set(id, { id, controller });
+    this.clients.set(id, { id, controller, atendenteId: null });
+  }
+
+  setClientAtendente(clientId: string, atendenteId: number): void {
+    const client = this.clients.get(clientId);
+    if (client) {
+      client.atendenteId = atendenteId;
+    }
   }
 
   removeClient(id: string): void {
+    const client = this.clients.get(id);
+    const atendenteId = client?.atendenteId ?? null;
     this.clients.delete(id);
+
+    // Verificar se atendente perdeu todas as conexoes
+    if (atendenteId) {
+      const stillConnected = this.isAtendenteConnected(atendenteId);
+      if (!stillConnected) {
+        this.markAtendenteOffline(atendenteId);
+      }
+    }
+  }
+
+  private isAtendenteConnected(atendenteId: number): boolean {
+    for (const client of this.clients.values()) {
+      if (client.atendenteId === atendenteId) return true;
+    }
+    return false;
+  }
+
+  private async markAtendenteOffline(atendenteId: number): Promise<void> {
+    try {
+      // Import dinamico para evitar dependencia circular
+      const { default: pool } = await import('./db');
+      const result = await pool.query(
+        `UPDATE atd.atendentes SET status_presenca = 'offline', updated_at = NOW()
+         WHERE id = $1 AND status_presenca != 'offline'
+         RETURNING nome`,
+        [atendenteId],
+      );
+      if (result.rowCount && result.rowCount > 0) {
+        console.log(`[SSE] Atendente ${atendenteId} (${result.rows[0].nome}) marcado offline (sem conexao SSE)`);
+        this.broadcast({
+          type: 'atendente_status',
+          data: {
+            atendente_id: atendenteId,
+            nome: result.rows[0].nome,
+            status: 'offline',
+          },
+        });
+      }
+    } catch (err) {
+      console.error('[SSE] Erro ao marcar atendente offline:', err);
+    }
+  }
+
+  getConnectedAtendenteIds(): Set<number> {
+    const ids = new Set<number>();
+    for (const client of this.clients.values()) {
+      if (client.atendenteId) ids.add(client.atendenteId);
+    }
+    return ids;
   }
 
   get clientCount(): number {

@@ -53,6 +53,7 @@ export async function PATCH(request: NextRequest) {
 }
 
 // GET: Retorna status de todos os atendentes ativos
+// Cross-check com conexoes SSE para corrigir status de quem nao tem conexao ativa
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -67,7 +68,21 @@ export async function GET() {
        ORDER BY nome`,
     );
 
-    return NextResponse.json({ atendentes: result.rows });
+    // Cross-check: se atendente nao tem conexao SSE ativa, forcar offline
+    const connectedIds = sseManager.getConnectedAtendenteIds();
+    const atendentes = result.rows.map((a) => {
+      if (a.status_presenca !== 'offline' && !connectedIds.has(a.id)) {
+        // Correcao lazy: atualizar banco em background
+        pool.query(
+          `UPDATE atd.atendentes SET status_presenca = 'offline', updated_at = NOW() WHERE id = $1 AND status_presenca != 'offline'`,
+          [a.id],
+        ).catch(() => {});
+        return { ...a, status_presenca: 'offline' };
+      }
+      return a;
+    });
+
+    return NextResponse.json({ atendentes });
   } catch (err) {
     console.error('[API/atendentes/status] Erro no GET:', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
