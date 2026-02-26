@@ -9,6 +9,7 @@ import CategoryFilter from '@/components/filters/CategoryFilter';
 import ConversaList from '@/components/chat/ConversaList';
 import MessageView from '@/components/chat/MessageView';
 import CallAlert from '@/components/calls/CallAlert';
+import GrupoListModal from '@/components/chat/GrupoListModal';
 import { useSSE } from '@/hooks/useSSE';
 import { useConversas } from '@/hooks/useConversas';
 import { useMensagens } from '@/hooks/useMensagens';
@@ -21,8 +22,10 @@ export default function ConversasPage() {
   const searchParams = useSearchParams();
   const { operatorStatus, setOperatorStatus } = useAppContext();
   const [busca, setBusca] = useState('');
+  const [buscaPainel, setBuscaPainel] = useState('');
   const [filtro, setFiltro] = useState('');
   const [selectedConversa, setSelectedConversa] = useState<Conversa | null>(null);
+  const [showGrupoList, setShowGrupoList] = useState(false);
   const [activeCalls, setActiveCalls] = useState<Chamada[]>([]);
   // Set de conversa_ids onde o atendente foi mencionado (nao lidas)
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
@@ -41,10 +44,11 @@ export default function ConversasPage() {
   const canal = searchParams.get('canal');
   const prevCanalRef = useRef<string | null>(canal);
 
-  // Reset filtro quando canal muda — default 'individual' (nao tem "Todos")
+  // Reset filtro e busca quando canal muda — default 'individual' (nao tem "Todos")
   useEffect(() => {
     if (canal !== prevCanalRef.current) {
       setFiltro(canal ? 'individual' : '');
+      setBuscaPainel('');
       prevCanalRef.current = canal;
     }
   }, [canal]);
@@ -54,9 +58,6 @@ export default function ConversasPage() {
     if (canal) {
       if (filtro === 'pendentes') {
         return { categoria: canal, pendentes: 'true' };
-      }
-      if (filtro === 'historico') {
-        return { categoria: canal, historico: 'true' };
       }
       const tipo = filtro === 'grupo' ? 'grupo' : 'individual';
       return { categoria: canal, tipo };
@@ -76,7 +77,7 @@ export default function ConversasPage() {
 
   const { conversas, loading, updateConversa, refresh, marcarComoLida } = useConversas({
     ...filterParams,
-    busca: busca || undefined,
+    busca: buscaPainel || undefined,
   });
 
   // Cachear nomes de grupo
@@ -482,7 +483,15 @@ export default function ConversasPage() {
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}
         <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 bg-white dark:bg-black">
-          <CategoryFilter selected={filtro} onChange={setFiltro} grupo={(session?.user as { grupo?: string })?.grupo || 'todos'} canal={canal} />
+          <CategoryFilter
+            selected={filtro}
+            onChange={setFiltro}
+            grupo={(session?.user as { grupo?: string })?.grupo || 'todos'}
+            canal={canal}
+            busca={buscaPainel}
+            onBuscaChange={setBuscaPainel}
+            onListarGrupos={() => setShowGrupoList(true)}
+          />
           <ConversaList
             conversas={conversas}
             activeId={selectedConversa?.id ?? null}
@@ -497,6 +506,22 @@ export default function ConversasPage() {
             isAdmin={userRole === 'admin'}
           />
         </div>
+
+        {/* Modal listar grupos */}
+        {canal && (
+          <GrupoListModal
+            open={showGrupoList}
+            canal={canal}
+            onClose={() => setShowGrupoList(false)}
+            onSelectGrupo={(grupo) => {
+              setShowGrupoList(false);
+              setSelectedConversa(grupo);
+              if (grupo.nao_lida > 0) marcarComoLida(grupo.id);
+              // Mudar para tab grupo se nao estiver
+              if (filtro !== 'grupo') setFiltro('grupo');
+            }}
+          />
+        )}
 
         {/* Painel central: mensagens */}
         <MessageView

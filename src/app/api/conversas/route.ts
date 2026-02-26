@@ -84,9 +84,16 @@ export async function GET(request: NextRequest) {
   }
 
   if (busca) {
-    conditions.push(
-      `(c.nome_contato ILIKE $${paramIndex} OR c.nome_grupo ILIKE $${paramIndex} OR c.telefone ILIKE $${paramIndex} OR ct.nome ILIKE $${paramIndex})`,
-    );
+    // Busca em nome, telefone, nome do grupo e contato
+    let buscaCondition = `(c.nome_contato ILIKE $${paramIndex} OR c.nome_grupo ILIKE $${paramIndex} OR c.telefone ILIKE $${paramIndex} OR ct.nome ILIKE $${paramIndex}`;
+
+    // Busca profunda: incluir conteudo de mensagens (apenas para buscas >= 3 chars)
+    if (busca.length >= 3) {
+      buscaCondition += ` OR c.id IN (SELECT DISTINCT conversa_id FROM atd.mensagens WHERE conteudo ILIKE $${paramIndex} LIMIT 50)`;
+    }
+
+    buscaCondition += ')';
+    conditions.push(buscaCondition);
     values.push(`%${busca}%`);
     paramIndex++;
   }
