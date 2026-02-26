@@ -20,6 +20,7 @@ const CAMPOS_OBRIGATORIOS: Record<string, string> = {
 };
 
 // Mapeamento campo XML -> coluna real no banco externo
+// CORRIGIDO: companion_name = tecnico responsavel (nao exams.technician que raramente e preenchido)
 const CAMPO_COLUNA: Record<string, { tabela: 'exams' | 'patients'; coluna: string }> = {
   DataExame: { tabela: 'exams', coluna: 'exam_date' },
   Nome: { tabela: 'patients', coluna: 'name' },
@@ -29,7 +30,7 @@ const CAMPO_COLUNA: Record<string, { tabela: 'exams' | 'patients'; coluna: strin
   Cidade: { tabela: 'exams', coluna: 'device_model' },
   Pais: { tabela: 'patients', coluna: 'responsible' },
   Celular: { tabela: 'patients', coluna: 'phone' },
-  Profissao: { tabela: 'exams', coluna: 'technician' },
+  Profissao: { tabela: 'patients', coluna: 'companion_name' },
   Email: { tabela: 'patients', coluna: 'email' },
   Indicacao: { tabela: 'exams', coluna: 'indication' },
   Cid: { tabela: 'exams', coluna: 'cid' },
@@ -54,6 +55,7 @@ interface ExamRow {
   responsible: string | null;
   phone: string | null;
   technician: string | null;
+  companion_name: string | null;
   email: string | null;
   indication: string | null;
   cid: string | null;
@@ -68,7 +70,6 @@ function delay(ms: number): Promise<void> {
 
 class FichaValidator {
   private intervalId: ReturnType<typeof setInterval> | null = null;
-  private watermark: Date | null = null;
   private running = false;
   private stats = {
     ciclos: 0,
@@ -85,29 +86,15 @@ class FichaValidator {
       return;
     }
 
-    try {
-      // Capturar watermark = MAX(created_at) do banco externo
-      const result = await examesPool.query(
-        `SELECT MAX(created_at) as max_created FROM exams`,
-      );
-      this.watermark = result.rows[0]?.max_created
-        ? new Date(result.rows[0].max_created)
-        : new Date();
+    this.running = true;
+    this.intervalId = setInterval(() => {
+      this.checkFichas().catch((err) => {
+        console.error('[FichaValidator] Erro no ciclo:', err);
+        this.stats.erros++;
+      });
+    }, INTERVALO_MS);
 
-      console.log(`[FichaValidator] Watermark definido: ${this.watermark.toISOString()}`);
-
-      this.running = true;
-      this.intervalId = setInterval(() => {
-        this.checkFichas().catch((err) => {
-          console.error('[FichaValidator] Erro no ciclo:', err);
-          this.stats.erros++;
-        });
-      }, INTERVALO_MS);
-
-      console.log('[FichaValidator] Iniciado — verificacao a cada 2 minutos');
-    } catch (err) {
-      console.error('[FichaValidator] Erro ao iniciar:', err);
-    }
+    console.log('[FichaValidator] Iniciado — verificacao a cada 2 minutos (filtro por exam_date)');
   }
 
   stop(): void {
@@ -122,7 +109,6 @@ class FichaValidator {
   getStatus() {
     return {
       running: this.running,
-      watermark: this.watermark?.toISOString() || null,
       stats: { ...this.stats },
     };
   }
@@ -131,18 +117,17 @@ class FichaValidator {
     this.stats.ciclos++;
     this.stats.ultimoCiclo = new Date().toISOString();
 
-    // ETAPA 1: Fichas novas com campos faltantes (apenas exames de HOJE)
+    // ETAPA 1: Fichas de hoje com campos faltantes (sem alerta ainda)
     await this.processNewExams();
 
-    // ETAPA 2: Fichas corrigidas (apenas alertas de HOJE)
+    // ETAPA 2: Fichas corrigidas (alertas de hoje pendentes)
     await this.checkCorrections();
   }
 
   private async processNewExams(): Promise<void> {
-    if (!this.watermark) return;
-
     try {
-      // Buscar exames novos no banco externo — APENAS exames de HOJE
+      // Buscar TODOS os exames de HOJE no banco externo
+      // Filtro por exam_date (nao created_at) — imune a migracoes de dados antigos
       const examsResult = await examesPool.query<ExamRow>(
         `SELECT
           e.id AS exam_id,
@@ -156,6 +141,7 @@ class FichaValidator {
           p.responsible,
           p.phone,
           e.technician,
+          p.companion_name,
           p.email,
           e.indication,
           e.cid,
@@ -164,28 +150,14 @@ class FichaValidator {
           e.created_at
         FROM exams e
         JOIN patients p ON p.id = e.patient_id
-        WHERE e.created_at > $1
-          AND e.exam_date::date = CURRENT_DATE
+        WHERE e.exam_date::date = CURRENT_DATE
           AND p.birth_date IS NOT NULL
         ORDER BY e.created_at ASC`,
-        [this.watermark],
       );
-
-      // Atualizar watermark mesmo se nao houver exames de hoje
-      // (para nao re-processar exames antigos no proximo ciclo)
-      const allExamsResult = await examesPool.query(
-        `SELECT MAX(created_at) as max_created FROM exams WHERE created_at > $1`,
-        [this.watermark],
-      );
-      if (allExamsResult.rows[0]?.max_created) {
-        this.watermark = new Date(allExamsResult.rows[0].max_created);
-      }
 
       if (examsResult.rows.length === 0) return;
 
-      console.log(`[FichaValidator] ${examsResult.rows.length} exames novos de hoje encontrados`);
-
-      // Filtrar exames que ja tem alerta registrado
+      // Filtrar exames que ja tem alerta registrado no banco local
       const examIds = examsResult.rows.map((r) => r.exam_id);
       const alertasResult = await pool.query(
         `SELECT exam_id FROM atd.eeg_alertas_ficha WHERE exam_id = ANY($1::uuid[])`,
@@ -193,15 +165,21 @@ class FichaValidator {
       );
       const alertasExistentes = new Set(alertasResult.rows.map((r: { exam_id: string }) => r.exam_id));
 
+      // Processar apenas exames sem alerta
+      let novos = 0;
       for (const row of examsResult.rows) {
         if (alertasExistentes.has(row.exam_id)) continue;
 
         const missing = this.validateFields(row);
         if (missing.length > 0) {
           await this.sendAlerts(row, missing);
-          // Delay entre alertas para evitar rate limit da 360Dialog
+          novos++;
           await delay(WHATSAPP_DELAY_MS);
         }
+      }
+
+      if (novos > 0) {
+        console.log(`[FichaValidator] ${novos} alertas novos criados de ${examsResult.rows.length} exames de hoje`);
       }
     } catch (err) {
       console.error('[FichaValidator] Erro ao processar fichas novas:', err);
@@ -221,7 +199,7 @@ class FichaValidator {
       Cidade: row.device_model,
       Pais: row.responsible,
       Celular: row.phone,
-      Profissao: row.technician,
+      Profissao: row.companion_name,
       Email: row.email,
       Indicacao: row.indication,
       Cid: row.cid,
@@ -257,27 +235,47 @@ class FichaValidator {
     if (!name || !name.trim()) return null;
 
     try {
-      // Busca exata por LOWER
+      // 1. Busca exata por LOWER
       const result = await pool.query(
         `SELECT id, nome, telefone, setor FROM atd.hub_usuarios
          WHERE ativo = TRUE AND LOWER(nome) = LOWER($1)
          LIMIT 1`,
         [name.trim()],
       );
+      if (result.rows.length > 0) return result.rows[0];
 
-      if (result.rows.length > 0) {
-        return result.rows[0];
-      }
-
-      // Busca fuzzy: LIKE
+      // 2. Busca fuzzy: nome da ficha contem nome do hub (ex: "PAULA RODRIGUES" contem "Paula")
       const fuzzyResult = await pool.query(
         `SELECT id, nome, telefone, setor FROM atd.hub_usuarios
-         WHERE ativo = TRUE AND LOWER(nome) LIKE LOWER($1)
+         WHERE ativo = TRUE AND LOWER($1) LIKE '%' || LOWER(nome) || '%'
+         ORDER BY LENGTH(nome) DESC
          LIMIT 1`,
-        [`%${name.trim()}%`],
+        [name.trim()],
       );
+      if (fuzzyResult.rows.length > 0) return fuzzyResult.rows[0];
 
-      return fuzzyResult.rows[0] || null;
+      // 3. Busca inversa: nome do hub contem parte do nome da ficha
+      const inverseResult = await pool.query(
+        `SELECT id, nome, telefone, setor FROM atd.hub_usuarios
+         WHERE ativo = TRUE AND LOWER(nome) LIKE '%' || LOWER($1) || '%'
+         LIMIT 1`,
+        [name.trim()],
+      );
+      if (inverseResult.rows.length > 0) return inverseResult.rows[0];
+
+      // 4. Busca pelo primeiro nome
+      const firstName = name.trim().split(/\s+/)[0];
+      if (firstName.length >= 3) {
+        const firstNameResult = await pool.query(
+          `SELECT id, nome, telefone, setor FROM atd.hub_usuarios
+           WHERE ativo = TRUE AND LOWER(nome) LIKE LOWER($1) || '%'
+           LIMIT 1`,
+          [firstName],
+        );
+        if (firstNameResult.rows.length > 0) return firstNameResult.rows[0];
+      }
+
+      return null;
     } catch (err) {
       console.error('[FichaValidator] Erro ao buscar tecnico:', err);
       return null;
@@ -292,9 +290,18 @@ class FichaValidator {
   }
 
   private async sendAlerts(row: ExamRow, missing: string[]): Promise<void> {
-    const tecnicoNaFicha = row.technician?.trim() || '';
+    // Usar companion_name como campo principal do tecnico (campo real preenchido)
+    // Fallback para exams.technician caso companion_name esteja vazio
+    const tecnicoNaFicha = row.companion_name?.trim() || row.technician?.trim() || '';
     const tecnicoIdentificado = tecnicoNaFicha.length > 0;
-    const tecnico = tecnicoIdentificado ? await this.findTechnician(tecnicoNaFicha) : null;
+    // Limpar nome para busca no hub_usuarios:
+    // - Remover prefixo "TEC." ou "TEC "
+    // - Remover sufixo de codigo de aparelho (ex: "C11", "C14", "C7")
+    const tecnicoNomeLimpo = tecnicoNaFicha
+      .replace(/^TEC\.?\s*/i, '')   // Remove prefixo TEC./TEC
+      .replace(/\s+C\d+\s*$/i, '')  // Remove sufixo " C11", " C14", etc.
+      .trim();
+    const tecnico = tecnicoIdentificado ? await this.findTechnician(tecnicoNomeLimpo) : null;
     const tecnicoTipo = this.classifyTechnician(tecnico?.setor || null);
     const tecnicoNome = tecnico?.nome || tecnicoNaFicha || 'Nao identificado';
     const tecnicoTelefone = tecnico?.telefone || null;
@@ -471,6 +478,7 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
             p.responsible,
             p.phone,
             e.technician,
+            p.companion_name,
             p.email,
             e.indication,
             e.cid,
@@ -535,36 +543,35 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
   }
 
   private async sendWhatsApp(to: string, text: string): Promise<void> {
-    const url = process.env.DIALOG360_API_URL;
-    const apiKey = process.env.DIALOG360_API_KEY;
+    // Usar UAZAPI (instancia EEG) para enviar alertas — evita rate limit da 360Dialog
+    const uazapiUrl = process.env.UAZAPI_URL;
+    const tokens = process.env.UAZAPI_INSTANCE_TOKENS?.split(',') || [];
+    const token = tokens[0]; // Token EEG (instancia principal)
 
-    if (!url || !apiKey) {
-      throw new Error('360Dialog nao configurado');
+    if (!uazapiUrl || !token) {
+      throw new Error('UAZAPI nao configurado');
     }
 
-    const res = await fetch(`${url}/messages`, {
+    const res = await fetch(`${uazapiUrl}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'D360-API-KEY': apiKey,
+        token,
       },
       body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'text',
-        text: { body: text, preview_url: false },
+        number: to,
+        text,
       }),
     });
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`360Dialog retornou ${res.status}: ${body}`);
+      throw new Error(`UAZAPI retornou ${res.status}: ${body}`);
     }
 
     const data = await res.json();
-    const msgId = data.messages?.[0]?.id || 'unknown';
-    console.log(`[FichaValidator] WhatsApp enviado para ${to}: msgId=${msgId}`);
+    const msgId = data.messageid || data.id || 'unknown';
+    console.log(`[FichaValidator] WhatsApp enviado via UAZAPI para ${to}: msgId=${msgId}`);
   }
 }
 
