@@ -90,11 +90,12 @@ async function sendMediaVia360Dialog(
 
   try {
     // Primeiro, upload da midia
+    // Campo 'type' deve ser o MIME type real (ex: audio/ogg), nao a categoria (ex: audio)
     const formData = new FormData();
     const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimetype });
     formData.append('file', blob, filename);
     formData.append('messaging_product', 'whatsapp');
-    formData.append('type', mediaType);
+    formData.append('type', mimetype);
 
     const uploadRes = await fetch(`${apiUrl}/media`, {
       method: 'POST',
