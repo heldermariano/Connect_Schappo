@@ -76,6 +76,13 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Sync de fotos de contato via UAZAPI | DONE |
 | Avatares de participantes em grupos | DONE |
 | Respostas prontas (quick replies) com autocomplete `/` | DONE |
+| Reacoes (emoji) em mensagens | DONE |
+| Encaminhamento de mensagens | DONE |
+| Envio de contatos (vCard) e localizacao | DONE |
+| Menu de contexto em mensagens (copiar, responder, reagir, encaminhar, editar, deletar) | DONE |
+| Hub de tecnicos EEG (CRUD admin/supervisor) | DONE |
+| Validador automatico de fichas EEG (polling + alertas WhatsApp) | DONE |
+| Timezone America/Sao_Paulo (Node.js + PostgreSQL + Docker) | DONE |
 
 ### Pendente / Proximo
 
@@ -142,8 +149,8 @@ connect-schappo/
 ├── package.json                        # Deps: next, react, pg, next-auth, sip.js, asterisk-manager
 ├── next.config.ts                      # standalone + allowedDevOrigins
 ├── tsconfig.json                       # strict, alias @/* → ./src/*
-├── Dockerfile                          # Multi-stage Node 20 Alpine
-├── docker-compose.yml                  # Producao com Traefik + Let's Encrypt
+├── Dockerfile                          # Multi-stage Node 20 Alpine (TZ=America/Sao_Paulo + tzdata)
+├── docker-compose.yml                  # Producao com Traefik + Let's Encrypt (TZ=America/Sao_Paulo)
 ├── .dockerignore
 ├── .gitignore
 ├── .env / .env.local                   # Variaveis de ambiente (NAO commitar)
@@ -163,7 +170,12 @@ connect-schappo/
 │   ├── 004_mencoes_registrar_mensagem.sql  # Campo mencoes[] + trigger
 │   ├── 005_contatos_table.sql          # Tabela contatos (nome, telefone, email, notas)
 │   ├── 006_softphone_sip_settings.sql  # Campos SIP em atendentes (server, password_encrypted)
-│   └── 010_respostas_prontas.sql       # Respostas prontas (atalhos por operador)
+│   ├── 008_conversas_ultima_msg_from_me.sql # Campo ultima_msg_from_me em conversas
+│   ├── 009_unique_chatid_categoria.sql # Unique index wa_chatid + categoria
+│   ├── 010_respostas_prontas.sql       # Respostas prontas (atalhos por operador)
+│   ├── 011_mensagens_edited.sql        # Campo edited_at em mensagens
+│   ├── 012_hub_usuarios_alertas_ficha.sql  # Hub tecnicos + alertas fichas EEG
+│   └── 013_fix_timestamps_tz.sql       # Timezone America/Sao_Paulo + TIMESTAMPTZ
 │
 ├── config/
 │   ├── pjsip-whatsapp.conf            # Config PJSIP para trunk WhatsApp Voz
@@ -197,7 +209,8 @@ connect-schappo/
     │   │   │   └── [id]/page.tsx       # Redirect → /conversas
     │   │   ├── chamadas/page.tsx       # Log de chamadas + status ramais
     │   │   ├── contatos/page.tsx       # Lista contatos + modal detalhes
-    │   │   └── respostas-prontas/page.tsx # Gerenciamento respostas prontas (CRUD)
+    │   │   ├── respostas-prontas/page.tsx # Gerenciamento respostas prontas (CRUD)
+    │   │   └── tecnicos/page.tsx       # Gerenciamento tecnicos EEG (admin)
     │   │
     │   └── api/
     │       ├── auth/[...nextauth]/route.ts      # NextAuth handler
@@ -219,7 +232,11 @@ connect-schappo/
     │       │   ├── [conversaId]/route.ts        # GET: mensagens paginadas + mencoes
     │       │   ├── [conversaId]/[msgId]/route.ts # DELETE: excluir mensagem
     │       │   ├── send/route.ts                # POST: enviar texto
-    │       │   └── send-media/route.ts          # POST: enviar midia (endpoints UAZAPI especificos)
+    │       │   ├── send-media/route.ts          # POST: enviar midia (endpoints UAZAPI especificos)
+    │       │   ├── forward/route.ts             # POST: encaminhar mensagem
+    │       │   ├── react/route.ts               # POST: reagir com emoji
+    │       │   ├── send-contact/route.ts        # POST: enviar contato (vCard)
+    │       │   └── send-location/route.ts       # POST: enviar localizacao
     │       │
     │       ├── exames/
     │       │   ├── buscar/route.ts              # GET: busca exames no banco externo (NeuroSchappo)
@@ -239,6 +256,13 @@ connect-schappo/
     │       ├── respostas-prontas/
     │       │   ├── route.ts                     # GET: listar + POST: criar (por operador)
     │       │   └── [id]/route.ts                # PUT: editar + DELETE: excluir
+    │       │
+    │       ├── hub-usuarios/
+    │       │   ├── route.ts                     # GET/POST: CRUD tecnicos EEG (admin/supervisor)
+    │       │   └── [id]/route.ts                # PUT: editar tecnico
+    │       │
+    │       ├── ficha-validator/
+    │       │   └── route.ts                     # GET/POST: status e controle do validador de fichas (admin)
     │       │
     │       └── atendentes/
     │           ├── sip/route.ts                 # GET/PUT: config SIP (encrypted)
@@ -264,7 +288,8 @@ connect-schappo/
     │   │   ├── AttachmentPreview.tsx     # Preview arquivo antes de enviar
     │   │   ├── ExameSearch.tsx           # Busca exames via # (popup, download PDFs)
     │   │   ├── QuickReplyAutocomplete.tsx # Autocomplete respostas prontas (ativado por /)
-    │   │   └── AtribuirDropdown.tsx      # Dropdown atribuir conversa a atendente
+    │   │   ├── AtribuirDropdown.tsx      # Dropdown atribuir conversa a atendente
+    │   │   └── MessageContextMenu.tsx    # Menu de contexto (copiar, responder, reagir, encaminhar, editar, deletar)
     │   │
     │   ├── calls/
     │   │   ├── CallLog.tsx               # Lista historico chamadas
@@ -289,6 +314,9 @@ connect-schappo/
     │   │   ├── AddContatoModal.tsx        # Modal novo contato
     │   │   └── ImportCsvModal.tsx         # Import CSV Chatwoot
     │   │
+    │   ├── tecnicos/
+    │   │   └── TecnicoModal.tsx           # Modal criar/editar tecnico EEG
+    │   │
     │   ├── respostas-prontas/
     │   │   └── RespostaProntaModal.tsx    # Modal criar/editar resposta pronta
     │   │
@@ -308,14 +336,15 @@ connect-schappo/
     │   ├── useChamadas.ts                # Fetch + filtro chamadas
     │   ├── useContatos.ts                # Fetch + busca + sync contatos
     │   ├── useRespostasProntas.ts        # CRUD respostas prontas
+    │   ├── useHubUsuarios.ts             # CRUD tecnicos EEG
     │   └── useSipPhone.ts                # SIP completo: register, call, hold, mute, DTMF
     │
     ├── contexts/
     │   └── AppContext.tsx                 # operatorStatus compartilhado (Header ↔ Softphone)
     │
     ├── lib/
-    │   ├── db.ts                         # pg.Pool (search_path = atd)
-    │   ├── db-exames.ts                  # pg.Pool externo (neuro_schappo, read-only, max 5)
+    │   ├── db.ts                         # pg.Pool (search_path = atd, timezone America/Sao_Paulo)
+    │   ├── db-exames.ts                  # pg.Pool externo (neuro_schappo, read-only, max 5, timezone America/Sao_Paulo)
     │   ├── auth.ts                       # NextAuth config (CredentialsProvider, JWT 12h)
     │   ├── types.ts                      # Interfaces: Conversa, Mensagem, Chamada, Contato, etc.
     │   ├── sse-manager.ts                # Broadcast SSE server-side
@@ -324,7 +353,10 @@ connect-schappo/
     │   ├── webhook-parser-360.ts         # Parser 360Dialog (Meta Cloud API) → schema atd
     │   ├── sip-config.ts                 # AES-256-GCM encrypt/decrypt SIP passwords
     │   ├── notification.ts               # Beep (Web Audio 880Hz) + toast mencao
-    │   └── participant-cache.ts          # Cache participantes grupo (mencoes → nomes)
+    │   ├── participant-cache.ts          # Cache participantes grupo (mencoes → nomes)
+    │   └── ficha-validator.ts            # Validador automatico de fichas EEG (polling + alertas WhatsApp)
+    │
+    ├── instrumentation.ts                # Startup: inicia FichaValidator no boot do Next.js
     │
     └── types/
         └── asterisk-manager.d.ts         # Type defs para asterisk-manager
@@ -341,17 +373,19 @@ postgresql://connect_dev:SENHA@localhost:5432/connect_schappo
 Schema: atd
 ```
 
-### Tabelas (7)
+### Tabelas (9)
 
 | Tabela | Descricao | Colunas-chave |
 |--------|-----------|---------------|
 | `atd.atendentes` | Operadores/atendentes | id, nome, username, password_hash, ramal, grupo_atendimento, role, status_presenca, sip_* |
 | `atd.conversas` | Chats WhatsApp | id, wa_chatid (UNIQUE), tipo, categoria, provider, telefone, nao_lida, atendente_id, is_archived |
-| `atd.mensagens` | Mensagens | id, conversa_id (FK), wa_message_id (UNIQUE), from_me, tipo_mensagem, conteudo, media_*, mencoes[] |
+| `atd.mensagens` | Mensagens | id, conversa_id (FK), wa_message_id (UNIQUE), from_me, tipo_mensagem, conteudo, media_*, mencoes[], edited_at |
 | `atd.chamadas` | Log chamadas | id, conversa_id, origem, direcao, caller/called_number, status, duracao_seg, asterisk_id |
 | `atd.contatos` | Contatos salvos | id, nome, telefone (UNIQUE), email, notas, chatwoot_id |
 | `atd.participantes_grupo` | Membros de grupos | id, wa_phone + wa_chatid (UNIQUE), nome_whatsapp, avatar_url |
 | `atd.respostas_prontas` | Quick replies por operador | id, atendente_id (FK), atalho (UNIQUE c/ atendente), conteudo |
+| `atd.hub_usuarios` | Diretorio de tecnicos EEG | id, nome, telefone (UNIQUE), cargo, setor, ativo |
+| `atd.eeg_alertas_ficha` | Alertas de fichas EEG | id, exam_id (UNIQUE), tecnico_id (FK), campos_faltantes[], corrigido |
 
 ### Funcoes SQL
 
@@ -360,7 +394,7 @@ Schema: atd
 | `atd.upsert_conversa()` | Insert/update conversa por wa_chatid |
 | `atd.registrar_mensagem()` | Insert mensagem + update conversa (ultima_msg, nao_lida) |
 
-### Migracoes: `sql/001` a `sql/010` (executar em ordem)
+### Migracoes: `sql/001` a `sql/013` (executar em ordem)
 
 ---
 
@@ -385,6 +419,10 @@ Schema: atd
 | `/api/mensagens/[conversaId]/[msgId]` | DELETE | Excluir mensagem (admin) |
 | `/api/mensagens/send` | POST | Enviar texto via UAZAPI ou 360Dialog |
 | `/api/mensagens/send-media` | POST | Enviar midia (endpoints UAZAPI especificos + 360Dialog) |
+| `/api/mensagens/forward` | POST | Encaminhar mensagem para outro contato/conversa |
+| `/api/mensagens/react` | POST | Reagir com emoji a mensagem existente |
+| `/api/mensagens/send-contact` | POST | Enviar contato (vCard) via WhatsApp |
+| `/api/mensagens/send-location` | POST | Enviar localizacao (lat/lng) via WhatsApp |
 
 ### Exames (autenticado)
 
@@ -429,6 +467,21 @@ Schema: atd
 | `/api/media/[messageId]` | GET | Proxy midia com cache + retry URL expirada |
 | `/api/atendentes/sip` | GET/PUT | Config SIP (password AES encrypted) |
 | `/api/atendentes/status` | GET/PATCH | Presenca operador + AMI queue pause |
+
+### Hub de Usuarios / Tecnicos (admin/supervisor)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/hub-usuarios` | GET | Lista tecnicos ativos |
+| `/api/hub-usuarios` | POST | Criar tecnico (nome, telefone, cargo, setor) |
+| `/api/hub-usuarios/[id]` | PUT | Editar tecnico |
+
+### Validador de Fichas (admin)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/ficha-validator` | GET | Status do validador (running, last_check, stats) |
+| `/api/ficha-validator` | POST | Iniciar/parar validador (action: start/stop) |
 
 ---
 
@@ -576,6 +629,9 @@ EXAMES_DB_NAME=neuro_schappo
 EXAMES_DB_USER=neuro_schappo
 EXAMES_DB_PASSWORD=senha
 
+# Timezone
+TZ=America/Sao_Paulo
+
 # App
 NEXT_PUBLIC_APP_URL=http://10.150.77.78:3000
 NEXT_PUBLIC_APP_NAME=Connect Schappo
@@ -625,6 +681,22 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 | `docs/GUIA_WEBRTC_PJSIP.md` | Config PJSIP WebRTC no Issabel (ramal 250, coexistencia chan_sip) |
 | `docs/GUIA_AUTORESPOSTA_N8N.md` | Workflow N8N auto-resposta chamadas |
 | `docs/MELHORIAS_FASE2.md` | Roadmap original Fase 2 (parcialmente feito) |
+| `docs/STATUS_PROJETO.md` | Status geral — o que esta feito e o que falta |
+
+---
+
+## Timezone
+
+Toda a aplicacao usa **America/Sao_Paulo** (GMT-3):
+
+| Camada | Configuracao |
+|--------|-------------|
+| Node.js | `TZ=America/Sao_Paulo` no `.env`, Dockerfile e docker-compose |
+| PostgreSQL (database) | `ALTER DATABASE SET timezone TO 'America/Sao_Paulo'` (sql/013) |
+| PostgreSQL (conexao) | `SET timezone` no `pool.on('connect')` em db.ts e db-exames.ts |
+| Docker (Alpine) | `apk add tzdata` + `ENV TZ=America/Sao_Paulo` no Dockerfile |
+
+**IMPORTANTE**: Todas as colunas de data devem usar `TIMESTAMPTZ` (nao `TIMESTAMP`).
 
 ---
 

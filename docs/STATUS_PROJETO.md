@@ -1,6 +1,6 @@
 # Connect Schappo — Status do Projeto
 
-> Ultima atualizacao: 23/02/2026
+> Ultima atualizacao: 26/02/2026
 
 ---
 
@@ -15,7 +15,8 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 
 ### Infraestrutura
 - [x] Projeto Next.js 16 + TypeScript + Tailwind CSS 4
-- [x] PostgreSQL schema `atd` com 6 tabelas + 2 funcoes PL/pgSQL
+- [x] PostgreSQL schema `atd` com 9 tabelas + 2 funcoes PL/pgSQL
+- [x] Timezone America/Sao_Paulo (Node.js + PostgreSQL + Docker)
 - [x] Docker multi-stage build + docker-compose com Traefik
 - [x] Deploy em producao: connect.clinicaschappo.com (HTTPS auto)
 - [x] Health check `/api/health` (DB + AMI)
@@ -91,6 +92,18 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 - [x] Sync de fotos via UAZAPI
 - [x] Busca no header encontra contatos salvos (LEFT JOIN)
 
+### Mensagens Avancadas
+- [x] Reacoes (emoji) em mensagens via UAZAPI/360Dialog
+- [x] Encaminhamento de mensagens
+- [x] Envio de contatos (vCard)
+- [x] Envio de localizacao (latitude/longitude)
+- [x] Menu de contexto em mensagens (copiar, responder, reagir, encaminhar, editar, deletar)
+
+### Hub de Tecnicos e Validacao de Fichas
+- [x] Hub de usuarios/tecnicos EEG (CRUD admin/supervisor)
+- [x] Validador automatico de fichas EEG (polling + alertas WhatsApp)
+- [x] Tabela eeg_alertas_ficha (tracking de alertas enviados)
+
 ### UX / Interface
 - [x] Layout compartilhado: Sidebar + Softphone em todas as telas
 - [x] Lightbox fullscreen para imagens
@@ -106,7 +119,7 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 
 ### Prioridade Alta
 - [ ] Dashboard de metricas (tempo resposta, volume, SLA)
-- [ ] Respostas rapidas (templates)
+- [x] Respostas rapidas (templates) — DONE (respostas prontas com autocomplete `/`)
 - [ ] Notas internas em conversas
 - [ ] Tags/labels nas conversas (UI para gerenciar)
 
@@ -149,6 +162,12 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 | `sql/004_mencoes_registrar_mensagem.sql` | Campo mencoes[] |
 | `sql/005_contatos_table.sql` | Tabela contatos |
 | `sql/006_softphone_sip_settings.sql` | Campos SIP em atendentes |
+| `sql/008_conversas_ultima_msg_from_me.sql` | Campo ultima_msg_from_me em conversas |
+| `sql/009_unique_chatid_categoria.sql` | Unique index wa_chatid + categoria |
+| `sql/010_respostas_prontas.sql` | Respostas prontas (atalhos por operador) |
+| `sql/011_mensagens_edited.sql` | Campo edited_at (TIMESTAMPTZ) em mensagens |
+| `sql/012_hub_usuarios_alertas_ficha.sql` | Hub tecnicos + alertas fichas EEG |
+| `sql/013_fix_timestamps_tz.sql` | Timezone America/Sao_Paulo + colunas TIMESTAMPTZ |
 
 ### Configs Externos
 
@@ -193,11 +212,11 @@ A Fase 1 (read-only) esta completa. A Fase 2 (interacao) esta parcialmente imple
 
 | Diretorio | Quantidade | Tipo |
 |-----------|------------|------|
-| `src/app/api/` | 24 route.ts | API Routes |
-| `src/components/` | 36 .tsx | React Components |
-| `src/hooks/` | 6 .ts | Custom Hooks |
-| `src/lib/` | 11 .ts | Utilities |
+| `src/app/api/` | 31 route.ts | API Routes |
+| `src/components/` | 39 .tsx | React Components |
+| `src/hooks/` | 8 .ts | Custom Hooks |
+| `src/lib/` | 13 .ts | Utilities |
 | `src/contexts/` | 1 .tsx | React Context |
-| `sql/` | 6 .sql | Migracoes |
+| `sql/` | 12 .sql | Migracoes |
 | `config/` | 7 arquivos | Configs externos |
-| `docs/` | 6 .md | Documentacao |
+| `docs/` | 7 .md | Documentacao |

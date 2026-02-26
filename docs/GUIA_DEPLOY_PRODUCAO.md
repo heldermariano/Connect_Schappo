@@ -89,6 +89,9 @@ PANEL_PASS=senha_segura_producao
 NEXTAUTH_SECRET=gerar_com_openssl_rand_base64_32
 NEXTAUTH_URL=https://connect.clinicaschappo.com
 
+# Timezone
+TZ=America/Sao_Paulo
+
 # App
 NEXT_PUBLIC_APP_URL=https://connect.clinicaschappo.com
 NEXT_PUBLIC_APP_NAME=Connect Schappo
@@ -96,14 +99,24 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 
 **IMPORTANTE**: O container usa `host.docker.internal` para acessar servicos no host (PostgreSQL, Asterisk AMI). Isso e resolvido pela diretiva `extra_hosts` no docker-compose.yml.
 
-### 3. Executar schema SQL (primeira vez)
+### 3. Executar migracoes SQL (primeira vez)
 
 ```bash
-# Se o banco esta no mesmo servidor:
-psql -U connect_dev -d connect_schappo -f sql/001_schema_atd.sql
+# Executar todas as migracoes em ordem (001 a 013):
+for f in sql/0*.sql; do
+  echo "Executando $f..."
+  psql -U connect_dev -d connect_schappo -f "$f"
+done
 
-# Se o banco esta em outro servidor:
+# Ou individualmente (se banco em outro servidor):
 psql postgresql://connect_dev:SENHA@HOST:5432/connect_schappo -f sql/001_schema_atd.sql
+# ... ate sql/013_fix_timestamps_tz.sql
+```
+
+**IMPORTANTE**: A migracao 013 configura timezone `America/Sao_Paulo` no database. Apos executar, verificar:
+```bash
+psql -U connect_dev -d connect_schappo -c "SELECT NOW(), current_setting('timezone')"
+# Deve retornar horario de Brasilia (GMT-3) e 'America/Sao_Paulo'
 ```
 
 ### 4. Build e deploy
@@ -241,6 +254,7 @@ docker exec connect-schappo nc -z host.docker.internal 5038
 - Base: `node:20-alpine`
 - Build: multi-stage (deps → build → runner)
 - Output: Next.js standalone
+- Timezone: `America/Sao_Paulo` (via `ENV TZ` + `apk add tzdata`)
 - Tamanho: ~293MB
 - Porta: 3000
 - Usuario: nextjs (UID 1001, sem root)
