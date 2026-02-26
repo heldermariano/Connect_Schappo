@@ -39,6 +39,8 @@ const CAMPO_COLUNA: Record<string, { tabela: 'exams' | 'patients'; coluna: strin
 
 const SUPERVISAO_TELEFONE = '5561996628353';
 const INTERVALO_MS = 120_000; // 2 minutos
+// Delay entre mensagens WhatsApp para evitar rate limit da 360Dialog
+const WHATSAPP_DELAY_MS = 5000;
 
 interface ExamRow {
   exam_id: string;
@@ -60,6 +62,10 @@ interface ExamRow {
   created_at: string;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class FichaValidator {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private watermark: Date | null = null;
@@ -67,6 +73,7 @@ class FichaValidator {
   private stats = {
     ciclos: 0,
     alertasEnviados: 0,
+    alertasFalha: 0,
     correcoesDetectadas: 0,
     ultimoCiclo: null as string | null,
     erros: 0,
@@ -124,10 +131,10 @@ class FichaValidator {
     this.stats.ciclos++;
     this.stats.ultimoCiclo = new Date().toISOString();
 
-    // ETAPA 1: Fichas novas com campos faltantes
+    // ETAPA 1: Fichas novas com campos faltantes (apenas exames de HOJE)
     await this.processNewExams();
 
-    // ETAPA 2: Fichas corrigidas
+    // ETAPA 2: Fichas corrigidas (apenas alertas de HOJE)
     await this.checkCorrections();
   }
 
@@ -135,7 +142,7 @@ class FichaValidator {
     if (!this.watermark) return;
 
     try {
-      // Buscar exames novos no banco externo
+      // Buscar exames novos no banco externo — APENAS exames de HOJE
       const examsResult = await examesPool.query<ExamRow>(
         `SELECT
           e.id AS exam_id,
@@ -158,15 +165,24 @@ class FichaValidator {
         FROM exams e
         JOIN patients p ON p.id = e.patient_id
         WHERE e.created_at > $1
+          AND e.exam_date::date = CURRENT_DATE
         ORDER BY e.created_at ASC`,
         [this.watermark],
       );
 
+      // Atualizar watermark mesmo se nao houver exames de hoje
+      // (para nao re-processar exames antigos no proximo ciclo)
+      const allExamsResult = await examesPool.query(
+        `SELECT MAX(created_at) as max_created FROM exams WHERE created_at > $1`,
+        [this.watermark],
+      );
+      if (allExamsResult.rows[0]?.max_created) {
+        this.watermark = new Date(allExamsResult.rows[0].max_created);
+      }
+
       if (examsResult.rows.length === 0) return;
 
-      // Atualizar watermark para o mais recente
-      const lastCreatedAt = examsResult.rows[examsResult.rows.length - 1].created_at;
-      this.watermark = new Date(lastCreatedAt);
+      console.log(`[FichaValidator] ${examsResult.rows.length} exames novos de hoje encontrados`);
 
       // Filtrar exames que ja tem alerta registrado
       const examIds = examsResult.rows.map((r) => r.exam_id);
@@ -182,6 +198,8 @@ class FichaValidator {
         const missing = this.validateFields(row);
         if (missing.length > 0) {
           await this.sendAlerts(row, missing);
+          // Delay entre alertas para evitar rate limit da 360Dialog
+          await delay(WHATSAPP_DELAY_MS);
         }
       }
     } catch (err) {
@@ -365,38 +383,17 @@ Caso n\u00E3o haja corre\u00E7\u00E3o ou justificativa plaus\u00EDvel, as provid
 Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
     }
 
-    // Enviar alertas simultaneamente
-    const promises: Promise<void>[] = [];
-
-    // Alerta ao tecnico (se tem telefone)
-    if (tecnicoTelefone) {
-      promises.push(
-        this.sendWhatsApp(tecnicoTelefone, alertaTecnico)
-          .then(() => console.log(`[FichaValidator] Alerta enviado ao tecnico ${tecnicoNome} (${tecnicoTelefone})`))
-          .catch((err) => console.error(`[FichaValidator] Erro ao enviar alerta ao tecnico:`, err)),
-      );
-    } else {
-      console.warn(`[FichaValidator] Tecnico "${tecnicoNome}" sem telefone cadastrado — alerta nao enviado`);
-    }
-
-    // Notificacao a supervisao (Dany)
-    promises.push(
-      this.sendWhatsApp(SUPERVISAO_TELEFONE, notificacaoSupervisao)
-        .then(() => console.log(`[FichaValidator] Supervisao notificada sobre ficha de ${nomePaciente}`))
-        .catch((err) => console.error(`[FichaValidator] Erro ao notificar supervisao:`, err)),
-    );
-
-    await Promise.allSettled(promises);
-
-    // Registrar no banco
+    // Registrar alerta no banco PRIMEIRO (antes de enviar WhatsApp)
     const totalOk = 14 - missing.length;
+    let alertaRegistrado = false;
     try {
-      await pool.query(
+      const insertResult = await pool.query(
         `INSERT INTO atd.eeg_alertas_ficha
           (exam_id, patient_id, tecnico_nome, tecnico_id, tecnico_telefone, tecnico_tipo,
            campos_faltantes, total_campos_ok, total_campos, paciente_nome, data_exame)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 14, $9, $10)
-         ON CONFLICT (exam_id) DO NOTHING`,
+         ON CONFLICT (exam_id) DO NOTHING
+         RETURNING id`,
         [
           row.exam_id,
           row.patient_id,
@@ -410,20 +407,53 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
           row.exam_date || null,
         ],
       );
-      this.stats.alertasEnviados++;
+      alertaRegistrado = insertResult.rows.length > 0;
+      if (alertaRegistrado) {
+        this.stats.alertasEnviados++;
+      }
     } catch (err) {
       console.error('[FichaValidator] Erro ao registrar alerta:', err);
       this.stats.erros++;
+      return; // Nao enviar WhatsApp se nao conseguiu registrar
+    }
+
+    if (!alertaRegistrado) return; // ON CONFLICT — ja existia
+
+    // Enviar alertas WhatsApp com logs detalhados
+    // Alerta ao tecnico (se tem telefone)
+    if (tecnicoTelefone) {
+      try {
+        await this.sendWhatsApp(tecnicoTelefone, alertaTecnico);
+        console.log(`[FichaValidator] Alerta enviado ao tecnico ${tecnicoNome} (${tecnicoTelefone}) — paciente: ${nomePaciente}`);
+      } catch (err) {
+        console.error(`[FichaValidator] FALHA ao enviar alerta ao tecnico ${tecnicoNome} (${tecnicoTelefone}):`, err);
+        this.stats.alertasFalha++;
+      }
+    } else {
+      console.warn(`[FichaValidator] Tecnico "${tecnicoNome}" sem telefone cadastrado — alerta nao enviado`);
+    }
+
+    // Delay entre mensagens para evitar rate limit
+    await delay(WHATSAPP_DELAY_MS);
+
+    // Notificacao a supervisao (Dany)
+    try {
+      await this.sendWhatsApp(SUPERVISAO_TELEFONE, notificacaoSupervisao);
+      console.log(`[FichaValidator] Supervisao notificada sobre ficha de ${nomePaciente}`);
+    } catch (err) {
+      console.error(`[FichaValidator] FALHA ao notificar supervisao sobre ${nomePaciente}:`, err);
+      this.stats.alertasFalha++;
     }
   }
 
   private async checkCorrections(): Promise<void> {
     try {
-      // Buscar fichas com alerta pendente de correcao
+      // Buscar fichas com alerta pendente de correcao — APENAS de HOJE
       const alertas = await pool.query(
         `SELECT id, exam_id, patient_id, tecnico_nome, tecnico_tipo
          FROM atd.eeg_alertas_ficha
-         WHERE corrigido = FALSE`,
+         WHERE corrigido = FALSE
+           AND data_exame::date = CURRENT_DATE`,
       );
 
       if (alertas.rows.length === 0) return;
@@ -533,6 +563,10 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
       const body = await res.text();
       throw new Error(`360Dialog retornou ${res.status}: ${body}`);
     }
+
+    const data = await res.json();
+    const msgId = data.messages?.[0]?.id || 'unknown';
+    console.log(`[FichaValidator] WhatsApp enviado para ${to}: msgId=${msgId}`);
   }
 }
 
