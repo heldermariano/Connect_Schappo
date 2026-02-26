@@ -11,7 +11,9 @@ interface UseMensagensResult {
   loadMore: () => void;
   addMensagem: (msg: Mensagem) => void;
   removeMensagem: (msgId: number) => void;
+  updateMensagem: (msgId: number, updatedFields: Partial<Mensagem>) => void;
   sendMensagem: (conversaId: number, conteudo: string, mencoes?: string[], quotedMsgId?: string) => Promise<void>;
+  editMensagem: (conversaId: number, msgId: number, conteudo: string) => Promise<void>;
 }
 
 export function useMensagens(conversaId: number | null): UseMensagensResult {
@@ -78,6 +80,12 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     setMensagens((prev) => prev.filter((m) => m.id !== msgId));
   }, []);
 
+  const updateMensagem = useCallback((msgId: number, updatedFields: Partial<Mensagem>) => {
+    setMensagens((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, ...updatedFields } : m)),
+    );
+  }, []);
+
   const sendMensagem = useCallback(async (cId: number, conteudo: string, mencoes?: string[], quotedMsgId?: string) => {
     const body: Record<string, unknown> = { conversa_id: cId, conteudo };
     if (mencoes && mencoes.length > 0) {
@@ -103,5 +111,27 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
     }
   }, [addMensagem]);
 
-  return { mensagens, loading, error, hasMore, loadMore, addMensagem, removeMensagem, sendMensagem };
+  const editMensagem = useCallback(async (cId: number, msgId: number, conteudo: string) => {
+    const res = await fetch(`/api/mensagens/${cId}/${msgId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conteudo }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: 'Erro ao editar' }));
+      throw new Error(data.error || 'Erro ao editar mensagem');
+    }
+
+    const data = await res.json();
+    if (data.mensagem) {
+      updateMensagem(msgId, {
+        conteudo: data.mensagem.conteudo,
+        is_edited: true,
+        edited_at: data.mensagem.edited_at,
+      });
+    }
+  }, [updateMensagem]);
+
+  return { mensagens, loading, error, hasMore, loadMore, addMensagem, removeMensagem, updateMensagem, sendMensagem, editMensagem };
 }

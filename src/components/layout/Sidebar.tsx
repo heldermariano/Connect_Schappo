@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/chamadas', label: 'Chamadas', icon: 'phone' },
   { href: '/contatos', label: 'Contatos', icon: 'contacts' },
   { href: '/respostas-prontas', label: 'Respostas', icon: 'replies' },
+  { href: '/tecnicos', label: 'Tecnicos', icon: 'tecnicos' },
 ];
 
 function NavIcon({ icon, active }: { icon: string; active: boolean }) {
@@ -35,6 +36,13 @@ function NavIcon({ icon, active }: { icon: string; active: boolean }) {
     return (
       <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    );
+  }
+  if (icon === 'tecnicos') {
+    return (
+      <svg className={`w-6 h-6 ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
       </svg>
     );
   }
@@ -73,6 +81,7 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const { unreadCounts } = useAppContext();
   const userName = (session?.user as { nome?: string })?.nome;
+  const userRole = (session?.user as { role?: string })?.role;
   const userGrupo = (session?.user as { grupo?: string })?.grupo || 'todos';
   const initials = userName
     ? userName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -110,7 +119,7 @@ export default function Sidebar() {
       <div className="mb-4">
         <SidebarLogo />
       </div>
-      {NAV_ITEMS.map((item) => {
+      {NAV_ITEMS.filter((item) => item.icon !== 'tecnicos' || userRole === 'admin').map((item) => {
         const active = pathname.startsWith(item.href);
         const isConversas = item.icon === 'chat';
 

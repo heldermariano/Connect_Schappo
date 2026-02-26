@@ -151,6 +151,39 @@ export interface ChatInternoMensagem {
   nome_remetente?: string;
 }
 
+// --- Hub Usuarios (Tecnicos) ---
+
+export interface HubUsuario {
+  id: number;
+  nome: string;
+  telefone: string;
+  cargo: string;
+  setor: string | null;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Alertas Ficha EEG ---
+
+export interface EegAlertaFicha {
+  id: number;
+  exam_id: string;
+  patient_id: string | null;
+  tecnico_nome: string | null;
+  tecnico_id: number | null;
+  tecnico_telefone: string | null;
+  tecnico_tipo: 'plantonista' | 'rotineiro' | null;
+  campos_faltantes: string[];
+  total_campos_ok: number;
+  total_campos: number;
+  corrigido: boolean;
+  corrigido_at: string | null;
+  notificado_correcao: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- SIP / Softphone ---
 
 export interface SipSettings {

@@ -3,12 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-
-const CATEGORIA_OWNER: Record<string, string> = {
-  eeg: '556192894339',
-  recepcao: '556183008973',
-  geral: '556133455701',
-};
+import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -20,11 +15,12 @@ async function sendLocationViaUAZAPI(
   number: string,
   latitude: number,
   longitude: number,
+  instanceToken: string,
   name?: string,
   address?: string,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
-  const token = process.env.UAZAPI_TOKEN;
+  const token = instanceToken;
   if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
 
   try {
@@ -137,7 +133,8 @@ export async function POST(request: NextRequest) {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendLocationVia360Dialog(to, lat, lng, name, address);
     } else {
-      sendResult = await sendLocationViaUAZAPI(destinatario, lat, lng, name, address);
+      const uazapiToken = getUazapiToken(conversa.categoria);
+      sendResult = await sendLocationViaUAZAPI(destinatario, lat, lng, uazapiToken, name, address);
     }
 
     if (!sendResult.success) {

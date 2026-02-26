@@ -20,11 +20,14 @@ interface MessageInputProps {
   tipoConversa?: string;
   replyingTo?: Mensagem | null;
   onCancelReply?: () => void;
+  editingMsg?: Mensagem | null;
+  onCancelEdit?: () => void;
+  onEdit?: (msgId: number, conteudo: string) => Promise<void>;
 }
 
 const ACCEPTED_TYPES = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx';
 
-export default function MessageInput({ onSend, conversaId, disabled, chatId, tipoConversa, replyingTo, onCancelReply }: MessageInputProps) {
+export default function MessageInput({ onSend, conversaId, disabled, chatId, tipoConversa, replyingTo, onCancelReply, editingMsg, onCancelEdit, onEdit }: MessageInputProps) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +63,22 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       .catch(() => setParticipants([]));
   }, [chatId, isGroup]);
 
+  // Preencher textarea quando entrar em modo edicao
+  useEffect(() => {
+    if (editingMsg) {
+      setText(editingMsg.conteudo || '');
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+          textarea.focus();
+          textarea.style.height = 'auto';
+          textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        }
+      });
+    }
+  }, [editingMsg]);
+
   // Limpar mencoes ao mudar de conversa
   useEffect(() => {
     setMentionedPhones([]);
@@ -80,6 +99,27 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
 
   const handleSend = useCallback(async () => {
     if (sending) return;
+
+    // Modo edicao: chamar onEdit em vez de onSend
+    if (editingMsg && onEdit) {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      setSending(true);
+      setError(null);
+      try {
+        await onEdit(editingMsg.id, trimmed);
+        setText('');
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao editar mensagem');
+      } finally {
+        setSending(false);
+        textareaRef.current?.focus();
+      }
+      return;
+    }
 
     // Enviar midia se tem arquivos anexados
     if (attachments.length > 0 && conversaId) {
@@ -151,7 +191,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       setSending(false);
       textareaRef.current?.focus();
     }
-  }, [text, sending, onSend, attachments, conversaId, mentionedPhones, mentionedLids, replyingTo]);
+  }, [text, sending, onSend, attachments, conversaId, mentionedPhones, mentionedLids, replyingTo, editingMsg, onEdit]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -417,8 +457,30 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         </div>
       )}
 
+      {/* Preview de edicao */}
+      {editingMsg && onCancelEdit && (
+        <div className="flex items-center gap-2 mx-4 mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 rounded-r-lg">
+          <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          <span className="text-xs text-amber-700 dark:text-amber-400 font-medium flex-1">Editando mensagem</span>
+          <button
+            onClick={() => {
+              onCancelEdit();
+              setText('');
+              if (textareaRef.current) textareaRef.current.style.height = 'auto';
+            }}
+            className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Preview da mensagem sendo respondida */}
-      {replyingTo && onCancelReply && (
+      {!editingMsg && replyingTo && onCancelReply && (
         <QuotedMessage mensagem={replyingTo} onCancel={onCancelReply} />
       )}
 
@@ -470,7 +532,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       <div className="flex items-end gap-2 px-4 py-2">
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || sending}
+          disabled={disabled || sending || !!editingMsg}
           className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
                      text-gray-400 hover:text-schappo-600 hover:bg-gray-100
                      disabled:opacity-50 disabled:cursor-not-allowed
@@ -493,7 +555,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         {hasMediaRecorder && (
           <button
             onClick={() => setIsRecording(true)}
-            disabled={disabled || sending}
+            disabled={disabled || sending || !!editingMsg}
             className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
                        text-gray-400 hover:text-red-500 hover:bg-gray-100
                        disabled:opacity-50 disabled:cursor-not-allowed
@@ -509,7 +571,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         {/* Botao localizacao */}
         <button
           onClick={() => setLocationModalOpen(true)}
-          disabled={disabled || sending || !conversaId}
+          disabled={disabled || sending || !conversaId || !!editingMsg}
           className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
                      text-gray-400 hover:text-green-600 hover:bg-gray-100
                      disabled:opacity-50 disabled:cursor-not-allowed
@@ -525,7 +587,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         {/* Botao enviar contato */}
         <button
           onClick={() => setContactModalOpen(true)}
-          disabled={disabled || sending || !conversaId}
+          disabled={disabled || sending || !conversaId || !!editingMsg}
           className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full
                      text-gray-400 hover:text-blue-600 hover:bg-gray-100
                      disabled:opacity-50 disabled:cursor-not-allowed
@@ -542,8 +604,10 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={attachments.length > 0 ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
+          placeholder={editingMsg ? 'Editar mensagem...' : attachments.length > 0 ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
           disabled={disabled || sending}
+          spellCheck={true}
+          lang="pt-BR"
           rows={1}
           className="flex-1 resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm
                      focus:outline-none focus:ring-2 focus:ring-schappo-500 focus:border-transparent

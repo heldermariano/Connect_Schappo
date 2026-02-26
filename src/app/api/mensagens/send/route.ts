@@ -3,13 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-
-// Mapeamento categoria → owner (numero que envia)
-const CATEGORIA_OWNER: Record<string, string> = {
-  eeg: '556192894339',
-  recepcao: '556183008973',
-  geral: '556133455701',
-};
+import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 // Categorias permitidas por grupo de atendimento
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
@@ -19,35 +13,36 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 };
 
 // Envia mensagem via UAZAPI
-async function sendViaUAZAPI(number: string, text: string, mentionedJid?: string[], quotedMsgId?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+// Campos conforme docs: number, text, replyid, mentions (string csv)
+async function sendViaUAZAPI(number: string, text: string, instanceToken: string, mentions?: string[], replyId?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
-  const token = process.env.UAZAPI_TOKEN;
 
-  if (!url || !token) {
+  if (!url || !instanceToken) {
     return { success: false, error: 'UAZAPI nao configurado' };
   }
 
   try {
     const payload: Record<string, unknown> = { number, text };
-    if (mentionedJid && mentionedJid.length > 0) {
-      payload.mentionedJid = mentionedJid;
+    if (mentions && mentions.length > 0) {
+      // UAZAPI espera mentions como string separada por virgula (numeros sem @)
+      payload.mentions = mentions.map(m => m.replace('@s.whatsapp.net', '').replace('@lid', '')).join(',');
     }
-    if (quotedMsgId) {
-      payload.quoted = quotedMsgId;
+    if (replyId) {
+      payload.replyid = replyId;
     }
 
     const res = await fetch(`${url}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        token,
+        token: instanceToken,
       },
       body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
       const body = await res.text();
-      console.error('[send/uazapi] Erro:', res.status, body);
+      console.error('[send/uazapi] Erro:', res.status, body, { number, replyid: replyId });
       return { success: false, error: `UAZAPI retornou ${res.status}` };
     }
 
@@ -171,8 +166,10 @@ export async function POST(request: NextRequest) {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendVia360Dialog(to, textToSend);
     } else {
-      // UAZAPI: aceita numero ou chatid
-      sendResult = await sendViaUAZAPI(destinatario, textToSend, mentionedJid, quoted_msg_id);
+      // UAZAPI: aceita numero ou chatid — usar token da instancia correta
+      // replyid usa wa_message_id curto (sem prefixo owner) conforme doc UAZAPI
+      const uazapiToken = getUazapiToken(conversa.categoria);
+      sendResult = await sendViaUAZAPI(destinatario, textToSend, uazapiToken, mentionedJid, quoted_msg_id || undefined);
     }
 
     if (!sendResult.success) {

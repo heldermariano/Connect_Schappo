@@ -3,13 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-
-// Mapeamento categoria → owner (numero que envia)
-const CATEGORIA_OWNER: Record<string, string> = {
-  eeg: '556192894339',
-  recepcao: '556183008973',
-  geral: '556133455701',
-};
+import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -25,50 +19,44 @@ function getMediaType(mimetype: string): 'image' | 'audio' | 'video' | 'document
   return 'document';
 }
 
-// Mapeia tipo de midia para endpoint UAZAPI especifico
-function getUAZAPIEndpoint(mediaType: string): string {
-  switch (mediaType) {
-    case 'image': return '/send/image';
-    case 'audio': return '/send/audio';
-    case 'video': return '/send/video';
-    case 'document': return '/send/document';
-    default: return '/send/document';
-  }
-}
-
-// Envia midia via UAZAPI usando endpoints especificos (/send/image, /send/document, etc.)
+// Envia midia via UAZAPI usando endpoint unificado /send/media
+// Campos conforme doc: number, type, file, text (caption), docName, replyid, mentions
 async function sendMediaViaUAZAPI(
   number: string,
   mediaType: string,
   fileBuffer: Buffer,
   filename: string,
   mimetype: string,
+  instanceToken: string,
   caption?: string,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
-  const token = process.env.UAZAPI_TOKEN;
-  if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
+  if (!url || !instanceToken) return { success: false, error: 'UAZAPI nao configurado' };
 
   try {
     const base64Data = `data:${mimetype};base64,${fileBuffer.toString('base64')}`;
-    const endpoint = getUAZAPIEndpoint(mediaType);
 
     const body: Record<string, string> = {
       number,
+      type: mediaType,
       file: base64Data,
-      caption: caption || '',
     };
 
-    // Campo filename para documentos (aparece como titulo no WhatsApp)
-    if (mediaType === 'document') {
-      body.filename = filename;
+    // text = caption/legenda
+    if (caption) {
+      body.text = caption;
     }
 
-    const res = await fetch(`${url}${endpoint}`, {
+    // docName para documentos (aparece como titulo no WhatsApp)
+    if (mediaType === 'document') {
+      body.docName = filename;
+    }
+
+    const res = await fetch(`${url}/send/media`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        token,
+        token: instanceToken,
       },
       body: JSON.stringify(body),
     });
@@ -222,7 +210,8 @@ export async function POST(request: NextRequest) {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, file.name, mimetype, captionToSend);
     } else {
-      sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, captionToSend);
+      const uazapiToken = getUazapiToken(conversa.categoria);
+      sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, uazapiToken, captionToSend);
     }
 
     if (!sendResult.success) {

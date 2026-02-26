@@ -3,13 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-
-// Mapeamento categoria → owner
-const CATEGORIA_OWNER: Record<string, string> = {
-  eeg: '556192894339',
-  recepcao: '556183008973',
-  geral: '556133455701',
-};
+import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -18,9 +12,9 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 };
 
 // Envia texto via UAZAPI
-async function sendTextUAZAPI(number: string, text: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+async function sendTextUAZAPI(number: string, text: string, instanceToken: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
-  const token = process.env.UAZAPI_TOKEN;
+  const token = instanceToken;
   if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
 
   try {
@@ -120,7 +114,8 @@ export async function POST(request: NextRequest) {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendText360(to, textToSend);
     } else {
-      sendResult = await sendTextUAZAPI(destinatario, textToSend);
+      const uazapiToken = getUazapiToken(conversa.categoria);
+      sendResult = await sendTextUAZAPI(destinatario, textToSend, uazapiToken);
     }
 
     if (!sendResult.success) {

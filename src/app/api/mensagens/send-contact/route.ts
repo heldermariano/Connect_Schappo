@@ -3,12 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-
-const CATEGORIA_OWNER: Record<string, string> = {
-  eeg: '556192894339',
-  recepcao: '556183008973',
-  geral: '556133455701',
-};
+import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -20,9 +15,10 @@ async function sendContactViaUAZAPI(
   number: string,
   contactName: string,
   contactPhone: string,
+  instanceToken: string,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
-  const token = process.env.UAZAPI_TOKEN;
+  const token = instanceToken;
   if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
 
   try {
@@ -128,7 +124,8 @@ export async function POST(request: NextRequest) {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendContactVia360Dialog(to, contact_name, contact_phone);
     } else {
-      sendResult = await sendContactViaUAZAPI(destinatario, contact_name, contact_phone);
+      const uazapiToken = getUazapiToken(conversa.categoria);
+      sendResult = await sendContactViaUAZAPI(destinatario, contact_name, contact_phone, uazapiToken);
     }
 
     if (!sendResult.success) {

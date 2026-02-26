@@ -3,8 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
+import { getUazapiToken } from '@/lib/types';
 
-// PATCH: Marcar conversa como lida (zerar nao_lida)
+// PATCH: Marcar conversa como lida (zerar nao_lida + tick azul no WhatsApp)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -23,7 +24,7 @@ export async function PATCH(
   try {
     const result = await pool.query(
       `UPDATE atd.conversas SET nao_lida = 0, updated_at = NOW()
-       WHERE id = $1 RETURNING id, ultima_mensagem`,
+       WHERE id = $1 RETURNING id, ultima_mensagem, categoria, provider`,
       [conversaId],
     );
 
@@ -31,12 +32,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'Conversa nao encontrada' }, { status: 404 });
     }
 
+    const conversa = result.rows[0];
+
+    // Marcar como lida no WhatsApp via UAZAPI (tick azul)
+    if (conversa.provider === 'uazapi') {
+      markReadOnWhatsApp(conversaId, conversa.categoria).catch((err) =>
+        console.error('[api/conversas/read] Erro ao marcar lida no WhatsApp:', err),
+      );
+    }
+
     // Emitir SSE para atualizar outros clientes
     sseManager.broadcast({
       type: 'conversa_atualizada',
       data: {
         conversa_id: conversaId,
-        ultima_msg: result.rows[0].ultima_mensagem || '',
+        ultima_msg: conversa.ultima_mensagem || '',
         nao_lida: 0,
       },
     });
@@ -45,5 +55,36 @@ export async function PATCH(
   } catch (err) {
     console.error('[api/conversas/read] Erro:', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
+  }
+}
+
+// Envia markread para UAZAPI (nao bloqueia a resposta)
+async function markReadOnWhatsApp(conversaId: number, categoria: string) {
+  const url = process.env.UAZAPI_URL;
+  const token = getUazapiToken(categoria);
+  if (!url || !token) return;
+
+  // Buscar as ultimas mensagens nao lidas (from_me = false) para marcar como lida
+  const msgs = await pool.query(
+    `SELECT wa_message_id FROM atd.mensagens
+     WHERE conversa_id = $1 AND from_me = false
+     ORDER BY id DESC LIMIT 10`,
+    [conversaId],
+  );
+
+  const ids = msgs.rows
+    .map((m) => m.wa_message_id)
+    .filter((id) => id && !id.startsWith('sent_') && !id.startsWith('reaction_'));
+
+  if (ids.length === 0) return;
+
+  try {
+    await fetch(`${url}/message/markread`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token },
+      body: JSON.stringify({ id: ids }),
+    });
+  } catch {
+    // Silenciar — nao eh critico
   }
 }

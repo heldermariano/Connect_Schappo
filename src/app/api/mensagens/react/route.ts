@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
-
-// Mapeamento categoria → owner (numero que envia)
-const CATEGORIA_OWNER: Record<string, string> = {
-  eeg: '556192894339',
-  recepcao: '556183008973',
-  geral: '556133455701',
-};
+import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -39,17 +33,18 @@ export async function POST(request: NextRequest) {
     const destinatario = isGroup ? conversa.wa_chatid : (conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', ''));
 
     // Enviar reacao via provider
+    // UAZAPI: POST /message/react { number, text (emoji), id (wa_message_id) }
     if (conversa.provider === 'uazapi') {
       const url = process.env.UAZAPI_URL;
-      const token = process.env.UAZAPI_TOKEN;
+      const token = getUazapiToken(conversa.categoria);
       if (url && token) {
-        await fetch(`${url}/send/reaction`, {
+        await fetch(`${url}/message/react`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', token },
           body: JSON.stringify({
             number: destinatario,
-            messageId: wa_message_id,
             text: emoji,
+            id: wa_message_id,
           }),
         });
       }

@@ -26,6 +26,7 @@ interface MessageViewProps {
   currentUserRole?: string;
   onDeleteConversa?: (conversaId: number) => void;
   onDeleteMensagem?: (conversaId: number, msgId: number) => void;
+  onEditMensagem?: (conversaId: number, msgId: number, conteudo: string) => Promise<void>;
 }
 
 export default function MessageView({
@@ -43,6 +44,7 @@ export default function MessageView({
   currentUserRole,
   onDeleteConversa,
   onDeleteMensagem,
+  onEditMensagem,
 }: MessageViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +58,8 @@ export default function MessageView({
   const [reactionTarget, setReactionTarget] = useState<{ x: number; y: number; mensagem: Mensagem } | null>(null);
   // Forward modal state
   const [forwardingMsg, setForwardingMsg] = useState<Mensagem | null>(null);
+  // Edit state
+  const [editingMsg, setEditingMsg] = useState<Mensagem | null>(null);
 
   // Limpar estados ao mudar de conversa
   useEffect(() => {
@@ -63,6 +67,7 @@ export default function MessageView({
     setContextMenu(null);
     setReactionTarget(null);
     setForwardingMsg(null);
+    setEditingMsg(null);
   }, [conversa?.id]);
 
   // Auto-scroll para ultima mensagem
@@ -119,6 +124,19 @@ export default function MessageView({
     setForwardingMsg(contextMenu.mensagem);
     setContextMenu(null);
   }, [contextMenu]);
+
+  const handleEdit = useCallback(() => {
+    if (!contextMenu) return;
+    setEditingMsg(contextMenu.mensagem);
+    setReplyingTo(null); // Mutuamente exclusivo
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleEditSend = useCallback(async (msgId: number, conteudo: string) => {
+    if (!conversa || !onEditMensagem) return;
+    await onEditMensagem(conversa.id, msgId, conteudo);
+    setEditingMsg(null);
+  }, [conversa, onEditMensagem]);
 
   const handleDelete = useCallback(() => {
     if (!contextMenu || !conversa || !onDeleteMensagem) return;
@@ -273,6 +291,7 @@ export default function MessageView({
           onReply={handleReply}
           onForward={handleForward}
           onReact={handleReact}
+          onEdit={onEditMensagem ? handleEdit : undefined}
           onDelete={handleDelete}
           onClose={() => setContextMenu(null)}
         />
@@ -310,6 +329,9 @@ export default function MessageView({
           tipoConversa={conversa.tipo}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
+          editingMsg={editingMsg}
+          onCancelEdit={() => setEditingMsg(null)}
+          onEdit={handleEditSend}
         />
       )}
     </div>

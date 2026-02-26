@@ -121,7 +121,9 @@ export default function ConversasPage() {
     loadMore,
     addMensagem,
     removeMensagem,
+    updateMensagem,
     sendMensagem,
+    editMensagem,
   } = useMensagens(selectedConversa?.id ?? null);
 
   const userPhone = session?.user?.telefone;
@@ -206,6 +208,16 @@ export default function ConversasPage() {
           setSelectedConversa((prev) => prev ? { ...prev, atendente_id: d.atendente_id ?? null, ...(d.atendente_nome !== undefined ? { atendente_nome: d.atendente_nome } : {}) } as Conversa : null);
         }
       }
+      if (event === 'mensagem_editada') {
+        const d = data as { conversa_id: number; mensagem: Mensagem };
+        if (selectedConversa && d.conversa_id === selectedConversa.id && d.mensagem) {
+          updateMensagem(d.mensagem.id, {
+            conteudo: d.mensagem.conteudo,
+            is_edited: true,
+            edited_at: d.mensagem.edited_at,
+          });
+        }
+      }
       if (event === 'chamada_nova') {
         const d = data as { chamada: Chamada };
         setActiveCalls((prev) => [...prev, d.chamada]);
@@ -219,7 +231,7 @@ export default function ConversasPage() {
         refresh();
       }
     },
-    [selectedConversa, addMensagem, updateConversa, refresh, isMentioned, operatorStatus],
+    [selectedConversa, addMensagem, updateMensagem, updateConversa, refresh, isMentioned, operatorStatus],
   );
 
   useSSE(handleSSE);
@@ -317,6 +329,13 @@ export default function ConversasPage() {
       }
     },
     [refresh],
+  );
+
+  const handleEditMensagem = useCallback(
+    async (conversaId: number, msgId: number, conteudo: string) => {
+      await editMensagem(conversaId, msgId, conteudo);
+    },
+    [editMensagem],
   );
 
   const handleDeleteMensagem = useCallback(
@@ -445,6 +464,7 @@ export default function ConversasPage() {
           currentUserRole={userRole}
           onDeleteConversa={handleDeleteConversa}
           onDeleteMensagem={handleDeleteMensagem}
+          onEditMensagem={handleEditMensagem}
         />
       </div>
     </>
