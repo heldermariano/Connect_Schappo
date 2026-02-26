@@ -92,10 +92,11 @@ async function sendMediaVia360Dialog(
     // Primeiro, upload da midia
     // Campo 'type' deve ser o MIME type real (ex: audio/ogg), nao a categoria (ex: audio)
     // 360Dialog (Meta Cloud API) nao aceita audio/webm — converter para audio/ogg
+    // mediaType pode ser 'audio' ou 'ptt' (voice recording)
     let uploadMimetype = mimetype;
     let uploadFilename = filename;
-    if (mimetype.includes('webm') && mediaType === 'audio') {
-      uploadMimetype = 'audio/ogg; codecs=opus';
+    if (mimetype.includes('webm') && (mediaType === 'audio' || mediaType === 'ptt')) {
+      uploadMimetype = 'audio/ogg';
       uploadFilename = filename.replace(/\.webm$/, '.ogg');
     }
 
