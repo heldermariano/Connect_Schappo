@@ -166,6 +166,7 @@ class FichaValidator {
         JOIN patients p ON p.id = e.patient_id
         WHERE e.created_at > $1
           AND e.exam_date::date = CURRENT_DATE
+          AND p.birth_date IS NOT NULL
         ORDER BY e.created_at ASC`,
         [this.watermark],
       );
