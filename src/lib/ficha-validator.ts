@@ -292,9 +292,11 @@ class FichaValidator {
   }
 
   private async sendAlerts(row: ExamRow, missing: string[]): Promise<void> {
-    const tecnico = await this.findTechnician(row.technician || '');
+    const tecnicoNaFicha = row.technician?.trim() || '';
+    const tecnicoIdentificado = tecnicoNaFicha.length > 0;
+    const tecnico = tecnicoIdentificado ? await this.findTechnician(tecnicoNaFicha) : null;
     const tecnicoTipo = this.classifyTechnician(tecnico?.setor || null);
-    const tecnicoNome = tecnico?.nome || row.technician || 'Nao identificado';
+    const tecnicoNome = tecnico?.nome || tecnicoNaFicha || 'Nao identificado';
     const tecnicoTelefone = tecnico?.telefone || null;
 
     const nomePaciente = row.name || 'Nao informado';
@@ -306,12 +308,17 @@ class FichaValidator {
       .map((campo) => `\u274C ${CAMPOS_OBRIGATORIOS[campo] || campo}`)
       .join('\n');
 
-    // Montar mensagens conforme templates
-    let alertaTecnico: string;
-    let notificacaoSupervisao: string;
+    // Montar mensagem de alerta ao tecnico (usada quando tecnico tem telefone)
+    const tipoLabel = tecnicoTipo === 'plantonista' ? 'Plantonista' : 'Rotineiro';
+    const regraFaturamento = tecnicoTipo === 'plantonista'
+      ? `Conforme as regras estabelecidas pela empresa, o preenchimento completo da ficha \u00E9 *obrigat\u00F3rio* para a realiza\u00E7\u00E3o e o faturamento do exame.
 
-    if (tecnicoTipo === 'plantonista') {
-      alertaTecnico = `\u26A0\uFE0F *ALERTA \u2014 Ficha Incompleta*
+Fichas com campos obrigat\u00F3rios pendentes *n\u00E3o ser\u00E3o faturadas* e os valores correspondentes *n\u00E3o ser\u00E3o repassados*.`
+      : `O preenchimento completo e correto da ficha \u00E9 *obrigat\u00F3rio* conforme as normas da empresa.
+
+Fichas com campos pendentes ser\u00E3o encaminhadas \u00E0 *supervis\u00E3o* para verifica\u00E7\u00E3o e provid\u00EAncias cab\u00EDveis.`;
+
+    const alertaTecnico = `\u26A0\uFE0F *ALERTA \u2014 Ficha Incompleta*
 
 T\u00E9cnico(a): ${tecnicoNome}
 Paciente: ${nomePaciente}
@@ -321,52 +328,42 @@ A ficha do paciente acima apresenta campos obrigat\u00F3rios n\u00E3o preenchido
 
 ${listaCampos}
 
-Conforme as regras estabelecidas pela empresa, o preenchimento completo da ficha \u00E9 *obrigat\u00F3rio* para a realiza\u00E7\u00E3o e o faturamento do exame.
-
-Fichas com campos obrigat\u00F3rios pendentes *n\u00E3o ser\u00E3o faturadas* e os valores correspondentes *n\u00E3o ser\u00E3o repassados*.
+${regraFaturamento}
 
 Regularize a ficha assim que poss\u00EDvel.
 
 Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
 
-      notificacaoSupervisao = `\uD83D\uDCCB *Ficha Incompleta \u2014 Plantonista*
+    // Montar mensagem para supervisao — varia conforme tecnico identificado ou nao
+    let notificacaoSupervisao: string;
 
-T\u00E9cnico(a): ${tecnicoNome}
-Telefone: ${tecnicoTelefone || 'N\u00E3o cadastrado'}
+    if (!tecnicoIdentificado) {
+      // Tecnico NAO colocou nome na ficha — supervisao precisa verificar o aparelho
+      notificacaoSupervisao = `\uD83D\uDEA8 *Ficha Incompleta \u2014 T\u00E9cnico N\u00E3o Identificado*
+
 Paciente: ${nomePaciente}
 Data: ${dataExame}
 
-A ficha do paciente acima foi criada com campos obrigat\u00F3rios pendentes:
+A ficha do paciente acima foi criada *sem o campo "T\u00E9cnico respons\u00E1vel"* preenchido.
+
+Campos obrigat\u00F3rios pendentes:
 
 ${listaCampos}
 
-O t\u00E9cnico j\u00E1 foi alertado.
-
-Caso n\u00E3o haja corre\u00E7\u00E3o ou justificativa plaus\u00EDvel, as provid\u00EAncias cab\u00EDveis ficam a cargo da supervis\u00E3o.
-
-Conforme regras da empresa, fichas incompletas de plantonistas *n\u00E3o s\u00E3o faturadas*.
+\u26A0\uFE0F *A\u00E7\u00E3o necess\u00E1ria:* Verifique qual t\u00E9cnico est\u00E1 com o aparelho que realizou este exame e solicite a corre\u00E7\u00E3o da ficha.
 
 Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
     } else {
-      alertaTecnico = `\u26A0\uFE0F *ALERTA \u2014 Ficha Incompleta*
+      // Tecnico identificado — mensagem padrao
+      const tecAlertado = tecnicoTelefone
+        ? 'O t\u00E9cnico j\u00E1 foi alertado.'
+        : 'O t\u00E9cnico *n\u00E3o p\u00F4de ser alertado* (telefone n\u00E3o cadastrado no sistema).';
 
-T\u00E9cnico(a): ${tecnicoNome}
-Paciente: ${nomePaciente}
-Data: ${dataExame}
+      const regraFaturamentoSup = tecnicoTipo === 'plantonista'
+        ? '\nConforme regras da empresa, fichas incompletas de plantonistas *n\u00E3o s\u00E3o faturadas*.\n'
+        : '';
 
-A ficha do paciente acima apresenta campos obrigat\u00F3rios n\u00E3o preenchidos:
-
-${listaCampos}
-
-O preenchimento completo e correto da ficha \u00E9 *obrigat\u00F3rio* conforme as normas da empresa.
-
-Fichas com campos pendentes ser\u00E3o encaminhadas \u00E0 *supervis\u00E3o* para verifica\u00E7\u00E3o e provid\u00EAncias cab\u00EDveis.
-
-Regularize a ficha assim que poss\u00EDvel.
-
-Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
-
-      notificacaoSupervisao = `\uD83D\uDCCB *Ficha Incompleta \u2014 Rotineiro*
+      notificacaoSupervisao = `\uD83D\uDCCB *Ficha Incompleta \u2014 ${tipoLabel}*
 
 T\u00E9cnico(a): ${tecnicoNome}
 Telefone: ${tecnicoTelefone || 'N\u00E3o cadastrado'}
@@ -377,10 +374,10 @@ A ficha do paciente acima foi criada com campos obrigat\u00F3rios pendentes:
 
 ${listaCampos}
 
-O t\u00E9cnico j\u00E1 foi alertado.
+${tecAlertado}
 
 Caso n\u00E3o haja corre\u00E7\u00E3o ou justificativa plaus\u00EDvel, as provid\u00EAncias cab\u00EDveis ficam a cargo da supervis\u00E3o.
-
+${regraFaturamentoSup}
 Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
     }
 
@@ -420,9 +417,8 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
 
     if (!alertaRegistrado) return; // ON CONFLICT — ja existia
 
-    // Enviar alertas WhatsApp com logs detalhados
-    // Alerta ao tecnico (se tem telefone)
-    if (tecnicoTelefone) {
+    // Enviar alerta ao tecnico (apenas se identificado E tem telefone)
+    if (tecnicoIdentificado && tecnicoTelefone) {
       try {
         await this.sendWhatsApp(tecnicoTelefone, alertaTecnico);
         console.log(`[FichaValidator] Alerta enviado ao tecnico ${tecnicoNome} (${tecnicoTelefone}) — paciente: ${nomePaciente}`);
@@ -430,17 +426,18 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
         console.error(`[FichaValidator] FALHA ao enviar alerta ao tecnico ${tecnicoNome} (${tecnicoTelefone}):`, err);
         this.stats.alertasFalha++;
       }
+      // Delay entre mensagens para evitar rate limit
+      await delay(WHATSAPP_DELAY_MS);
+    } else if (tecnicoIdentificado && !tecnicoTelefone) {
+      console.warn(`[FichaValidator] Tecnico "${tecnicoNome}" sem telefone cadastrado — alerta nao enviado, supervisao sera notificada`);
     } else {
-      console.warn(`[FichaValidator] Tecnico "${tecnicoNome}" sem telefone cadastrado — alerta nao enviado`);
+      console.warn(`[FichaValidator] Tecnico nao identificado na ficha de ${nomePaciente} — supervisao sera notificada`);
     }
 
-    // Delay entre mensagens para evitar rate limit
-    await delay(WHATSAPP_DELAY_MS);
-
-    // Notificacao a supervisao (Dany)
+    // Notificacao a supervisao (SEMPRE — tanto com tecnico quanto sem)
     try {
       await this.sendWhatsApp(SUPERVISAO_TELEFONE, notificacaoSupervisao);
-      console.log(`[FichaValidator] Supervisao notificada sobre ficha de ${nomePaciente}`);
+      console.log(`[FichaValidator] Supervisao notificada sobre ficha de ${nomePaciente} (tecnico: ${tecnicoIdentificado ? tecnicoNome : 'NAO IDENTIFICADO'})`);
     } catch (err) {
       console.error(`[FichaValidator] FALHA ao notificar supervisao sobre ${nomePaciente}:`, err);
       this.stats.alertasFalha++;
