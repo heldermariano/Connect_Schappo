@@ -365,6 +365,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       const formData = new FormData();
       formData.append('conversa_id', String(conversaId));
       formData.append('file', file);
+      formData.append('voice_recording', 'true');
 
       const res = await fetch('/api/mensagens/send-media', {
         method: 'POST',

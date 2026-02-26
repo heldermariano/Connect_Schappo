@@ -196,19 +196,23 @@ export async function POST(request: NextRequest) {
     }
 
     const mimetype = file.type || 'application/octet-stream';
-    const mediaType = getMediaType(mimetype);
+    const isVoiceRecording = formData.get('voice_recording') === 'true';
+    const mediaType = isVoiceRecording ? 'ptt' : getMediaType(mimetype);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
     // Prefixar nome do operador em negrito no caption (visivel no WhatsApp)
+    // PTT/audio nao suporta caption no WhatsApp
     const nomeOperador = session.user.nome;
-    const captionToSend = caption ? `*${nomeOperador}:*\n${caption}` : `*${nomeOperador}*`;
+    const captionToSend = mediaType === 'ptt' ? undefined : (caption ? `*${nomeOperador}:*\n${caption}` : `*${nomeOperador}*`);
 
     // Enviar via provider correto
     let sendResult: { success: boolean; messageId?: string; error?: string };
 
     if (conversa.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, file.name, mimetype, captionToSend);
+      // 360Dialog (Meta Cloud API) nao tem tipo 'ptt', usar 'audio'
+      const dialogMediaType = mediaType === 'ptt' ? 'audio' : mediaType;
+      sendResult = await sendMediaVia360Dialog(to, dialogMediaType, fileBuffer, file.name, mimetype, captionToSend);
     } else {
       const uazapiToken = getUazapiToken(conversa.categoria);
       sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, uazapiToken, captionToSend);
@@ -218,10 +222,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: sendResult.error || 'Falha ao enviar midia' }, { status: 502 });
     }
 
-    // Salvar mensagem no banco
+    // Salvar mensagem no banco (tipo_mensagem no banco sempre usa tipo generico, nao ptt)
     const owner = CATEGORIA_OWNER[conversa.categoria] || '';
     const waMessageId = sendResult.messageId || `sent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const conteudo = caption || `[${mediaType === 'image' ? 'Imagem' : mediaType === 'audio' ? 'Audio' : mediaType === 'video' ? 'Video' : 'Documento'}]`;
+    const dbMediaType = mediaType === 'ptt' ? 'audio' : mediaType;
+    const conteudo = caption || `[${dbMediaType === 'image' ? 'Imagem' : dbMediaType === 'audio' ? 'Audio' : dbMediaType === 'video' ? 'Video' : 'Documento'}]`;
 
     const msgResult = await pool.query(
       `INSERT INTO atd.mensagens (
@@ -235,7 +240,7 @@ export async function POST(request: NextRequest) {
         waMessageId,
         owner,
         session.user.nome,
-        mediaType,
+        dbMediaType,
         conteudo,
         mimetype,
         file.name,
