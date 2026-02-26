@@ -84,7 +84,7 @@ async function sendMediaVia360Dialog(
   mimetype: string,
   caption?: string,
   isVoiceRecording?: boolean,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; mediaId?: string; error?: string }> {
   const apiUrl = process.env.DIALOG360_API_URL;
   const apiKey = process.env.DIALOG360_API_KEY;
   if (!apiUrl || !apiKey) return { success: false, error: '360Dialog nao configurado' };
@@ -160,7 +160,7 @@ async function sendMediaVia360Dialog(
 
     const sendData = await sendRes.json();
     console.log(`[send-media/360dialog] Send OK: msgId=${sendData.messages?.[0]?.id} type=${sendType} voice=${isVoiceRecording}`);
-    return { success: true, messageId: sendData.messages?.[0]?.id };
+    return { success: true, messageId: sendData.messages?.[0]?.id, mediaId };
   } catch (err) {
     console.error('[send-media/360dialog] Erro:', err);
     return { success: false, error: 'Erro de conexao com 360Dialog' };
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
     const captionToSend = mediaType === 'ptt' ? undefined : (caption ? `*${nomeOperador}:*\n${caption}` : `*${nomeOperador}*`);
 
     // Enviar via provider correto
-    let sendResult: { success: boolean; messageId?: string; error?: string };
+    let sendResult: { success: boolean; messageId?: string; mediaId?: string; error?: string };
 
     if (conversa.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
@@ -245,6 +245,16 @@ export async function POST(request: NextRequest) {
     const dbMediaType = mediaType === 'ptt' ? 'audio' : mediaType;
     const conteudo = caption || `[${dbMediaType === 'image' ? 'Imagem' : dbMediaType === 'audio' ? 'Audio' : dbMediaType === 'video' ? 'Video' : 'Documento'}]`;
 
+    // Metadata: incluir provider e media_id da 360Dialog para o media proxy
+    const metadata: Record<string, unknown> = {
+      sent_by: session.user.id,
+      sent_by_name: session.user.nome,
+      provider: conversa.provider,
+    };
+    if (sendResult.mediaId) {
+      metadata.dialog360_media_id = sendResult.mediaId;
+    }
+
     const msgResult = await pool.query(
       `INSERT INTO atd.mensagens (
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
@@ -261,7 +271,7 @@ export async function POST(request: NextRequest) {
         conteudo,
         mimetype,
         file.name,
-        JSON.stringify({ sent_by: session.user.id, sent_by_name: session.user.nome }),
+        JSON.stringify(metadata),
       ],
     );
 

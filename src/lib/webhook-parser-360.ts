@@ -94,10 +94,15 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
               break;
           }
 
-          // Metadata: incluir reacted_to para reacoes
-          const metadata: Record<string, unknown> = {};
+          // Metadata: incluir media_id da 360Dialog para download via API
+          const metadata: Record<string, unknown> = { provider: '360dialog' };
           if (msg.type === 'reaction' && msg.reaction?.message_id) {
             metadata.reacted_to = msg.reaction.message_id;
+          }
+          // Salvar media_id para o media proxy baixar depois
+          const mediaObj = msg.image || msg.audio || msg.video || msg.document || msg.sticker;
+          if (mediaObj && 'id' in mediaObj) {
+            metadata.dialog360_media_id = (mediaObj as { id: string }).id;
           }
 
           messages.push({
