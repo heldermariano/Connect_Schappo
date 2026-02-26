@@ -83,6 +83,7 @@ async function sendMediaVia360Dialog(
   filename: string,
   mimetype: string,
   caption?: string,
+  isVoiceRecording?: boolean,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const apiUrl = process.env.DIALOG360_API_URL;
   const apiKey = process.env.DIALOG360_API_KEY;
@@ -114,20 +115,27 @@ async function sendMediaVia360Dialog(
 
     if (!uploadRes.ok) {
       const body = await uploadRes.text();
-      console.error('[send-media/360dialog] Upload falhou:', body);
+      console.error(`[send-media/360dialog] Upload falhou (${uploadRes.status}): mime=${uploadMimetype} file=${uploadFilename}`, body);
       return { success: false, error: `Upload falhou: ${uploadRes.status}` };
     }
 
     const uploadData = await uploadRes.json();
     const mediaId = uploadData.id;
+    console.log(`[send-media/360dialog] Upload OK: mediaId=${mediaId} mime=${uploadMimetype} voice=${isVoiceRecording}`);
 
     // Enviar mensagem com a midia
+    // Meta Cloud API usa 'audio' como tipo (nao 'ptt')
+    const sendType = (mediaType === 'ptt') ? 'audio' : mediaType;
     const mediaPayload: Record<string, unknown> = { id: mediaId };
-    if (caption && (mediaType === 'image' || mediaType === 'video' || mediaType === 'document')) {
+    if (caption && (sendType === 'image' || sendType === 'video' || sendType === 'document')) {
       mediaPayload.caption = caption;
     }
-    if (mediaType === 'document') {
+    if (sendType === 'document') {
       mediaPayload.filename = filename;
+    }
+    // Voice message (PTT): adicionar voice=true para reproduzir como mensagem de voz
+    if (isVoiceRecording) {
+      mediaPayload.voice = true;
     }
 
     const sendRes = await fetch(`${apiUrl}/messages`, {
@@ -139,18 +147,19 @@ async function sendMediaVia360Dialog(
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to,
-        type: mediaType,
-        [mediaType]: mediaPayload,
+        type: sendType,
+        [sendType]: mediaPayload,
       }),
     });
 
     if (!sendRes.ok) {
       const body = await sendRes.text();
-      console.error('[send-media/360dialog] Send falhou:', body);
+      console.error(`[send-media/360dialog] Send falhou (${sendRes.status}): type=${sendType} voice=${isVoiceRecording}`, body);
       return { success: false, error: `Send falhou: ${sendRes.status}` };
     }
 
     const sendData = await sendRes.json();
+    console.log(`[send-media/360dialog] Send OK: msgId=${sendData.messages?.[0]?.id} type=${sendType} voice=${isVoiceRecording}`);
     return { success: true, messageId: sendData.messages?.[0]?.id };
   } catch (err) {
     console.error('[send-media/360dialog] Erro:', err);
@@ -220,9 +229,7 @@ export async function POST(request: NextRequest) {
 
     if (conversa.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      // 360Dialog (Meta Cloud API) nao tem tipo 'ptt', usar 'audio'
-      const dialogMediaType = mediaType === 'ptt' ? 'audio' : mediaType;
-      sendResult = await sendMediaVia360Dialog(to, dialogMediaType, fileBuffer, file.name, mimetype, captionToSend);
+      sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, file.name, mimetype, captionToSend, isVoiceRecording);
     } else {
       const uazapiToken = getUazapiToken(conversa.categoria);
       sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, uazapiToken, captionToSend);

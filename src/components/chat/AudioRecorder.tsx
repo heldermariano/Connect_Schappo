@@ -41,9 +41,10 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Tentar codecs em ordem de preferencia
+      // Preferir ogg/opus (compativel com WhatsApp/Meta Cloud API)
+      // Fallback para webm/opus se ogg nao suportado
       let mimeType = '';
-      for (const mime of ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']) {
+      for (const mime of ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm']) {
         if (MediaRecorder.isTypeSupported(mime)) {
           mimeType = mime;
           break;
@@ -59,11 +60,12 @@ export default function AudioRecorder({ onRecordingComplete, onCancel, disabled 
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        const ext = (recorder.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
+        const actualMime = recorder.mimeType || 'audio/ogg';
+        const blob = new Blob(chunksRef.current, { type: actualMime });
+        const ext = actualMime.includes('webm') ? 'webm' : 'ogg';
         const now = new Date();
         const ts = now.toISOString().replace(/[-:T]/g, '').slice(0, 15);
-        const file = new File([blob], `audio_${ts}.${ext}`, { type: recorder.mimeType || 'audio/webm' });
+        const file = new File([blob], `audio_${ts}.${ext}`, { type: actualMime });
         onRecordingComplete(file);
       };
 
