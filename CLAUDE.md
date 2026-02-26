@@ -28,6 +28,7 @@
 | NextAuth | 4.24.13 | Autenticacao JWT |
 | sip.js | 0.21.2 | Softphone WebRTC |
 | asterisk-manager | 0.2.0 | Client AMI (Issabel) |
+| ffmpeg-static | 5.3.0 | Conversao audio webm→ogg (envio 360Dialog) |
 | Docker + Traefik | latest | Deploy producao |
 
 ---
@@ -83,6 +84,11 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Hub de tecnicos EEG (CRUD admin/supervisor) | DONE |
 | Validador automatico de fichas EEG (polling + alertas WhatsApp) | DONE |
 | Timezone America/Sao_Paulo (Node.js + PostgreSQL + Docker) | DONE |
+| Conversao audio webm→ogg via ffmpeg (envio 360Dialog) | DONE |
+| Media proxy multi-provider (UAZAPI + 360Dialog) | DONE |
+| Painel conversas redesenhado (2 tabs + busca inline + pendentes) | DONE |
+| Busca profunda em mensagens (conteudo) | DONE |
+| Listagem de grupos do canal (modal sync UAZAPI) | DONE |
 
 ### Pendente / Proximo
 
@@ -146,7 +152,7 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 ```
 connect-schappo/
 ├── CLAUDE.md                           # Este arquivo
-├── package.json                        # Deps: next, react, pg, next-auth, sip.js, asterisk-manager
+├── package.json                        # Deps: next, react, pg, next-auth, sip.js, asterisk-manager, ffmpeg-static
 ├── next.config.ts                      # standalone + allowedDevOrigins
 ├── tsconfig.json                       # strict, alias @/* → ./src/*
 ├── Dockerfile                          # Multi-stage Node 20 Alpine (TZ=America/Sao_Paulo + tzdata)
@@ -216,7 +222,7 @@ connect-schappo/
     │       ├── auth/[...nextauth]/route.ts      # NextAuth handler
     │       ├── events/route.ts                  # SSE stream tempo real
     │       ├── health/route.ts                  # Health check (DB + AMI)
-    │       ├── media/[messageId]/route.ts       # Proxy midia (stream + cache 30min)
+    │       ├── media/[messageId]/route.ts       # Proxy midia multi-provider (UAZAPI + 360Dialog, cache 30min)
     │       │
     │       ├── webhook/
     │       │   ├── uazapi/route.ts              # POST: webhook UAZAPI (msg + call)
@@ -232,7 +238,7 @@ connect-schappo/
     │       │   ├── [conversaId]/route.ts        # GET: mensagens paginadas + mencoes
     │       │   ├── [conversaId]/[msgId]/route.ts # DELETE: excluir mensagem
     │       │   ├── send/route.ts                # POST: enviar texto
-    │       │   ├── send-media/route.ts          # POST: enviar midia (endpoints UAZAPI especificos)
+    │       │   ├── send-media/route.ts          # POST: enviar midia (UAZAPI + 360Dialog + ffmpeg audio)
     │       │   ├── forward/route.ts             # POST: encaminhar mensagem
     │       │   ├── react/route.ts               # POST: reagir com emoji
     │       │   ├── send-contact/route.ts        # POST: enviar contato (vCard)
@@ -288,6 +294,8 @@ connect-schappo/
     │   │   ├── AttachmentPreview.tsx     # Preview arquivo antes de enviar
     │   │   ├── ExameSearch.tsx           # Busca exames via # (popup, download PDFs)
     │   │   ├── QuickReplyAutocomplete.tsx # Autocomplete respostas prontas (ativado por /)
+    │   │   ├── AudioRecorder.tsx          # Gravacao audio PTT (ogg/webm, guard Strict Mode)
+    │   │   ├── GrupoListModal.tsx        # Modal listar/sync grupos do canal UAZAPI
     │   │   ├── AtribuirDropdown.tsx      # Dropdown atribuir conversa a atendente
     │   │   └── MessageContextMenu.tsx    # Menu de contexto (copiar, responder, reagir, encaminhar, editar, deletar)
     │   │
@@ -321,7 +329,7 @@ connect-schappo/
     │   │   └── RespostaProntaModal.tsx    # Modal criar/editar resposta pronta
     │   │
     │   ├── filters/
-    │   │   ├── CategoryFilter.tsx         # Filtro: Todos/Individual/Grupo EEG/Grupo Recepcao
+    │   │   ├── CategoryFilter.tsx         # 2 tabs (Individual/Grupo) + busca inline + pendentes + listar grupos
     │   │   └── SearchBar.tsx              # Campo busca nome/telefone
     │   │
     │   └── ui/
@@ -411,14 +419,14 @@ Schema: atd
 
 | Rota | Metodo | Descricao |
 |------|--------|-----------|
-| `/api/conversas` | GET | Lista com filtros (categoria, tipo, busca) + JOIN contatos |
+| `/api/conversas` | GET | Lista com filtros (categoria, tipo, busca profunda em mensagens) + JOIN contatos |
 | `/api/conversas/[id]/read` | PATCH | Marcar como lida |
 | `/api/conversas/[id]/atribuir` | PATCH | Atribuir atendente / finalizar (is_archived) |
 | `/api/conversas/[id]` | DELETE | Excluir conversa (admin) |
 | `/api/mensagens/[conversaId]` | GET | Mensagens paginadas (cursor) + mencoes resolvidas |
 | `/api/mensagens/[conversaId]/[msgId]` | DELETE | Excluir mensagem (admin) |
 | `/api/mensagens/send` | POST | Enviar texto via UAZAPI ou 360Dialog |
-| `/api/mensagens/send-media` | POST | Enviar midia (endpoints UAZAPI especificos + 360Dialog) |
+| `/api/mensagens/send-media` | POST | Enviar midia (UAZAPI + 360Dialog, conversao audio via ffmpeg) |
 | `/api/mensagens/forward` | POST | Encaminhar mensagem para outro contato/conversa |
 | `/api/mensagens/react` | POST | Reagir com emoji a mensagem existente |
 | `/api/mensagens/send-contact` | POST | Enviar contato (vCard) via WhatsApp |
@@ -464,7 +472,7 @@ Schema: atd
 |------|--------|-----------|
 | `/api/events` | GET | SSE stream (nova_mensagem, conversa_atualizada, chamada_*, atendente_status) |
 | `/api/health` | GET | Health check (DB + AMI) |
-| `/api/media/[messageId]` | GET | Proxy midia com cache + retry URL expirada |
+| `/api/media/[messageId]` | GET | Proxy midia multi-provider (UAZAPI + 360Dialog) com cache + retry |
 | `/api/atendentes/sip` | GET/PUT | Config SIP (password AES encrypted) |
 | `/api/atendentes/status` | GET/PATCH | Presenca operador + AMI queue pause |
 
@@ -502,6 +510,11 @@ Schema: atd
 - Payload segue padrao Meta Cloud API
 - Webhook GET valida `hub.verify_token` vs `WEBHOOK_SECRET`
 - Suporta Calling API (SIP) no numero 556133455701
+- **Audio**: 360Dialog NAO aceita `audio/webm`. Browser grava webm → server converte para ogg via ffmpeg-static (remux opus). Audio MP4 do MediaRecorder tambem nao entrega (aceita upload mas WhatsApp nao reproduz).
+- **Formatos audio aceitos**: `audio/aac`, `audio/mp4`, `audio/mpeg`, `audio/amr`, `audio/ogg`, `audio/opus`
+- **Voice message (PTT)**: Usar `type: 'audio'` com `voice: true` no payload (nao usar tipo 'ptt')
+- **Media download**: `GET /{media_id}` retorna URL do Facebook CDN (`lookaside.fbsbx.com`). Reescrever URL para proxy `waba-v2.360dialog.io` e usar header `D360-API-KEY` para download.
+- **Metadata**: Mensagens 360Dialog armazenam `dialog360_media_id` e `provider: '360dialog'` em `metadata` (JSONB) para o media proxy
 
 ### Issabel/Asterisk AMI
 
@@ -668,6 +681,8 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 6. **Softphone sem SSR** — Sempre usar `dynamic()` com `ssr: false` para sip.js
 7. **Finalizar = arquivar** — `is_archived = TRUE` oculta da lista; webhooks resetam para `FALSE` ao receber nova msg
 8. **UAZAPI endpoints especificos** — Usar `/send/document`, `/send/image`, etc. (nao `/send/media`) para filename funcionar
+9. **Audio 360Dialog** — Sempre converter para `audio/ogg` antes de enviar. Browser grava webm/mp4 que WhatsApp nao reproduz. Usar ffmpeg-static (`convertToOgg`).
+10. **Media proxy dual-provider** — Detectar provider via `metadata.provider` ou `metadata.dialog360_media_id`. 360Dialog: reescrever URLs Facebook CDN para proxy 360Dialog.
 
 ---
 
