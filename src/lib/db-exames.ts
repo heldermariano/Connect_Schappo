@@ -11,4 +11,9 @@ const examesPool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
+// Seta timezone em cada conexao
+examesPool.on('connect', (client) => {
+  client.query("SET timezone TO 'America/Sao_Paulo'");
+});
+
 export default examesPool;
