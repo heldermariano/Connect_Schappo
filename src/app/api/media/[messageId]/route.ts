@@ -35,27 +35,32 @@ async function get360DialogMediaUrl(mediaId: string): Promise<string | null> {
 }
 
 // Baixa midia usando URL da 360Dialog
-// A URL retornada pode ser do dominio 360dialog ou do Facebook — ambos precisam do header
-// Se houver redirect, fetch do Node segue automaticamente mas pode perder headers
+// A URL retornada pela API aponta para lookaside.fbsbx.com (Facebook CDN) que requer OAuth.
+// Substituir o host por waba-v2.360dialog.io (proxy da 360Dialog) que aceita D360-API-KEY.
+function rewrite360Url(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // Substituir qualquer host Facebook pelo proxy da 360Dialog
+    if (parsed.hostname.includes('fbsbx.com') || parsed.hostname.includes('facebook.com') || parsed.hostname.includes('fbcdn.net')) {
+      const proxyBase = DIALOG360_API_URL || 'https://waba-v2.360dialog.io';
+      return `${proxyBase}${parsed.pathname}${parsed.search}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 async function fetch360DialogMedia(url: string): Promise<Response | null> {
   try {
-    // Tentar com D360-API-KEY (URLs do dominio 360dialog)
-    let res = await fetch(url, {
+    const proxyUrl = rewrite360Url(url);
+    const res = await fetch(proxyUrl, {
       headers: { 'D360-API-KEY': DIALOG360_API_KEY },
       redirect: 'follow',
     });
     if (res.ok) return res;
 
-    // Se 401/403, tentar com Authorization Bearer (URLs do Facebook/Meta)
-    if (res.status === 401 || res.status === 403) {
-      res = await fetch(url, {
-        headers: { Authorization: `Bearer ${DIALOG360_API_KEY}` },
-        redirect: 'follow',
-      });
-      if (res.ok) return res;
-    }
-
-    console.error(`[media proxy] 360Dialog download falhou: ${res.status} url=${url.substring(0, 80)}...`);
+    console.error(`[media proxy] 360Dialog download falhou: ${res.status} url=${proxyUrl.substring(0, 100)}...`);
     return null;
   } catch (err) {
     console.error('[media proxy] 360Dialog download erro:', err);
