@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
           c.categoria,
           c.ultima_msg_at,
           ct.chatwoot_id,
-          ct.notas
+          ct.notas,
+          c.is_archived
         FROM atd.conversas c
         LEFT JOIN atd.contatos ct ON ct.telefone = c.telefone AND ct.telefone IS NOT NULL AND ct.telefone != ''
         WHERE c.tipo = 'individual' AND c.telefone IS NOT NULL AND c.telefone != ''
@@ -40,7 +41,8 @@ export async function GET(request: NextRequest) {
           NULL AS categoria,
           NULL::timestamptz AS ultima_msg_at,
           ct.chatwoot_id,
-          ct.notas
+          ct.notas,
+          NULL::boolean AS is_archived
         FROM atd.participantes_grupo p
         LEFT JOIN atd.contatos ct ON ct.telefone = p.wa_phone AND ct.telefone IS NOT NULL AND ct.telefone != ''
         WHERE COALESCE(p.nome_salvo, p.nome_whatsapp) IS NOT NULL
@@ -56,7 +58,8 @@ export async function GET(request: NextRequest) {
           NULL AS categoria,
           NULL::timestamptz AS ultima_msg_at,
           ct.chatwoot_id,
-          ct.notas
+          ct.notas,
+          NULL::boolean AS is_archived
         FROM atd.contatos ct
         WHERE ct.telefone IS NOT NULL AND ct.telefone != ''
           AND NOT EXISTS (
@@ -84,7 +87,8 @@ export async function GET(request: NextRequest) {
           categoria,
           ultima_msg_at,
           chatwoot_id,
-          notas
+          notas,
+          is_archived
         FROM todos
         ORDER BY telefone, ultima_msg_at DESC NULLS LAST
       )

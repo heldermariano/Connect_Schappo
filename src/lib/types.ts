@@ -145,9 +145,19 @@ export interface ChatInternoMensagem {
   id: number;
   chat_id: number;
   atendente_id: number;
-  conteudo: string;
+  conteudo: string | null;
   lida: boolean;
   created_at: string;
+  // Media
+  tipo?: 'text' | 'image' | 'audio' | 'video' | 'document' | 'ptt';
+  media_url?: string | null;
+  media_mimetype?: string | null;
+  media_filename?: string | null;
+  // Reacoes
+  reacoes?: Array<{ emoji: string; atendente_id: number; nome: string }>;
+  // Reply
+  reply_to_id?: number | null;
+  reply_to?: { conteudo: string | null; nome_remetente: string } | null;
   // JOIN
   nome_remetente?: string;
 }
@@ -211,14 +221,15 @@ export type SipCallState = 'idle' | 'calling' | 'ringing' | 'in-call' | 'on-hold
 // --- SSE Events ---
 
 export type SSEEvent =
-  | { type: 'nova_mensagem'; data: { conversa_id: number; mensagem: Mensagem; categoria?: string } }
+  | { type: 'nova_mensagem'; data: { conversa_id: number; mensagem: Mensagem; categoria?: string; tipo?: string } }
   | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null; ultima_msg_from_me?: boolean } }
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
   | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }
   | { type: 'atendente_status'; data: { atendente_id: number; nome: string; status: string } }
   | { type: 'softphone_incoming'; data: { caller_number: string; caller_name?: string } }
-  | { type: 'chat_interno_mensagem'; data: { chat_id: number; mensagem: ChatInternoMensagem; destinatario_id: number } };
+  | { type: 'chat_interno_mensagem'; data: { chat_id: number; mensagem: ChatInternoMensagem; destinatario_id: number } }
+  | { type: 'chat_interno_reacao'; data: { chat_id: number; mensagem_id: number; reacoes: Array<{ emoji: string; atendente_id: number; nome: string }>; destinatario_id: number } };
 
 // --- Webhook Payloads ---
 

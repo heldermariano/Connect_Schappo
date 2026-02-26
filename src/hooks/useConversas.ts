@@ -8,6 +8,7 @@ interface UseConversasParams {
   tipo?: string;
   pendentes?: string;
   busca?: string;
+  historico?: string;
 }
 
 interface UseConversasResult {
@@ -34,6 +35,7 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
       if (params.tipo) query.set('tipo', params.tipo);
       if (params.pendentes) query.set('pendentes', params.pendentes);
       if (params.busca) query.set('busca', params.busca);
+      if (params.historico) query.set('historico', params.historico);
 
       const res = await fetch(`/api/conversas?${query.toString()}`);
       if (!res.ok) throw new Error('Erro ao carregar conversas');
@@ -47,7 +49,7 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
     } finally {
       setLoading(false);
     }
-  }, [params.categoria, params.tipo, params.pendentes, params.busca]);
+  }, [params.categoria, params.tipo, params.pendentes, params.busca, params.historico]);
 
   useEffect(() => {
     fetchConversas();

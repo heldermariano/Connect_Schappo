@@ -51,7 +51,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const conditions: string[] = ['c.is_archived = FALSE'];
+  const historico = params.get('historico'); // 'true' — buscar conversas finalizadas
+  const conditions: string[] = [historico === 'true' ? 'c.is_archived = TRUE' : 'c.is_archived = FALSE'];
   const values: unknown[] = [];
   let paramIndex = 1;
 

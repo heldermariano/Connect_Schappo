@@ -93,12 +93,12 @@ export function useChatInternoMensagens(chatId: number | null) {
     });
   }, []);
 
-  const sendMensagem = useCallback(async (chatId: number, conteudo: string) => {
+  const sendMensagem = useCallback(async (chatId: number, conteudo: string, replyToId?: number) => {
     try {
       const res = await fetch(`/api/chat-interno/${chatId}/mensagens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conteudo }),
+        body: JSON.stringify({ conteudo, reply_to_id: replyToId }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -111,5 +111,55 @@ export function useChatInternoMensagens(chatId: number | null) {
     return null;
   }, [addMensagem]);
 
-  return { mensagens, loading, hasMore, addMensagem, sendMensagem };
+  const sendMedia = useCallback(async (chatId: number, file: File, caption?: string, voiceRecording?: boolean, replyToId?: number) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (caption) formData.append('caption', caption);
+      if (voiceRecording) formData.append('voice_recording', 'true');
+      if (replyToId) formData.append('reply_to_id', replyToId.toString());
+
+      const res = await fetch(`/api/chat-interno/${chatId}/media`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        addMensagem(data.mensagem);
+        return data.mensagem;
+      }
+    } catch (err) {
+      console.error('[useChatInternoMensagens] Erro ao enviar media:', err);
+    }
+    return null;
+  }, [addMensagem]);
+
+  const reactToMessage = useCallback(async (chatId: number, mensagemId: number, emoji: string) => {
+    try {
+      const res = await fetch(`/api/chat-interno/${chatId}/react`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem_id: mensagemId, emoji }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Atualizar reacoes na mensagem localmente
+        setMensagens((prev) =>
+          prev.map((m) => m.id === mensagemId ? { ...m, reacoes: data.reacoes } : m),
+        );
+        return data.reacoes;
+      }
+    } catch (err) {
+      console.error('[useChatInternoMensagens] Erro ao reagir:', err);
+    }
+    return null;
+  }, []);
+
+  const updateMessageReacoes = useCallback((mensagemId: number, reacoes: Array<{ emoji: string; atendente_id: number; nome: string }>) => {
+    setMensagens((prev) =>
+      prev.map((m) => m.id === mensagemId ? { ...m, reacoes } : m),
+    );
+  }, []);
+
+  return { mensagens, loading, hasMore, addMensagem, sendMensagem, sendMedia, reactToMessage, updateMessageReacoes };
 }

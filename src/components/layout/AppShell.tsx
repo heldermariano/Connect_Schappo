@@ -10,7 +10,7 @@ import { AppProvider, useAppContext } from '@/contexts/AppContext';
 import { useSSE } from '@/hooks/useSSE';
 import { requestNotificationPermission } from '@/lib/desktop-notification';
 import { showToastNotification, playNotificationBeep } from '@/lib/notification';
-import type { ChatInternoSSEData } from '@/components/chat-interno/ChatInternoPopup';
+import type { ChatInternoSSEData, ChatInternoReacaoSSEData } from '@/components/chat-interno/ChatInternoPopup';
 
 // Importar SoftphoneFloating dinamicamente sem SSR (sip.js usa APIs do browser)
 const SoftphoneFloating = dynamic(() => import('@/components/softphone/SoftphoneFloating'), {
@@ -28,6 +28,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const [softphoneOpen, setSoftphoneOpen] = useState(false);
   const chatInternoOpenRef = useRef(false);
   const [chatInternoSSE, setChatInternoSSE] = useState<ChatInternoSSEData | null>(null);
+  const [chatInternoReacaoSSE, setChatInternoReacaoSSE] = useState<ChatInternoReacaoSSEData | null>(null);
   const [autoOpenChat, setAutoOpenChat] = useState<{ chat_id: number; sender_id: number; sender_name: string } | null>(null);
   const router = useRouter();
   const userId = session?.user?.id ? parseInt(session.user.id as string) : 0;
@@ -52,22 +53,39 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
       // Toast para nova mensagem WhatsApp (se nao estiver na conversa ativa)
       if (event === 'nova_mensagem') {
-        const d = data as { conversa_id: number; categoria?: string; mensagem: { from_me: boolean; sender_name?: string; conteudo?: string; tipo_mensagem?: string } };
+        const d = data as { conversa_id: number; categoria?: string; tipo?: string; mensagem: { from_me: boolean; sender_name?: string; conteudo?: string; tipo_mensagem?: string } };
         if (!d.mensagem.from_me && operatorStatusRef.current === 'disponivel') {
-          const senderName = d.mensagem.sender_name || 'Contato';
-          const preview = d.mensagem.conteudo
-            ? d.mensagem.conteudo.substring(0, 80)
-            : d.mensagem.tipo_mensagem === 'image' ? 'Imagem'
-            : d.mensagem.tipo_mensagem === 'audio' ? 'Audio'
-            : d.mensagem.tipo_mensagem === 'video' ? 'Video'
-            : d.mensagem.tipo_mensagem === 'document' ? 'Documento'
-            : 'Nova mensagem';
+          // Filtrar notificacoes por perfil do operador
+          const userGrupo = (session?.user as { grupo?: string })?.grupo || 'todos';
+          const isGrupo = d.tipo === 'grupo';
 
-          const canal = d.categoria || '';
-          playNotificationBeep();
-          showToastNotification(senderName, preview, () => {
-            router.push(`/conversas?canal=${canal}&id=${d.conversa_id}`);
-          }, canal);
+          // Recepcao: nao notifica mensagens de grupo
+          if (userGrupo === 'recepcao' && isGrupo) {
+            // skip — recepcao so recebe notificacoes de conversas individuais
+          } else {
+            const senderName = d.mensagem.sender_name || 'Contato';
+            const preview = d.mensagem.conteudo
+              ? d.mensagem.conteudo.substring(0, 80)
+              : d.mensagem.tipo_mensagem === 'image' ? 'Imagem'
+              : d.mensagem.tipo_mensagem === 'audio' ? 'Audio'
+              : d.mensagem.tipo_mensagem === 'video' ? 'Video'
+              : d.mensagem.tipo_mensagem === 'document' ? 'Documento'
+              : 'Nova mensagem';
+
+            const canal = d.categoria || '';
+            playNotificationBeep();
+            showToastNotification(senderName, preview, () => {
+              router.push(`/conversas?canal=${canal}&id=${d.conversa_id}`);
+            }, canal, isGrupo);
+          }
+        }
+      }
+
+      // Chat interno: reacoes SSE
+      if (event === 'chat_interno_reacao') {
+        const d = data as ChatInternoReacaoSSEData;
+        if (d.destinatario_id === userId && chatInternoOpenRef.current) {
+          setChatInternoReacaoSSE({ ...d });
         }
       }
 
@@ -171,6 +189,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             <ChatInternoPopup
               onClose={() => setChatInternoOpen(false)}
               sseMessage={chatInternoSSE}
+              sseReacao={chatInternoReacaoSSE}
               autoOpenChat={autoOpenChat}
               onAutoOpenHandled={() => setAutoOpenChat(null)}
             />

@@ -9,6 +9,7 @@ import { StatusPresenca } from '@/components/ui/StatusBadge';
 import StatusSelector from '@/components/ui/StatusSelector';
 import Avatar from '@/components/ui/Avatar';
 import { Contato, WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
+import AddContatoModal from '@/components/contatos/AddContatoModal';
 import { useAppContext } from '@/contexts/AppContext';
 
 interface HeaderProps {
@@ -44,6 +45,8 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
   const [criandoConversa, setCriandoConversa] = useState<string | null>(null);
   // Seletor de canal ao criar conversa nova
   const [channelSelectContato, setChannelSelectContato] = useState<Contato | null>(null);
+  const [showAddContato, setShowAddContato] = useState(false);
+  const [addContatoPhone, setAddContatoPhone] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -124,12 +127,21 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
   }, []);
 
   const handleContatoClick = useCallback((contato: Contato) => {
-    if (contato.conversa_id) {
+    const isArchived = (contato as Contato & { is_archived?: boolean }).is_archived;
+
+    if (contato.conversa_id && !isArchived) {
+      // Conversa ativa: abrir direto
       setShowDropdown(false);
       onBuscaChange('');
-      // Redirecionar para o canal correto
       const canal = contato.categoria || '';
       router.push(`/conversas?canal=${canal}&id=${contato.conversa_id}`);
+      return;
+    }
+
+    if (contato.conversa_id && isArchived) {
+      // Conversa finalizada: mostrar seletor para continuar no mesmo canal ou outro
+      if (!contato.telefone) return;
+      setChannelSelectContato(contato);
       return;
     }
 
@@ -175,7 +187,24 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
               <div className="px-4 py-3 text-sm text-gray-400 text-center">Buscando...</div>
             )}
             {!buscaContatos && contatos.length === 0 && (
-              <div className="px-4 py-3 text-sm text-gray-400 text-center">Nenhum contato encontrado</div>
+              <div className="px-4 py-3 text-center">
+                <div className="text-sm text-gray-400 mb-2">Nenhum contato encontrado</div>
+                {/^\+?\d{10,13}$/.test(busca.trim().replace(/\D/g, '')) && (
+                  <button
+                    onClick={() => {
+                      setAddContatoPhone(busca.trim().replace(/\D/g, ''));
+                      setShowAddContato(true);
+                      setShowDropdown(false);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Adicionar contato
+                  </button>
+                )}
+              </div>
             )}
             {contatos.length > 0 && (
               <>
@@ -195,8 +224,26 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{contato.nome}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">{formatPhone(contato.telefone)}</div>
                       </div>
-                      {contato.conversa_id ? (
-                        <span className="text-xs text-schappo-600 font-medium shrink-0">Abrir</span>
+                      {contato.conversa_id && !(contato as Contato & { is_archived?: boolean }).is_archived ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {contato.categoria && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-schappo-50 text-schappo-700 border border-schappo-200">
+                              {contato.categoria === 'eeg' ? 'EEG' : contato.categoria === 'recepcao' ? 'Recep' : 'Geral'}
+                            </span>
+                          )}
+                          <span className="text-xs text-schappo-600 font-medium">Abrir</span>
+                        </div>
+                      ) : contato.conversa_id && (contato as Contato & { is_archived?: boolean }).is_archived ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200">
+                            Finalizada
+                          </span>
+                          {contato.categoria && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-schappo-50 text-schappo-700 border border-schappo-200">
+                              {contato.categoria === 'eeg' ? 'EEG' : contato.categoria === 'recepcao' ? 'Recep' : 'Geral'}
+                            </span>
+                          )}
+                        </div>
                       ) : criandoConversa === contato.telefone ? (
                         <span className="text-xs text-gray-400 font-medium shrink-0">Criando...</span>
                       ) : channelSelectContato?.telefone === contato.telefone ? (
@@ -260,6 +307,21 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
           </button>
         </div>
       )}
+      {/* Modal adicionar contato */}
+      <AddContatoModal
+        open={showAddContato}
+        onClose={() => { setShowAddContato(false); setAddContatoPhone(''); }}
+        onAdd={async (nome, telefone, email) => {
+          const res = await fetch('/api/contatos/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, telefone, email }),
+          });
+          if (!res.ok) throw new Error('Erro ao adicionar contato');
+          // Re-trigger busca
+          onBuscaChange(telefone);
+        }}
+      />
     </header>
   );
 }

@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
     // Emitir SSE
     sseManager.broadcast({
       type: 'nova_mensagem',
-      data: { conversa_id: conversaId, mensagem, categoria: conversa.categoria },
+      data: { conversa_id: conversaId, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
     });
 
     sseManager.broadcast({

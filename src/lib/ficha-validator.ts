@@ -394,8 +394,8 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
       await pool.query(
         `INSERT INTO atd.eeg_alertas_ficha
           (exam_id, patient_id, tecnico_nome, tecnico_id, tecnico_telefone, tecnico_tipo,
-           campos_faltantes, total_campos_ok, total_campos)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 14)
+           campos_faltantes, total_campos_ok, total_campos, paciente_nome, data_exame)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 14, $9, $10)
          ON CONFLICT (exam_id) DO NOTHING`,
         [
           row.exam_id,
@@ -406,6 +406,8 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
           tecnicoTipo,
           missing.map((c) => CAMPOS_OBRIGATORIOS[c] || c),
           totalOk,
+          row.name || null,
+          row.exam_date || null,
         ],
       );
       this.stats.alertasEnviados++;

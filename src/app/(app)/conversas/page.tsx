@@ -55,6 +55,9 @@ export default function ConversasPage() {
       if (filtro === 'pendentes') {
         return { categoria: canal, pendentes: 'true' };
       }
+      if (filtro === 'historico') {
+        return { categoria: canal, historico: 'true' };
+      }
       const tipo = filtro === 'grupo' ? 'grupo' : 'individual';
       return { categoria: canal, tipo };
     }
@@ -293,6 +296,52 @@ export default function ConversasPage() {
     [updateConversa, selectedConversa],
   );
 
+  // Menu de contexto: marcar como nao lida / lida
+  const handleMarkUnread = useCallback(
+    async (conversaId: number) => {
+      const conv = conversas.find((c) => c.id === conversaId);
+      if (!conv) return;
+      if (conv.nao_lida > 0) {
+        marcarComoLida(conversaId);
+      } else {
+        // Marcar como nao lida
+        try {
+          await fetch(`/api/conversas/${conversaId}/read`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ unread: true }),
+          });
+          updateConversa(conversaId, { nao_lida: 1 });
+        } catch (err) {
+          console.error('[conversas] Erro ao marcar como nao lida:', err);
+        }
+      }
+    },
+    [conversas, marcarComoLida, updateConversa],
+  );
+
+  // Menu de contexto: marcar como resolvida (finalizar)
+  const handleMarkResolved = useCallback(
+    async (conversaId: number) => {
+      const conv = conversas.find((c) => c.id === conversaId);
+      if (!conv) return;
+      try {
+        await fetch(`/api/conversas/${conversaId}/atribuir`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ atendente_id: null }),
+        });
+        if (selectedConversa?.id === conversaId) {
+          setSelectedConversa(null);
+        }
+        refresh();
+      } catch (err) {
+        console.error('[conversas] Erro ao resolver conversa:', err);
+      }
+    },
+    [conversas, selectedConversa, refresh],
+  );
+
   const handleFinalizar = useCallback(
     async (conversaId: number) => {
       try {
@@ -442,6 +491,10 @@ export default function ConversasPage() {
             mencionadoEm={mencionadoEm}
             flashingConversas={flashingConversas}
             urgentConversas={urgentConversas}
+            onMarkUnread={handleMarkUnread}
+            onMarkResolved={handleMarkResolved}
+            onDelete={userRole === 'admin' ? handleDeleteConversa : undefined}
+            isAdmin={userRole === 'admin'}
           />
         </div>
 

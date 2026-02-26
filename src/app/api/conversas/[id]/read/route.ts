@@ -22,9 +22,19 @@ export async function PATCH(
   }
 
   try {
+    // Verificar se o body pede marcar como nao lida
+    let unread = false;
+    try {
+      const body = await request.json();
+      unread = body?.unread === true;
+    } catch {
+      // Body vazio = marcar como lida (padrao)
+    }
+
     const result = await pool.query(
-      `UPDATE atd.conversas SET nao_lida = 0, updated_at = NOW()
-       WHERE id = $1 RETURNING id, ultima_mensagem, categoria, provider`,
+      unread
+        ? `UPDATE atd.conversas SET nao_lida = 1, updated_at = NOW() WHERE id = $1 RETURNING id, ultima_mensagem, categoria, provider`
+        : `UPDATE atd.conversas SET nao_lida = 0, updated_at = NOW() WHERE id = $1 RETURNING id, ultima_mensagem, categoria, provider`,
       [conversaId],
     );
 
@@ -34,8 +44,8 @@ export async function PATCH(
 
     const conversa = result.rows[0];
 
-    // Marcar como lida no WhatsApp via UAZAPI (tick azul)
-    if (conversa.provider === 'uazapi') {
+    // Marcar como lida no WhatsApp via UAZAPI (tick azul) — so se marcando como lida
+    if (!unread && conversa.provider === 'uazapi') {
       markReadOnWhatsApp(conversaId, conversa.categoria).catch((err) =>
         console.error('[api/conversas/read] Erro ao marcar lida no WhatsApp:', err),
       );
@@ -47,7 +57,7 @@ export async function PATCH(
       data: {
         conversa_id: conversaId,
         ultima_msg: conversa.ultima_mensagem || '',
-        nao_lida: 0,
+        nao_lida: unread ? 1 : 0,
       },
     });
 

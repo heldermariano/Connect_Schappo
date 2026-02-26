@@ -16,6 +16,13 @@ export interface ChatInternoSSEData {
   destinatario_id: number;
 }
 
+export interface ChatInternoReacaoSSEData {
+  chat_id: number;
+  mensagem_id: number;
+  reacoes: Array<{ emoji: string; atendente_id: number; nome: string }>;
+  destinatario_id: number;
+}
+
 interface AutoOpenChat {
   chat_id: number;
   sender_id: number;
@@ -25,18 +32,19 @@ interface AutoOpenChat {
 interface ChatInternoPopupProps {
   onClose: () => void;
   sseMessage?: ChatInternoSSEData | null;
+  sseReacao?: ChatInternoReacaoSSEData | null;
   autoOpenChat?: AutoOpenChat | null;
   onAutoOpenHandled?: () => void;
 }
 
-export default function ChatInternoPopup({ onClose, sseMessage, autoOpenChat, onAutoOpenHandled }: ChatInternoPopupProps) {
+export default function ChatInternoPopup({ onClose, sseMessage, sseReacao, autoOpenChat, onAutoOpenHandled }: ChatInternoPopupProps) {
   const { data: session } = useSession();
   const { refreshChatInternoUnread } = useAppContext();
   const [selectedChat, setSelectedChat] = useState<ChatInterno | null>(null);
 
   const userId = session?.user?.id ? parseInt(session.user.id as string) : 0;
   const { chats, criarChat, updateChat } = useChatInterno();
-  const { mensagens, loading: loadingMsgs, addMensagem, sendMensagem } = useChatInternoMensagens(selectedChat?.id ?? null);
+  const { mensagens, loading: loadingMsgs, addMensagem, sendMensagem, sendMedia, reactToMessage, updateMessageReacoes } = useChatInternoMensagens(selectedChat?.id ?? null);
 
   const selectedChatRef = useRef<ChatInterno | null>(null);
   useEffect(() => { selectedChatRef.current = selectedChat; }, [selectedChat]);
@@ -98,22 +106,48 @@ export default function ChatInternoPopup({ onClose, sseMessage, autoOpenChat, on
     refreshChatInternoUnread();
   }, [refreshChatInternoUnread]);
 
-  const handleSend = useCallback((chatId: number, conteudo: string) => {
-    sendMensagem(chatId, conteudo);
+  const handleSend = useCallback((chatId: number, conteudo: string, replyToId?: number) => {
+    sendMensagem(chatId, conteudo, replyToId);
     updateChat(chatId, {
       ultima_mensagem: conteudo.substring(0, 200),
       ultima_msg_at: new Date().toISOString(),
     });
   }, [sendMensagem, updateChat]);
 
+  const handleSendMedia = useCallback((chatId: number, file: File, caption?: string, voiceRecording?: boolean, replyToId?: number) => {
+    sendMedia(chatId, file, caption, voiceRecording, replyToId);
+    const previewText = caption || (file.type.startsWith('image/') ? 'Imagem' : file.type.startsWith('audio/') ? 'Audio' : 'Arquivo');
+    updateChat(chatId, {
+      ultima_mensagem: previewText.substring(0, 200),
+      ultima_msg_at: new Date().toISOString(),
+    });
+  }, [sendMedia, updateChat]);
+
+  const handleReact = useCallback((chatId: number, mensagemId: number, emoji: string) => {
+    reactToMessage(chatId, mensagemId, emoji);
+  }, [reactToMessage]);
+
+  // Processar reacoes SSE
+  const lastReacaoRef = useRef<string>('');
+  useEffect(() => {
+    if (!sseReacao) return;
+    const key = `${sseReacao.mensagem_id}-${JSON.stringify(sseReacao.reacoes)}`;
+    if (key === lastReacaoRef.current) return;
+    lastReacaoRef.current = key;
+
+    if (selectedChatRef.current && selectedChatRef.current.id === sseReacao.chat_id) {
+      updateMessageReacoes(sseReacao.mensagem_id, sseReacao.reacoes);
+    }
+  }, [sseReacao, updateMessageReacoes]);
+
   const handleBack = useCallback(() => {
     setSelectedChat(null);
   }, []);
 
   return (
-    <div className="absolute top-0 left-0 right-0 bottom-16 z-[9998] bg-white dark:bg-black shadow-2xl flex flex-col overflow-hidden">
+    <div className="absolute top-0 left-0 right-0 bottom-16 z-[9998] bg-white dark:bg-black shadow-2xl flex flex-col overflow-hidden min-h-0">
       {/* Header */}
-      <div className="h-12 bg-gray-900 dark:bg-white flex items-center justify-between px-4 shrink-0">
+      <div className="h-12 bg-gray-900 dark:bg-white flex items-center justify-between px-4 shrink-0 z-10">
         <div className="flex items-center gap-2">
           {selectedChat && (
             <button
@@ -150,6 +184,8 @@ export default function ChatInternoPopup({ onClose, sseMessage, autoOpenChat, on
           loading={loadingMsgs}
           currentUserId={userId}
           onSend={handleSend}
+          onSendMedia={handleSendMedia}
+          onReact={handleReact}
         />
       ) : (
         <div className="flex-1 overflow-y-auto">

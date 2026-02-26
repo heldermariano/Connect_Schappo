@@ -42,13 +42,22 @@ export async function POST(request: NextRequest) {
     // Verificar se ja existe conversa para este telefone + categoria
     const existente = await pool.query(
       `SELECT id, wa_chatid, tipo, categoria, provider, telefone, nome_contato, nome_grupo, avatar_url,
-              ultima_mensagem, ultima_msg_at, nao_lida, atendente_id
+              ultima_mensagem, ultima_msg_at, nao_lida, atendente_id, is_archived
        FROM atd.conversas WHERE telefone = $1 AND tipo = 'individual' AND categoria = $2 LIMIT 1`,
       [tel, config.categoria],
     );
 
     if (existente.rows.length > 0) {
-      return NextResponse.json({ conversa: existente.rows[0] });
+      const conv = existente.rows[0];
+      // Se esta arquivada, reabrir
+      if (conv.is_archived) {
+        await pool.query(
+          `UPDATE atd.conversas SET is_archived = FALSE, updated_at = NOW() WHERE id = $1`,
+          [conv.id],
+        );
+        conv.is_archived = false;
+      }
+      return NextResponse.json({ conversa: conv });
     }
 
     // Criar nova conversa usando upsert_conversa

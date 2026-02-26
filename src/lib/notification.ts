@@ -76,6 +76,7 @@ export function showToastNotification(
   body: string,
   onClick?: () => void,
   canal?: string,
+  isGrupo?: boolean,
 ): void {
   const container = document.getElementById('toast-container') || createToastContainer();
 
@@ -90,6 +91,9 @@ export function showToastNotification(
     .slice(0, 2)
     .toUpperCase();
 
+  const grupoBadge = isGrupo
+    ? `<span style="display:inline-block;font-size:10px;font-weight:600;background:#3B82F6;color:#fff;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">Grupo</span>`
+    : '';
   const canalLabel = canal ? (CANAL_LABELS[canal] || canal.toUpperCase()) : '';
   const canalBadge = canalLabel
     ? `<span style="display:inline-block;font-size:10px;font-weight:600;background:#F58220;color:#fff;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle">${escapeHtml(canalLabel)}</span>`
@@ -98,7 +102,7 @@ export function showToastNotification(
   toast.innerHTML = `
     <div style="width:36px;height:36px;border-radius:50%;background:#F58220;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;color:#fff">${escapeHtml(initials)}</div>
     <div style="flex:1;min-width:0">
-      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}${canalBadge}</div>
+      <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(title)}${grupoBadge}${canalBadge}</div>
       <div style="font-size:12px;color:#a3a3a3;overflow:hidden;text-overflow:ellipsis;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escapeHtml(body)}</div>
     </div>
   `;
