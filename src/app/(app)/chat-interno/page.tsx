@@ -8,6 +8,7 @@ import { useChatInterno, useChatInternoMensagens } from '@/hooks/useChatInterno'
 import { playNotificationBeep } from '@/lib/notification';
 import { showDesktopNotification } from '@/lib/desktop-notification';
 import Header from '@/components/layout/Header';
+import type { StatusPresenca } from '@/components/ui/StatusBadge';
 import OperatorList from '@/components/chat-interno/OperatorList';
 import ChatInternoList from '@/components/chat-interno/ChatInternoList';
 import ChatInternoView from '@/components/chat-interno/ChatInternoView';
@@ -76,7 +77,7 @@ export default function ChatInternoPage() {
 
   return (
     <>
-      <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
+      <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: operadores + chats */}
         <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 bg-white dark:bg-black overflow-y-auto">

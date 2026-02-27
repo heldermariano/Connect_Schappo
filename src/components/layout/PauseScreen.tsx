@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Logo from '@/components/Logo';
 
 interface PauseScreenProps {
-  status: 'pausa' | 'ausente';
+  status: 'pausa' | 'almoco' | 'cafe' | 'lanche';
   onResume: () => void;
 }
 
@@ -31,7 +31,8 @@ export default function PauseScreen({ status, onResume }: PauseScreenProps) {
     return () => clearInterval(interval);
   }, [status]);
 
-  const label = status === 'pausa' ? 'Em Pausa' : 'Ausente';
+  const labels: Record<string, string> = { pausa: 'Em Pausa', almoco: 'Almoco', cafe: 'Cafe', lanche: 'Lanche' };
+  const label = labels[status] || 'Em Pausa';
 
   return (
     <div className="fixed inset-0 z-[9999] bg-[#F58220] flex flex-col items-center justify-center">

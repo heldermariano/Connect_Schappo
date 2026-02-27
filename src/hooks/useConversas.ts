@@ -18,6 +18,7 @@ interface UseConversasResult {
   error: string | null;
   refresh: () => void;
   updateConversa: (conversaId: number, updates: Partial<Conversa>) => void;
+  updateConversasByAtendente: (atendenteId: number, updates: Partial<Conversa>) => void;
   marcarComoLida: (conversaId: number) => void;
 }
 
@@ -67,6 +68,12 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
     );
   }, []);
 
+  const updateConversasByAtendente = useCallback((atendenteId: number, updates: Partial<Conversa>) => {
+    setConversas((prev) =>
+      prev.map((c) => (c.atendente_id === atendenteId ? { ...c, ...updates } : c)),
+    );
+  }, []);
+
   const marcarComoLida = useCallback((conversaId: number) => {
     // Atualizar localmente
     updateConversa(conversaId, { nao_lida: 0 });
@@ -76,5 +83,5 @@ export function useConversas(params: UseConversasParams = {}): UseConversasResul
     });
   }, [updateConversa]);
 
-  return { conversas, total, loading, error, refresh: fetchConversas, updateConversa, marcarComoLida };
+  return { conversas, total, loading, error, refresh: fetchConversas, updateConversa, updateConversasByAtendente, marcarComoLida };
 }

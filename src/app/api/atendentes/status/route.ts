@@ -15,7 +15,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const { status } = await request.json();
 
-    const validStatuses = ['disponivel', 'pausa', 'ausente', 'offline'];
+    const validStatuses = ['disponivel', 'pausa', 'almoco', 'cafe', 'lanche', 'offline'];
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: 'Status invalido' }, { status: 400 });
     }
@@ -35,8 +35,12 @@ export async function PATCH(request: NextRequest) {
       [status, atendenteId],
     );
 
-    // Tracking de pausas
-    if (status === 'pausa' || status === 'ausente') {
+    // Tracking de pausas (pausa, almoco, cafe, lanche)
+    const pauseStatuses = ['pausa', 'almoco', 'cafe', 'lanche'];
+    const isPause = pauseStatuses.includes(status);
+    const wasPause = pauseStatuses.includes(currentStatus) || currentStatus === 'ausente';
+
+    if (isPause) {
       // Fechar pausa anterior aberta (se houver) e abrir nova
       await pool.query(
         `UPDATE atd.atendente_pausas SET fim_at = NOW() WHERE atendente_id = $1 AND fim_at IS NULL`,
@@ -46,7 +50,7 @@ export async function PATCH(request: NextRequest) {
         `INSERT INTO atd.atendente_pausas (atendente_id, tipo) VALUES ($1, $2)`,
         [atendenteId, status],
       );
-    } else if ((status === 'disponivel' || status === 'offline') && (currentStatus === 'pausa' || currentStatus === 'ausente')) {
+    } else if ((status === 'disponivel' || status === 'offline') && wasPause) {
       // Fechar pausa aberta
       await pool.query(
         `UPDATE atd.atendente_pausas SET fim_at = NOW() WHERE atendente_id = $1 AND fim_at IS NULL`,
@@ -57,7 +61,7 @@ export async function PATCH(request: NextRequest) {
     // Se tem ramal, enviar QueuePause ao AMI
     if (session.user.ramal) {
       const paused = status !== 'disponivel';
-      const reason = status === 'pausa' ? 'pausa' : status === 'ausente' ? 'ausente' : '';
+      const reason = isPause ? status : '';
       pauseQueue(session.user.ramal, paused, reason);
     }
 

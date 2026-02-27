@@ -38,6 +38,8 @@ export interface Conversa {
   is_archived: boolean;
   is_muted: boolean;
   atendente_id: number | null;
+  atendente_nome?: string;
+  atendente_status?: string;
   labels: string[];
   metadata: Record<string, unknown>;
   created_at: string;
@@ -164,6 +166,13 @@ export interface ChatInternoMensagem {
 
 // --- Hub Usuarios (Tecnicos) ---
 
+export interface HubUsuarioResumo {
+  exames_hoje: number;
+  alertas_hoje: number;
+  pendentes: number;
+  corrigidos: number;
+}
+
 export interface HubUsuario {
   id: number;
   nome: string;
@@ -173,6 +182,7 @@ export interface HubUsuario {
   ativo: boolean;
   created_at: string;
   updated_at: string;
+  resumo?: HubUsuarioResumo;
 }
 
 // --- Alertas Ficha EEG ---

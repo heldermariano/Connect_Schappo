@@ -180,8 +180,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           onConfirm={handleInactivityConfirm}
         />
       )}
-      {(operatorStatus === 'pausa' || operatorStatus === 'ausente') && (
-        <PauseScreen status={operatorStatus as 'pausa' | 'ausente'} onResume={handleResume} />
+      {['pausa', 'almoco', 'cafe', 'lanche'].includes(operatorStatus) && (
+        <PauseScreen status={operatorStatus as 'pausa' | 'almoco' | 'cafe' | 'lanche'} onResume={handleResume} />
       )}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">

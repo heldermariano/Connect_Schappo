@@ -2,6 +2,7 @@
 
 import { Conversa } from '@/lib/types';
 import Avatar from '@/components/ui/Avatar';
+import StatusBadge, { normalizeStatus } from '@/components/ui/StatusBadge';
 import WaitTimer from './WaitTimer';
 
 interface ConversaItemProps {
@@ -104,8 +105,11 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
             </span>
           )}
           {conversa.atendente_id ? (
-            <span className="text-[10px] text-green-600">
-              Respondido por <span className="font-semibold">{(conversa as Conversa & { atendente_nome?: string }).atendente_nome || 'Operador'}</span>
+            <span className="text-[10px] text-green-600 inline-flex items-center gap-1">
+              {conversa.atendente_status && (
+                <StatusBadge status={normalizeStatus(conversa.atendente_status)} size="sm" />
+              )}
+              <span className="font-semibold">{conversa.atendente_nome || 'Operador'}</span>
             </span>
           ) : (
             !conversa.is_archived && <span className="text-[10px] text-gray-400 dark:text-gray-500">Não atribuída</span>

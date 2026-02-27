@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   if (idParam) {
     try {
       const result = await pool.query(
-        `SELECT c.*, a.nome AS atendente_nome,
+        `SELECT c.*, a.nome AS atendente_nome, a.status_presenca AS atendente_status,
                 COALESCE(ct.nome, c.nome_contato) AS nome_contato_display
          FROM atd.conversas c
          LEFT JOIN atd.atendentes a ON a.id = c.atendente_id
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     const total = parseInt(countResult.rows[0].count);
 
     const result = await pool.query(
-      `SELECT c.*, a.nome AS atendente_nome,
+      `SELECT c.*, a.nome AS atendente_nome, a.status_presenca AS atendente_status,
               COALESCE(ct.nome, c.nome_contato) AS nome_contato_display
        FROM atd.conversas c
        LEFT JOIN atd.atendentes a ON a.id = c.atendente_id

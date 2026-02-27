@@ -41,7 +41,7 @@ export default function OperatorList({ currentUserId, onSelect }: OperatorListPr
 
   // Ordenar: online primeiro, depois por nome
   const sorted = [...atendentes].sort((a, b) => {
-    const statusOrder: Record<string, number> = { disponivel: 0, pausa: 1, ausente: 2, offline: 3 };
+    const statusOrder: Record<string, number> = { disponivel: 0, pausa: 1, almoco: 1, cafe: 1, lanche: 1, offline: 3 };
     const sa = statusOrder[a.status_presenca as string] ?? 3;
     const sb = statusOrder[b.status_presenca as string] ?? 3;
     if (sa !== sb) return sa - sb;

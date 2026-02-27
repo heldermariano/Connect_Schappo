@@ -16,6 +16,7 @@ import { useMensagens } from '@/hooks/useMensagens';
 import { useAppContext } from '@/contexts/AppContext';
 import { playNotificationBeep, showMentionToast } from '@/lib/notification';
 import { showDesktopNotification } from '@/lib/desktop-notification';
+import type { StatusPresenca } from '@/components/ui/StatusBadge';
 
 export default function ConversasPage() {
   const { data: session } = useSession();
@@ -77,7 +78,7 @@ export default function ConversasPage() {
     }
   }, [canal, filtro]);
 
-  const { conversas, loading, updateConversa, refresh, marcarComoLida } = useConversas({
+  const { conversas, loading, updateConversa, updateConversasByAtendente, refresh, marcarComoLida } = useConversas({
     ...filterParams,
     busca: buscaPainel || undefined,
   });
@@ -242,8 +243,12 @@ export default function ConversasPage() {
         }
         refresh();
       }
+      if (event === 'atendente_status') {
+        const d = data as { atendente_id: number; status: string };
+        updateConversasByAtendente(d.atendente_id, { atendente_status: d.status });
+      }
     },
-    [selectedConversa, addMensagem, updateMensagem, updateConversa, refresh, isMentioned, operatorStatus],
+    [selectedConversa, addMensagem, updateMensagem, updateConversa, updateConversasByAtendente, refresh, isMentioned, operatorStatus],
   );
 
   useSSE(handleSSE);
@@ -479,7 +484,7 @@ export default function ConversasPage() {
   if (!canal) {
     return (
       <>
-        <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
+        <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
         <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black">
           <div className="text-center max-w-sm">
             <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -497,7 +502,7 @@ export default function ConversasPage() {
 
   return (
     <>
-      <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as 'disponivel' | 'pausa' | 'ausente' | 'offline'} onPresencaChange={setOperatorStatus} />
+      <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
       <CallAlert chamadas={activeCalls} />
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}

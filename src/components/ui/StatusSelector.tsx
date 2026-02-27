@@ -11,7 +11,9 @@ interface StatusSelectorProps {
 const STATUS_OPTIONS: { value: StatusPresenca; icon: string; label: string; color: string }[] = [
   { value: 'disponivel', icon: '\u25CF', label: 'Disponivel', color: 'text-green-500' },
   { value: 'pausa', icon: '\u25CF', label: 'Pausa', color: 'text-yellow-400' },
-  { value: 'ausente', icon: '\u25CF', label: 'Ausente', color: 'text-red-500' },
+  { value: 'almoco', icon: '\u25CF', label: 'Almoco', color: 'text-amber-500' },
+  { value: 'cafe', icon: '\u25CF', label: 'Cafe', color: 'text-amber-500' },
+  { value: 'lanche', icon: '\u25CF', label: 'Lanche', color: 'text-amber-500' },
   { value: 'offline', icon: '\u25CF', label: 'Offline', color: 'text-gray-400' },
 ];
 
@@ -31,7 +33,7 @@ export default function StatusSelector({ currentStatus, onStatusChange }: Status
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
-  const current = STATUS_OPTIONS.find((o) => o.value === currentStatus) || STATUS_OPTIONS[3];
+  const current = STATUS_OPTIONS.find((o) => o.value === currentStatus) || STATUS_OPTIONS.find((o) => o.value === 'offline')!;
 
   return (
     <div className="relative" ref={ref}>
