@@ -67,7 +67,7 @@ interface ExamRow {
   // Campos denormalizados em exams (as vezes mais completos que patients)
   patient_phone: string | null;
   patient_email: string | null;
-  patient_responsible: string | null;
+  patient_companion: string | null;
 }
 
 function delay(ms: number): Promise<void> {
@@ -157,7 +157,7 @@ class FichaValidator {
           e.created_at,
           e.patient_phone,
           e.patient_email,
-          e.patient_responsible
+          e.patient_companion
         FROM exams e
         JOIN patients p ON p.id = e.patient_id
         WHERE e.exam_date::date = CURRENT_DATE
@@ -209,7 +209,7 @@ class FichaValidator {
       Sexo: row.sex,
       Endereco: row.location_code,
       Cidade: row.device_model,
-      Pais: row.patient_responsible || row.responsible,
+      Pais: row.patient_companion || row.responsible,
       Celular: row.patient_phone || row.phone,
       Profissao: row.technician || row.companion_name,
       Email: row.patient_email || row.email,
@@ -500,7 +500,7 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
             e.created_at,
             e.patient_phone,
             e.patient_email,
-            e.patient_responsible
+            e.patient_companion
           FROM exams e
           JOIN patients p ON p.id = e.patient_id
           WHERE e.id = $1`,
