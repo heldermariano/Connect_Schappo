@@ -36,72 +36,64 @@ export async function POST(request: NextRequest) {
 }
 
 async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
-  // === LOG DETALHADO para debug de status updates ===
-  const evType = payload.EventType || (payload as unknown as Record<string, unknown>).event || 'UNKNOWN';
-  const evMsgStatus = (payload.message as unknown as Record<string, unknown>)?.status as string | undefined;
-  const evMsgId = payload.message?.messageid || payload.message?.id;
-  const evFromMe = payload.message?.fromMe;
+  // Evento de status (delivered, read) — UAZAPI usa EventType 'messages_update'
+  // Payload real do UAZAPI messages_update:
+  //   { EventType: 'messages_update', state: 'Delivered'|'Read', type: 'ReadReceipt',
+  //     event: { Type: 'Delivered'|'Read'|'read', MessageIDs: ['id1','id2'], IsFromMe: bool, Chat: '...@s.whatsapp.net' } }
+  // NOTA: NÃO usa payload.message — os dados estão em payload.event
+  if (payload.EventType === 'messages_update') {
+    const raw = payload as unknown as Record<string, unknown>;
+    const event = raw.event as { Type?: string; MessageIDs?: string[]; IsFromMe?: boolean; Chat?: string } | undefined;
+    const state = (raw.state as string) || event?.Type || '';
+    const messageIds = event?.MessageIDs || [];
 
-  // Log TODOS os eventos (exceto mensagens recebidas normais para nao poluir)
-  if (evType !== 'messages' || evMsgStatus) {
-    console.log(`[webhook/uazapi] EVENT: ${evType} | owner=${payload.owner || '?'} | msgId=${evMsgId || '?'} | status=${evMsgStatus || '?'} | fromMe=${evFromMe ?? '?'}`);
-    // Log payload completo para eventos de status
-    if (evMsgStatus || evType === 'messages_update' || evType === 'status' || evType === 'message_ack') {
-      console.log(`[webhook/uazapi] STATUS PAYLOAD:`, JSON.stringify(payload, null, 2));
+    if (!state || messageIds.length === 0) {
+      console.log(`[webhook/uazapi] messages_update sem state ou MessageIDs:`, JSON.stringify(raw, null, 2));
+      return;
     }
-  }
-  // === FIM LOG ===
 
-  // Evento de status (sent, delivered, read) — atualizar mensagem
-  // UAZAPI envia como EventType 'messages_update' (nao 'status')
-  // O campo message.status contem: SERVER_ACK, DELIVERY_ACK, READ, PLAYED, ERROR
-  // Tambem aceitar EventType 'messages' com campo status (UAZAPI pode enviar assim)
-  if (payload.EventType === 'messages_update' || payload.EventType === 'status' || payload.EventType === 'message_ack' || (payload.EventType === 'messages' && evMsgStatus)) {
-    const msgId = payload.message?.messageid || payload.message?.id;
-    const status = (payload.message as unknown as Record<string, unknown>)?.status as string | undefined;
-    if (!msgId || !status) return;
-
-    // Mapear status UAZAPI para nosso formato
-    const statusMap: Record<string, string> = {
-      DELIVERY_ACK: 'delivered',
-      READ: 'read',
-      PLAYED: 'read',
-      SERVER_ACK: 'sent',
-      ERROR: 'failed',
+    // Mapear state UAZAPI para nosso formato (case-insensitive)
+    const stateMap: Record<string, string> = {
+      delivered: 'delivered',
+      read: 'read',
+      played: 'read',
+      sent: 'sent',
+      error: 'failed',
     };
-    const normalizedStatus = statusMap[status] || status.toLowerCase();
+    const normalizedStatus = stateMap[state.toLowerCase()] || state.toLowerCase();
 
-    // Capturar mensagem de erro se houver
-    const errorMsg = (payload.message as unknown as Record<string, unknown>)?.error as string | undefined;
+    console.log(`[webhook/uazapi] STATUS: ${state} → ${normalizedStatus} | IDs=[${messageIds.join(', ')}] | owner=${payload.owner || '?'}`);
 
-    // Atualizar status da mensagem e adicionar ao historico
-    // Buscar por short ID (novo formato) OU com prefixo owner (formato antigo)
-    // UAZAPI envia messageid curto no status update, mas msgs antigas podem ter prefixo owner
+    // Atualizar cada mensagem no array de IDs
     const ownerPrefix = payload.owner ? `${payload.owner}:` : '';
-    const result = await pool.query(
-      `UPDATE atd.mensagens
-       SET status = $1,
-           metadata = jsonb_set(
-             COALESCE(metadata, '{}'::jsonb),
-             '{status_history}',
-             COALESCE(metadata->'status_history', '[]'::jsonb) || $2::jsonb
-           )
-       WHERE wa_message_id = $3 OR wa_message_id = $4
-       RETURNING id, conversa_id`,
-      [
-        normalizedStatus,
-        JSON.stringify({ status: normalizedStatus, timestamp: new Date().toISOString(), ...(errorMsg ? { error: errorMsg } : {}) }),
-        msgId,
-        ownerPrefix + msgId,
-      ],
-    );
+    const timestamp = new Date().toISOString();
 
-    if (result.rowCount && result.rowCount > 0) {
-      const { id, conversa_id } = result.rows[0];
-      sseManager.broadcast({
-        type: 'mensagem_status' as 'conversa_atualizada',
-        data: { conversa_id, mensagem_id: id, status: normalizedStatus } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
-      });
+    for (const mid of messageIds) {
+      const result = await pool.query(
+        `UPDATE atd.mensagens
+         SET status = $1,
+             metadata = jsonb_set(
+               COALESCE(metadata, '{}'::jsonb),
+               '{status_history}',
+               COALESCE(metadata->'status_history', '[]'::jsonb) || $2::jsonb
+             )
+         WHERE wa_message_id = $3 OR wa_message_id = $4
+         RETURNING id, conversa_id`,
+        [
+          normalizedStatus,
+          JSON.stringify({ status: normalizedStatus, timestamp }),
+          mid,
+          ownerPrefix + mid,
+        ],
+      );
+
+      if (result.rowCount && result.rowCount > 0) {
+        const { id, conversa_id } = result.rows[0];
+        sseManager.broadcast({
+          type: 'mensagem_status' as 'conversa_atualizada',
+          data: { conversa_id, mensagem_id: id, status: normalizedStatus } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+        });
+      }
     }
     return;
   }
