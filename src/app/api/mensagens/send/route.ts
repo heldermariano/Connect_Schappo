@@ -129,18 +129,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Sem permissao para esta conversa' }, { status: 403 });
     }
 
-    // Determinar destinatario
+    // Determinar destinatario — usar wa_chatid (JID real do WhatsApp) para garantir
+    // que o numero nao sofra normalizacao incorreta (ex: 12 vs 13 digitos BR)
     const isGroup = conversa.tipo === 'grupo';
-    let destinatario: string;
-
-    if (isGroup) {
-      // Grupo: usar wa_chatid (ex: 120363xxx@g.us)
-      destinatario = conversa.wa_chatid;
-    } else {
-      // Individual: normalizar telefone (adicionar 9o digito BR se necessario)
-      const raw = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
-      destinatario = normalizePhone(raw) || raw;
-    }
+    const destinatario = isGroup
+      ? conversa.wa_chatid
+      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
     // Enviar via provider correto
     let sendResult: { success: boolean; messageId?: string; error?: string };

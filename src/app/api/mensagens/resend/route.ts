@@ -97,10 +97,9 @@ export async function POST(request: NextRequest) {
 
     // Determinar destinatario
     const isGroup = original.tipo === 'grupo';
-    const rawDest = original.telefone || original.wa_chatid.replace('@s.whatsapp.net', '');
     const destinatario = isGroup
       ? original.wa_chatid
-      : (normalizePhone(rawDest) || rawDest);
+      : original.wa_chatid.replace('@s.whatsapp.net', '');
 
     // Montar texto para reenvio
     const conteudoOriginal = original.conteudo || `[${original.tipo_mensagem}]`;

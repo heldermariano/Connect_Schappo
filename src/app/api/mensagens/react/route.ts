@@ -30,8 +30,9 @@ export async function POST(request: NextRequest) {
 
     const conversa = conversaResult.rows[0];
     const isGroup = conversa.tipo === 'grupo';
-    const rawDest = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
-    const destinatario = isGroup ? conversa.wa_chatid : (normalizePhone(rawDest) || rawDest);
+    const destinatario = isGroup
+      ? conversa.wa_chatid
+      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
     // Enviar reacao via provider
     // UAZAPI: POST /message/react { number, text (emoji), id (wa_message_id) }

@@ -1,4 +1,4 @@
-import { WebhookPayload360Dialog } from './types';
+import { WebhookPayload360Dialog, normalizePhone } from './types';
 
 // Dados normalizados extraidos do payload 360Dialog (Meta Cloud API)
 export interface Parsed360Message {
@@ -52,7 +52,8 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
 
         for (const msg of value.messages) {
           const senderName = contactsMap.get(msg.from) || null;
-          const wa_chatid = `${msg.from}@s.whatsapp.net`;
+          const normalizedFrom = normalizePhone(msg.from) || msg.from;
+          const wa_chatid = `${normalizedFrom}@s.whatsapp.net`;
 
           // Extrair conteudo conforme tipo
           let conteudo: string | null = null;
@@ -120,7 +121,7 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             categoria: 'geral',
             provider: '360dialog',
             nome_contato: senderName,
-            telefone: msg.from,
+            telefone: normalizedFrom,
             metadata,
           });
         }

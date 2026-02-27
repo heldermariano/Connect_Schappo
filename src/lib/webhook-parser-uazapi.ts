@@ -1,4 +1,4 @@
-import { WebhookPayloadUAZAPI, OWNER_CATEGORY_MAP } from './types';
+import { WebhookPayloadUAZAPI, OWNER_CATEGORY_MAP, normalizePhone } from './types';
 
 // Dados normalizados extraidos do payload UAZAPI
 export interface ParsedUAZAPIMessage {
@@ -287,9 +287,20 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
   // Ignorar mensagens enviadas pela API (evitar loop) — mas permitir edicoes
   if (message.wasSentByApi && !isEdit) return null;
 
-  const wa_chatid = chat.wa_chatid;
-  const isGroup = chat.wa_isGroup === true || wa_chatid.includes('@g.us');
+  const rawChatId = chat.wa_chatid;
+  const isGroup = chat.wa_isGroup === true || rawChatId.includes('@g.us');
   const categoria = OWNER_CATEGORY_MAP[owner] || 'geral';
+
+  // Normalizar wa_chatid para individuais: garantir formato consistente (com 9o digito BR)
+  // Evita conversas duplicadas quando UAZAPI envia chatid com/sem 9
+  let wa_chatid = rawChatId;
+  if (!isGroup) {
+    const rawNum = rawChatId.replace('@s.whatsapp.net', '');
+    const normalized = normalizePhone(rawNum);
+    if (normalized) {
+      wa_chatid = normalized + '@s.whatsapp.net';
+    }
+  }
 
   // Usar messageid (sem prefixo owner) para campo UNIQUE no banco
   const wa_message_id = message.messageid || message.id;
@@ -311,7 +322,7 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
     provider: 'uazapi',
     nome_contato: extractContactName(chat, message) || null,
     nome_grupo: extractGroupName(chat, message),
-    telefone: extractConversationPhone(chat) || null,
+    telefone: normalizePhone(extractConversationPhone(chat)) || extractConversationPhone(chat) || null,
     avatar_url: chat.imagePreview || null, // Eh URL, nao base64!
     mencoes: extractMentions(message),
     metadata: {
@@ -331,19 +342,30 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
 export function parseUAZAPICall(payload: WebhookPayloadUAZAPI): ParsedUAZAPICall | null {
   if (!isCallEvent(payload)) return null;
 
-  const wa_chatid = payload.chat?.wa_chatid || payload.message?.from || '';
-  if (!wa_chatid) return null;
+  const rawChatId2 = payload.chat?.wa_chatid || payload.message?.from || '';
+  if (!rawChatId2) return null;
+
+  // Normalizar wa_chatid para individuais
+  let wa_chatid2 = rawChatId2;
+  if (!rawChatId2.includes('@g.us')) {
+    const rawNum2 = rawChatId2.replace('@s.whatsapp.net', '');
+    const normalized2 = normalizePhone(rawNum2);
+    if (normalized2) {
+      wa_chatid2 = normalized2 + '@s.whatsapp.net';
+    }
+  }
 
   // Extrair telefone: usar chat.phone ou extrair de wa_chatid
   let callerPhone = payload.chat?.phone || '';
   if (!callerPhone) {
-    callerPhone = wa_chatid.split('@')[0];
+    callerPhone = wa_chatid2.split('@')[0];
   }
+  callerPhone = normalizePhone(callerPhone) || callerPhone;
 
   const categoria = OWNER_CATEGORY_MAP[payload.owner] || 'geral';
 
   return {
-    wa_chatid,
+    wa_chatid: wa_chatid2,
     caller_phone: callerPhone,
     owner: payload.owner,
     categoria,

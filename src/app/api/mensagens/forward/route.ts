@@ -98,10 +98,9 @@ export async function POST(request: NextRequest) {
     }
 
     const isGroup = conversa.tipo === 'grupo';
-    const rawDest = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
     const destinatario = isGroup
       ? conversa.wa_chatid
-      : (normalizePhone(rawDest) || rawDest);
+      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
     // Montar texto encaminhado
     const senderLabel = originalMsg.sender_name || originalMsg.sender_phone || 'Desconhecido';

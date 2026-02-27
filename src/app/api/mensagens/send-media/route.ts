@@ -293,13 +293,9 @@ export async function POST(request: NextRequest) {
     }
 
     const isGroup = conversa.tipo === 'grupo';
-    let destinatario: string;
-    if (isGroup) {
-      destinatario = conversa.wa_chatid;
-    } else {
-      const raw = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
-      destinatario = normalizePhone(raw) || raw;
-    }
+    const destinatario = isGroup
+      ? conversa.wa_chatid
+      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
     // Detectar MIME type: usar file.type do browser, com fallback por extensao
     let mimetype = file.type || '';
