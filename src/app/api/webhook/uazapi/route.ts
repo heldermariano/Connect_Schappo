@@ -36,12 +36,29 @@ export async function POST(request: NextRequest) {
 }
 
 async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
+  // === LOG DETALHADO para debug de status updates ===
+  const evType = payload.EventType || (payload as unknown as Record<string, unknown>).event || 'UNKNOWN';
+  const evMsgStatus = (payload.message as unknown as Record<string, unknown>)?.status as string | undefined;
+  const evMsgId = payload.message?.messageid || payload.message?.id;
+  const evFromMe = payload.message?.fromMe;
+
+  // Log TODOS os eventos (exceto mensagens recebidas normais para nao poluir)
+  if (evType !== 'messages' || evMsgStatus) {
+    console.log(`[webhook/uazapi] EVENT: ${evType} | owner=${payload.owner || '?'} | msgId=${evMsgId || '?'} | status=${evMsgStatus || '?'} | fromMe=${evFromMe ?? '?'}`);
+    // Log payload completo para eventos de status
+    if (evMsgStatus || evType === 'messages_update' || evType === 'status' || evType === 'message_ack') {
+      console.log(`[webhook/uazapi] STATUS PAYLOAD:`, JSON.stringify(payload, null, 2));
+    }
+  }
+  // === FIM LOG ===
+
   // Evento de status (sent, delivered, read) — atualizar mensagem
   // UAZAPI envia como EventType 'messages_update' (nao 'status')
   // O campo message.status contem: SERVER_ACK, DELIVERY_ACK, READ, PLAYED, ERROR
-  if (payload.EventType === 'messages_update' || payload.EventType === 'status' || payload.EventType === 'message_ack') {
+  // Tambem aceitar EventType 'messages' com campo status (UAZAPI pode enviar assim)
+  if (payload.EventType === 'messages_update' || payload.EventType === 'status' || payload.EventType === 'message_ack' || (payload.EventType === 'messages' && evMsgStatus)) {
     const msgId = payload.message?.messageid || payload.message?.id;
-    const status = (payload.message as Record<string, unknown>)?.status as string | undefined;
+    const status = (payload.message as unknown as Record<string, unknown>)?.status as string | undefined;
     if (!msgId || !status) return;
 
     // Mapear status UAZAPI para nosso formato
@@ -55,7 +72,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
     const normalizedStatus = statusMap[status] || status.toLowerCase();
 
     // Capturar mensagem de erro se houver
-    const errorMsg = (payload.message as Record<string, unknown>)?.error as string | undefined;
+    const errorMsg = (payload.message as unknown as Record<string, unknown>)?.error as string | undefined;
 
     // Atualizar status da mensagem e adicionar ao historico
     // Buscar por short ID (novo formato) OU com prefixo owner (formato antigo)
