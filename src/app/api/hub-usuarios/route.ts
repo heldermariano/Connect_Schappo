@@ -17,11 +17,12 @@ export async function GET() {
 
     pool.query(`
       SELECT tecnico_id,
-        COUNT(*)::int AS alertas_hoje,
+        COUNT(*) FILTER (WHERE data_exame::date = CURRENT_DATE)::int AS alertas_hoje,
         COUNT(*) FILTER (WHERE corrigido = FALSE)::int AS pendentes,
-        COUNT(*) FILTER (WHERE corrigido = TRUE)::int AS corrigidos
+        COUNT(*) FILTER (WHERE corrigido = TRUE AND data_exame::date = CURRENT_DATE)::int AS corrigidos
       FROM atd.eeg_alertas_ficha
-      WHERE created_at::date = CURRENT_DATE AND tecnico_id IS NOT NULL
+      WHERE data_exame::date >= CURRENT_DATE - INTERVAL '7 days'
+        AND tecnico_id IS NOT NULL
       GROUP BY tecnico_id
     `),
 

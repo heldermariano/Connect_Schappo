@@ -464,12 +464,14 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
 
   private async checkCorrections(): Promise<void> {
     try {
-      // Buscar fichas com alerta pendente de correcao — APENAS de HOJE
+      // Buscar fichas com alerta pendente — ultimos 7 dias (nao so hoje)
       const alertas = await pool.query(
-        `SELECT id, exam_id, patient_id, tecnico_nome, tecnico_tipo
+        `SELECT id, exam_id, patient_id, tecnico_nome, tecnico_tipo, campos_faltantes
          FROM atd.eeg_alertas_ficha
          WHERE corrigido = FALSE
-           AND data_exame::date = CURRENT_DATE`,
+           AND data_exame::date >= CURRENT_DATE - INTERVAL '7 days'
+         ORDER BY data_exame DESC
+         LIMIT 100`,
       );
 
       if (alertas.rows.length === 0) return;
@@ -548,6 +550,19 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
           );
 
           this.stats.correcoesDetectadas++;
+        } else {
+          // Atualizar campos_faltantes se mudaram (correcao parcial)
+          const novosNomes = missing.map((c) => CAMPOS_OBRIGATORIOS[c] || c);
+          const antigosNomes = (alerta.campos_faltantes || []) as string[];
+          if (novosNomes.length !== antigosNomes.length || novosNomes.some((n: string) => !antigosNomes.includes(n))) {
+            const totalOk = 14 - missing.length;
+            await pool.query(
+              `UPDATE atd.eeg_alertas_ficha
+               SET campos_faltantes = $1, total_campos_ok = $2, updated_at = NOW()
+               WHERE id = $3`,
+              [novosNomes, totalOk, alerta.id],
+            );
+          }
         }
       }
     } catch (err) {
