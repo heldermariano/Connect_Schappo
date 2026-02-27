@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 import { execFileSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -95,7 +95,7 @@ async function sendMediaViaUAZAPI(
   mimetype: string,
   instanceToken: string,
   caption?: string,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
   if (!url || !instanceToken) return { success: false, error: 'UAZAPI nao configurado' };
 
@@ -134,7 +134,8 @@ async function sendMediaViaUAZAPI(
     }
 
     const data = await res.json();
-    return { success: true, messageId: data.id || data.messageid || data.messageId };
+    const ids = extractUazapiMessageIds(data);
+    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
   } catch (err) {
     console.error('[send-media/uazapi] Erro de rede:', err);
     return { success: false, error: 'Erro de conexao com UAZAPI' };
@@ -325,7 +326,7 @@ export async function POST(request: NextRequest) {
     console.log(`[send-media] provider=${conversa.provider} type=${mediaType} mime=${mimetype} file=${file.name} size=${fileBuffer.length} voice=${isVoiceRecording}`);
 
     // Enviar via provider correto
-    let sendResult: { success: boolean; messageId?: string; mediaId?: string; error?: string };
+    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; mediaId?: string; error?: string };
 
     if (conversa.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
@@ -353,6 +354,9 @@ export async function POST(request: NextRequest) {
     };
     if (sendResult.mediaId) {
       metadata.dialog360_media_id = sendResult.mediaId;
+    }
+    if (sendResult.fullMessageId) {
+      metadata.message_id_full = sendResult.fullMessageId;
     }
 
     const msgResult = await pool.query(

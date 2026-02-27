@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -12,7 +12,7 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 };
 
 // Envia texto via UAZAPI
-async function sendTextUAZAPI(number: string, text: string, instanceToken: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+async function sendTextUAZAPI(number: string, text: string, instanceToken: string): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
   if (!url || !instanceToken) return { success: false, error: 'UAZAPI nao configurado' };
 
@@ -24,7 +24,8 @@ async function sendTextUAZAPI(number: string, text: string, instanceToken: strin
     });
     if (!res.ok) return { success: false, error: `UAZAPI ${res.status}` };
     const data = await res.json();
-    return { success: true, messageId: data.id || data.messageid || data.messageId };
+    const ids = extractUazapiMessageIds(data);
+    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
   } catch {
     return { success: false, error: 'Erro de conexao UAZAPI' };
   }
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
     const textToSend = `*${nomeOperador}:*\n${conteudoOriginal}`;
 
     // Enviar via provider correto
-    let sendResult: { success: boolean; messageId?: string; error?: string };
+    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
 
     if (original.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
@@ -142,6 +143,7 @@ export async function POST(request: NextRequest) {
           sent_by: session.user.id,
           sent_by_name: session.user.nome,
           resent_from: mensagem_id,
+          message_id_full: sendResult.fullMessageId || waMessageId,
         }),
       ],
     );

@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -16,7 +16,7 @@ async function sendContactViaUAZAPI(
   contactName: string,
   contactPhone: string,
   instanceToken: string,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
   const token = instanceToken;
   if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
@@ -41,7 +41,8 @@ async function sendContactViaUAZAPI(
     }
 
     const data = await res.json();
-    return { success: true, messageId: data.id || data.messageid || data.messageId };
+    const ids = extractUazapiMessageIds(data);
+    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
   } catch (err) {
     console.error('[send-contact/uazapi] Erro:', err);
     return { success: false, error: 'Erro de conexao com UAZAPI' };
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
       ? conversa.wa_chatid
       : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
-    let sendResult: { success: boolean; messageId?: string; error?: string };
+    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
     if (conversa.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendContactVia360Dialog(to, contact_name, contact_phone);
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
         owner,
         session.user.nome,
         conteudoTexto,
-        JSON.stringify({ contact_name, contact_phone, sent_by: session.user.id }),
+        JSON.stringify({ contact_name, contact_phone, sent_by: session.user.id, message_id_full: sendResult.fullMessageId || waMessageId }),
       ],
     );
 

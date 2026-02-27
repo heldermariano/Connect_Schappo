@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 
 // Categorias permitidas por grupo de atendimento
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
@@ -14,7 +14,7 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 
 // Envia mensagem via UAZAPI
 // Campos conforme docs: number, text, replyid, mentions (string csv)
-async function sendViaUAZAPI(number: string, text: string, instanceToken: string, mentions?: string[], replyId?: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+async function sendViaUAZAPI(number: string, text: string, instanceToken: string, mentions?: string[], replyId?: string): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
 
   if (!url || !instanceToken) {
@@ -47,7 +47,8 @@ async function sendViaUAZAPI(number: string, text: string, instanceToken: string
     }
 
     const data = await res.json();
-    return { success: true, messageId: data.id || data.messageid || data.messageId };
+    const ids = extractUazapiMessageIds(data);
+    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
   } catch (err) {
     console.error('[send/uazapi] Erro de rede:', err);
     return { success: false, error: 'Erro de conexao com UAZAPI' };
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
       : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
     // Enviar via provider correto
-    let sendResult: { success: boolean; messageId?: string; error?: string };
+    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
 
     // Prefixar nome do operador em negrito (visivel no WhatsApp)
     const nomeOperador = session.user.nome;
@@ -172,6 +173,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Salvar mensagem no banco
+    // wa_message_id: usar short ID (sem prefixo owner) para match com status updates UAZAPI
     const owner = CATEGORIA_OWNER[conversa.categoria] || '';
     const waMessageId = sendResult.messageId || `sent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -188,7 +190,7 @@ export async function POST(request: NextRequest) {
         owner,
         session.user.nome,
         conteudo.trim(),
-        JSON.stringify({ sent_by: session.user.id, sent_by_name: session.user.nome }),
+        JSON.stringify({ sent_by: session.user.id, sent_by_name: session.user.nome, message_id_full: sendResult.fullMessageId || waMessageId }),
         mencoesArray.length > 0 ? mencoesArray : '{}',
         quoted_msg_id || null,
       ],

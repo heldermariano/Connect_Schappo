@@ -21,6 +21,7 @@ export function useSSE(onEvent: SSEHandler) {
       'connected',
       'nova_mensagem',
       'conversa_atualizada',
+      'mensagem_status',
       'chamada_nova',
       'chamada_atualizada',
       'ramal_status',

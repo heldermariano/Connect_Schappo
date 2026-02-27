@@ -36,6 +36,57 @@ export async function POST(request: NextRequest) {
 }
 
 async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
+  // Evento de status (sent, delivered, read) — atualizar mensagem
+  if (payload.EventType === 'status') {
+    const msgId = payload.message?.messageid || payload.message?.id;
+    const status = (payload.message as Record<string, unknown>)?.status as string | undefined;
+    if (!msgId || !status) return;
+
+    // Mapear status UAZAPI para nosso formato
+    const statusMap: Record<string, string> = {
+      DELIVERY_ACK: 'delivered',
+      READ: 'read',
+      PLAYED: 'read',
+      SERVER_ACK: 'sent',
+      ERROR: 'failed',
+    };
+    const normalizedStatus = statusMap[status] || status.toLowerCase();
+
+    // Capturar mensagem de erro se houver
+    const errorMsg = (payload.message as Record<string, unknown>)?.error as string | undefined;
+
+    // Atualizar status da mensagem e adicionar ao historico
+    // Buscar por short ID (novo formato) OU com prefixo owner (formato antigo)
+    // UAZAPI envia messageid curto no status update, mas msgs antigas podem ter prefixo owner
+    const ownerPrefix = payload.owner ? `${payload.owner}:` : '';
+    const result = await pool.query(
+      `UPDATE atd.mensagens
+       SET status = $1,
+           metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{status_history}',
+             COALESCE(metadata->'status_history', '[]'::jsonb) || $2::jsonb
+           )
+       WHERE wa_message_id = $3 OR wa_message_id = $4
+       RETURNING id, conversa_id`,
+      [
+        normalizedStatus,
+        JSON.stringify({ status: normalizedStatus, timestamp: new Date().toISOString(), ...(errorMsg ? { error: errorMsg } : {}) }),
+        msgId,
+        ownerPrefix + msgId,
+      ],
+    );
+
+    if (result.rowCount && result.rowCount > 0) {
+      const { id, conversa_id } = result.rows[0];
+      sseManager.broadcast({
+        type: 'mensagem_status' as 'conversa_atualizada',
+        data: { conversa_id, mensagem_id: id, status: normalizedStatus } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+      });
+    }
+    return;
+  }
+
   // Evento de chamada — registrar tentativa
   if (isCallEvent(payload)) {
     const call = parseUAZAPICall(payload);

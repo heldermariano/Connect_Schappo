@@ -110,11 +110,31 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
     }
   }
 
-  // Processar status updates
+  // Processar status updates (delivered, read, sent, failed)
   for (const status of statuses) {
-    await pool.query(
-      `UPDATE atd.mensagens SET status = $1 WHERE wa_message_id = $2`,
-      [status.status, status.wa_message_id],
+    const result = await pool.query(
+      `UPDATE atd.mensagens
+       SET status = $1,
+           metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{status_history}',
+             COALESCE(metadata->'status_history', '[]'::jsonb) || $2::jsonb
+           )
+       WHERE wa_message_id = $3
+       RETURNING id, conversa_id`,
+      [
+        status.status,
+        JSON.stringify({ status: status.status, timestamp: new Date(parseInt(status.timestamp) * 1000).toISOString() }),
+        status.wa_message_id,
+      ],
     );
+
+    if (result.rowCount && result.rowCount > 0) {
+      const { id, conversa_id } = result.rows[0];
+      sseManager.broadcast({
+        type: 'mensagem_status' as 'conversa_atualizada',
+        data: { conversa_id, mensagem_id: id, status: status.status } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+      });
+    }
   }
 }

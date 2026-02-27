@@ -417,3 +417,15 @@ export function normalizePhone(phone: string | null | undefined): string | null 
   if (cleaned.length < 10 || cleaned.length > 15) return null;
   return cleaned;
 }
+
+/**
+ * Extrai o messageid curto (sem prefixo owner) da resposta da UAZAPI.
+ * UAZAPI retorna: data.id = "owner:messageid" e data.messageid = "messageid" (curto).
+ * O webhook de status usa o messageid curto, entao devemos salvar sem prefixo.
+ * Retorna { shortId, fullId } para salvar shortId no banco e fullId em metadata.
+ */
+export function extractUazapiMessageIds(data: Record<string, unknown>): { shortId: string; fullId: string } {
+  const fullId = (data.id || data.messageid || data.messageId || '') as string;
+  const shortId = (data.messageid as string) || fullId.split(':').pop() || fullId;
+  return { shortId, fullId };
+}

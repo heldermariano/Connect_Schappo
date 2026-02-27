@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatInternoMensagem } from '@/lib/types';
 
 interface ChatInternoMessageProps {
@@ -69,7 +69,23 @@ function renderMedia(mensagem: ChatInternoMensagem) {
 export default function ChatInternoMessage({ mensagem, isOwn, onReact, onReply }: ChatInternoMessageProps) {
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPos, setEmojiPos] = useState<{ top: number; left: number } | null>(null);
+  const reactBtnRef = useRef<HTMLButtonElement>(null);
   const reacoes = mensagem.reacoes || [];
+
+  // Calcular posicao fixa do emoji picker ao abrir
+  const openEmojiPicker = useCallback(() => {
+    setShowEmojiPicker((v) => {
+      if (!v && reactBtnRef.current) {
+        const rect = reactBtnRef.current.getBoundingClientRect();
+        let left = isOwn ? rect.right - 220 : rect.left;
+        if (left + 220 > window.innerWidth) left = window.innerWidth - 228;
+        if (left < 8) left = 8;
+        setEmojiPos({ top: rect.top - 36, left });
+      }
+      return !v;
+    });
+  }, [isOwn]);
 
   return (
     <div
@@ -82,7 +98,8 @@ export default function ChatInternoMessage({ mensagem, isOwn, onReact, onReply }
         {showActions && (
           <div className={`absolute top-0 ${isOwn ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'} flex items-center gap-0.5 z-10`}>
             <button
-              onClick={() => setShowEmojiPicker((v) => !v)}
+              ref={reactBtnRef}
+              onClick={openEmojiPicker}
               className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-500 transition-colors"
               title="Reagir"
               type="button"
@@ -106,9 +123,9 @@ export default function ChatInternoMessage({ mensagem, isOwn, onReact, onReply }
           </div>
         )}
 
-        {/* Quick emoji picker */}
-        {showEmojiPicker && onReact && (
-          <div className={`absolute bottom-full ${isOwn ? 'right-0' : 'left-0'} mb-1 z-20`}>
+        {/* Quick emoji picker — fixed para nao ser cortado por overflow-hidden */}
+        {showEmojiPicker && onReact && emojiPos && (
+          <div className="fixed z-[60]" style={{ top: emojiPos.top, left: emojiPos.left }}>
             <div className="flex items-center gap-0.5 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 px-1.5 py-0.5">
               {QUICK_EMOJIS.map((emoji) => (
                 <button

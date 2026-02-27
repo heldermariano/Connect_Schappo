@@ -168,7 +168,7 @@ export default function ChatInternoView({ chat, mensagens, loading, currentUserI
       {!isRecording && (
         <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-800 px-1.5 py-1.5 flex items-center gap-1 shrink-0 bg-white dark:bg-black">
           {/* Emoji picker */}
-          <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="sm" />
+          <EmojiPickerButton onEmojiSelect={handleEmojiSelect} size="sm" fixed />
 
           {/* Attach */}
           <button

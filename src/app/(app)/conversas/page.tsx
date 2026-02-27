@@ -224,6 +224,12 @@ export default function ConversasPage() {
           });
         }
       }
+      if (event === 'mensagem_status') {
+        const d = data as { conversa_id: number; mensagem_id: number; status: string };
+        if (selectedConversa && d.conversa_id === selectedConversa.id) {
+          updateMensagem(d.mensagem_id, { status: d.status as Mensagem['status'] });
+        }
+      }
       if (event === 'chamada_nova') {
         const d = data as { chamada: Chamada };
         setActiveCalls((prev) => [...prev, d.chamada]);

@@ -427,24 +427,31 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     }
   }, [conversaId]);
 
-  // Ctrl+V / Colar imagem do clipboard (print screen)
+  // Ctrl+V / Colar arquivo do clipboard (imagem, audio, documento, etc.)
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      if (item.type.startsWith('image/')) {
+      if (item.kind === 'file') {
         e.preventDefault();
         const file = item.getAsFile();
         if (file) {
-          // Gerar nome descritivo para o print
-          const ext = item.type.split('/')[1] || 'png';
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-          const named = new File([file], `print-${timestamp}.${ext}`, { type: file.type });
-          if (named.size > 16 * 1024 * 1024) {
-            setError('Imagem muito grande (max 16MB)');
+          if (file.size > 16 * 1024 * 1024) {
+            setError('Arquivo muito grande (max 16MB)');
             return;
+          }
+          // Gerar nome descritivo se clipboard nao informar
+          let named = file;
+          if (!file.name || file.name === 'image.png' || file.name === 'blob') {
+            const ext = file.type.split('/')[1]?.split(';')[0] || 'bin';
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const prefix = file.type.startsWith('image/') ? 'print'
+              : file.type.startsWith('audio/') ? 'audio'
+              : file.type.startsWith('video/') ? 'video'
+              : 'arquivo';
+            named = new File([file], `${prefix}-${timestamp}.${ext}`, { type: file.type });
           }
           setAttachments([named]);
           setError(null);
