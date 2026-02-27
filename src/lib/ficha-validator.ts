@@ -40,8 +40,8 @@ const CAMPO_COLUNA: Record<string, { tabela: 'exams' | 'patients'; coluna: strin
 
 const SUPERVISAO_TELEFONE = '5561996628353';
 const INTERVALO_MS = 120_000; // 2 minutos
-// Delay entre mensagens WhatsApp para evitar rate limit da 360Dialog
-const WHATSAPP_DELAY_MS = 5000;
+// Delay entre mensagens WhatsApp para evitar rate limit da Meta/360Dialog
+const WHATSAPP_DELAY_MS = 8000;
 
 interface ExamRow {
   exam_id: string;
@@ -543,35 +543,37 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
   }
 
   private async sendWhatsApp(to: string, text: string): Promise<void> {
-    // Usar UAZAPI (instancia EEG) para enviar alertas — evita rate limit da 360Dialog
-    const uazapiUrl = process.env.UAZAPI_URL;
-    const tokens = process.env.UAZAPI_INSTANCE_TOKENS?.split(',') || [];
-    const token = tokens[0]; // Token EEG (instancia principal)
+    // Enviar pelo canal 360Dialog (numero Geral 556133455701 — canal oficial da clinica)
+    const url = process.env.DIALOG360_API_URL;
+    const apiKey = process.env.DIALOG360_API_KEY;
 
-    if (!uazapiUrl || !token) {
-      throw new Error('UAZAPI nao configurado');
+    if (!url || !apiKey) {
+      throw new Error('360Dialog nao configurado');
     }
 
-    const res = await fetch(`${uazapiUrl}/send/text`, {
+    const res = await fetch(`${url}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        token,
+        'D360-API-KEY': apiKey,
       },
       body: JSON.stringify({
-        number: to,
-        text,
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'text',
+        text: { body: text, preview_url: false },
       }),
     });
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`UAZAPI retornou ${res.status}: ${body}`);
+      throw new Error(`360Dialog retornou ${res.status}: ${body}`);
     }
 
     const data = await res.json();
-    const msgId = data.messageid || data.id || 'unknown';
-    console.log(`[FichaValidator] WhatsApp enviado via UAZAPI para ${to}: msgId=${msgId}`);
+    const msgId = data.messages?.[0]?.id || 'unknown';
+    console.log(`[FichaValidator] WhatsApp enviado via 360Dialog para ${to}: msgId=${msgId}`);
   }
 }
 

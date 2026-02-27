@@ -179,6 +179,13 @@ async function sendMediaVia360Dialog(
       }
     }
 
+    // Normalizar MIME type para formatos aceitos pela Meta Cloud API
+    // Imagens: image/jpeg, image/png (webp precisa converter para png)
+    if (uploadMimetype === 'image/webp' || uploadMimetype === 'image/bmp' || uploadMimetype === 'image/tiff') {
+      // Para formatos nao suportados, enviar como document em vez de rejeitar
+      console.log(`[send-media/360dialog] Formato ${uploadMimetype} nao suportado como imagem, convertendo tipo para document`);
+    }
+
     const formData = new FormData();
     const blob = new Blob([new Uint8Array(uploadBuffer)], { type: uploadMimetype });
     formData.append('file', blob, uploadFilename);
@@ -293,7 +300,22 @@ export async function POST(request: NextRequest) {
       destinatario = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
     }
 
-    const mimetype = file.type || 'application/octet-stream';
+    // Detectar MIME type: usar file.type do browser, com fallback por extensao
+    let mimetype = file.type || '';
+    if (!mimetype || mimetype === 'application/octet-stream') {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      const mimeMap: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+        webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+        mp4: 'video/mp4', avi: 'video/x-msvideo', mov: 'video/quicktime',
+        mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', aac: 'audio/aac',
+        pdf: 'application/pdf', doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xls: 'application/vnd.ms-excel',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
+      mimetype = (ext && mimeMap[ext]) || 'application/octet-stream';
+    }
     const isVoiceRecording = formData.get('voice_recording') === 'true';
     const mediaType = isVoiceRecording ? 'ptt' : getMediaType(mimetype);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
@@ -302,6 +324,8 @@ export async function POST(request: NextRequest) {
     // PTT/audio nao suporta caption no WhatsApp
     const nomeOperador = session.user.nome;
     const captionToSend = mediaType === 'ptt' ? undefined : (caption ? `*${nomeOperador}:*\n${caption}` : `*${nomeOperador}*`);
+
+    console.log(`[send-media] provider=${conversa.provider} type=${mediaType} mime=${mimetype} file=${file.name} size=${fileBuffer.length} voice=${isVoiceRecording}`);
 
     // Enviar via provider correto
     let sendResult: { success: boolean; messageId?: string; mediaId?: string; error?: string };

@@ -427,6 +427,33 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
     }
   }, [conversaId]);
 
+  // Ctrl+V / Colar imagem do clipboard (print screen)
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          // Gerar nome descritivo para o print
+          const ext = item.type.split('/')[1] || 'png';
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const named = new File([file], `print-${timestamp}.${ext}`, { type: file.type });
+          if (named.size > 16 * 1024 * 1024) {
+            setError('Imagem muito grande (max 16MB)');
+            return;
+          }
+          setAttachments([named]);
+          setError(null);
+        }
+        return;
+      }
+    }
+  }, []);
+
   const canSend = attachments.length > 0 || text.trim().length > 0;
 
   // Se gravando, mostrar AudioRecorder em vez do input normal
@@ -605,6 +632,7 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
           value={text}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={editingMsg ? 'Editar mensagem...' : attachments.length > 0 ? 'Legenda (opcional)...' : 'Digite sua mensagem...'}
           disabled={disabled || sending}
           spellCheck={true}
