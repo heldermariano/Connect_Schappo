@@ -223,6 +223,7 @@ export type SipCallState = 'idle' | 'calling' | 'ringing' | 'in-call' | 'on-hold
 export type SSEEvent =
   | { type: 'nova_mensagem'; data: { conversa_id: number; mensagem: Mensagem; categoria?: string; tipo?: string } }
   | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg?: string; nao_lida?: number; atendente_id?: number | null; atendente_nome?: string | null; ultima_msg_from_me?: boolean; is_archived?: boolean } }
+  | { type: 'mensagem_status'; data: { conversa_id: number; mensagem_id: number; status: string } }
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
   | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }
@@ -382,3 +383,37 @@ export const GRUPO_CHANNELS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
   todos: ['eeg', 'recepcao', 'geral'],
 };
+
+// --- Normalizacao de Telefone ---
+
+/**
+ * Normaliza numero de telefone brasileiro para envio via WhatsApp.
+ * - Remove sufixos @s.whatsapp.net / @lid
+ * - Adiciona DDI 55 se ausente
+ * - Adiciona 9o digito para celulares (12 digitos → 13)
+ * - Retorna null se invalido
+ * Grupos (@g.us) passam sem alteracao.
+ */
+export function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  if (phone.includes('@g.us')) return phone;
+
+  let cleaned = phone
+    .replace('@s.whatsapp.net', '')
+    .replace('@lid', '')
+    .replace(/\D/g, '');
+
+  if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
+  if (!cleaned.startsWith('55')) cleaned = '55' + cleaned;
+
+  // Celular BR sem 9o digito: 55 + DD(2) + 8 digitos = 12 → adicionar 9
+  if (cleaned.length === 12) {
+    const countryCode = cleaned.substring(0, 2);
+    const ddd = cleaned.substring(2, 4);
+    const number = cleaned.substring(4);
+    cleaned = countryCode + ddd + '9' + number;
+  }
+
+  if (cleaned.length < 10 || cleaned.length > 15) return null;
+  return cleaned;
+}

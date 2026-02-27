@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
 import { execFileSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -297,7 +297,8 @@ export async function POST(request: NextRequest) {
     if (isGroup) {
       destinatario = conversa.wa_chatid;
     } else {
-      destinatario = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+      const raw = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+      destinatario = normalizePhone(raw) || raw;
     }
 
     // Detectar MIME type: usar file.type do browser, com fallback por extensao

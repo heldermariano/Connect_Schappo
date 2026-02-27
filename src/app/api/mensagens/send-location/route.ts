@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
 
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
   recepcao: ['recepcao', 'geral'],
@@ -124,9 +124,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Sem permissao' }, { status: 403 });
     }
 
+    const rawDest = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
     const destinatario = conversa.tipo === 'grupo'
       ? conversa.wa_chatid
-      : conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+      : (normalizePhone(rawDest) || rawDest);
 
     let sendResult: { success: boolean; messageId?: string; error?: string };
     if (conversa.provider === '360dialog') {

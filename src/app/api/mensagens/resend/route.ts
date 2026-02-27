@@ -14,13 +14,12 @@ const GRUPO_CATEGORIAS: Record<string, string[]> = {
 // Envia texto via UAZAPI
 async function sendTextUAZAPI(number: string, text: string, instanceToken: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const url = process.env.UAZAPI_URL;
-  const token = instanceToken;
-  if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
+  if (!url || !instanceToken) return { success: false, error: 'UAZAPI nao configurado' };
 
   try {
     const res = await fetch(`${url}/send/text`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', token },
+      headers: { 'Content-Type': 'application/json', token: instanceToken },
       body: JSON.stringify({ number, text }),
     });
     if (!res.ok) return { success: false, error: `UAZAPI ${res.status}` };
@@ -63,88 +62,87 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { source_message_id, target_conversa_id } = await request.json();
+    const { mensagem_id } = await request.json();
 
-    if (!source_message_id || !target_conversa_id) {
-      return NextResponse.json({ error: 'source_message_id e target_conversa_id sao obrigatorios' }, { status: 400 });
+    if (!mensagem_id) {
+      return NextResponse.json({ error: 'mensagem_id e obrigatorio' }, { status: 400 });
     }
 
-    // Buscar mensagem original
+    // Buscar mensagem original com dados da conversa
     const msgResult = await pool.query(
-      `SELECT * FROM atd.mensagens WHERE id = $1`,
-      [source_message_id],
+      `SELECT m.*, c.wa_chatid, c.tipo, c.categoria, c.provider, c.telefone
+       FROM atd.mensagens m
+       JOIN atd.conversas c ON c.id = m.conversa_id
+       WHERE m.id = $1`,
+      [mensagem_id],
     );
+
     if (msgResult.rows.length === 0) {
       return NextResponse.json({ error: 'Mensagem nao encontrada' }, { status: 404 });
     }
-    const originalMsg = msgResult.rows[0];
 
-    // Buscar conversa destino
-    const conversaResult = await pool.query(
-      `SELECT id, wa_chatid, tipo, categoria, provider, telefone
-       FROM atd.conversas WHERE id = $1`,
-      [target_conversa_id],
-    );
-    if (conversaResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Conversa destino nao encontrada' }, { status: 404 });
+    const original = msgResult.rows[0];
+
+    // Apenas mensagens proprias podem ser reenviadas
+    if (!original.from_me) {
+      return NextResponse.json({ error: 'Somente mensagens proprias podem ser reenviadas' }, { status: 403 });
     }
-    const conversa = conversaResult.rows[0];
 
-    // Verificar permissao
+    // Verificar permissao do grupo
     const grupo = (session.user as { grupo?: string }).grupo || 'todos';
     const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
-    if (!categoriasPermitidas.includes(conversa.categoria)) {
+    if (!categoriasPermitidas.includes(original.categoria)) {
       return NextResponse.json({ error: 'Sem permissao para esta conversa' }, { status: 403 });
     }
 
-    const isGroup = conversa.tipo === 'grupo';
-    const rawDest = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    // Determinar destinatario
+    const isGroup = original.tipo === 'grupo';
+    const rawDest = original.telefone || original.wa_chatid.replace('@s.whatsapp.net', '');
     const destinatario = isGroup
-      ? conversa.wa_chatid
+      ? original.wa_chatid
       : (normalizePhone(rawDest) || rawDest);
 
-    // Montar texto encaminhado
-    const senderLabel = originalMsg.sender_name || originalMsg.sender_phone || 'Desconhecido';
-    const conteudoOriginal = originalMsg.conteudo || `[${originalMsg.tipo_mensagem}]`;
+    // Montar texto para reenvio
+    const conteudoOriginal = original.conteudo || `[${original.tipo_mensagem}]`;
     const nomeOperador = session.user.nome;
-    const textToSend = `*${nomeOperador}:*\n_Encaminhada de ${senderLabel}:_\n${conteudoOriginal}`;
+    const textToSend = `*${nomeOperador}:*\n${conteudoOriginal}`;
 
-    // Enviar via provider
+    // Enviar via provider correto
     let sendResult: { success: boolean; messageId?: string; error?: string };
-    if (conversa.provider === '360dialog') {
+
+    if (original.provider === '360dialog') {
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
       sendResult = await sendText360(to, textToSend);
     } else {
-      const uazapiToken = getUazapiToken(conversa.categoria);
+      const uazapiToken = getUazapiToken(original.categoria);
       sendResult = await sendTextUAZAPI(destinatario, textToSend, uazapiToken);
     }
 
     if (!sendResult.success) {
-      return NextResponse.json({ error: sendResult.error || 'Falha ao encaminhar' }, { status: 502 });
+      return NextResponse.json({ error: sendResult.error || 'Falha ao reenviar' }, { status: 502 });
     }
 
-    // Salvar no banco
-    const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `fwd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Salvar nova mensagem no banco
+    const owner = CATEGORIA_OWNER[original.categoria] || '';
+    const waMessageId = sendResult.messageId || `resend_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const newMsgResult = await pool.query(
       `INSERT INTO atd.mensagens (
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, is_forwarded, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, true, 'sent', $6)
+        tipo_mensagem, conteudo, status, metadata
+      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6)
       ON CONFLICT (wa_message_id) DO NOTHING
       RETURNING *`,
       [
-        target_conversa_id,
+        original.conversa_id,
         waMessageId,
         owner,
         session.user.nome,
         conteudoOriginal,
         JSON.stringify({
-          forwarded_from_msg_id: source_message_id,
-          forwarded_by: session.user.id,
-          forwarded_by_name: session.user.nome,
-          original_sender: senderLabel,
+          sent_by: session.user.id,
+          sent_by_name: session.user.nome,
+          resent_from: mensagem_id,
         }),
       ],
     );
@@ -155,27 +153,34 @@ export async function POST(request: NextRequest) {
 
     const mensagem = newMsgResult.rows[0];
 
-    // Atualizar conversa destino
+    // Marcar original com info de reenvio
+    await pool.query(
+      `UPDATE atd.mensagens SET metadata = metadata || $1 WHERE id = $2`,
+      [JSON.stringify({ resent_at: new Date().toISOString(), resent_by: session.user.nome }), mensagem_id],
+    );
+
+    // Atualizar conversa
     await pool.query(
       `UPDATE atd.conversas SET
         ultima_mensagem = LEFT($1, 200),
         ultima_msg_at = NOW(),
+        ultima_msg_from_me = TRUE,
         nao_lida = 0,
         updated_at = NOW()
        WHERE id = $2`,
-      [conteudoOriginal, target_conversa_id],
+      [conteudoOriginal, original.conversa_id],
     );
 
     // Emitir SSE
     sseManager.broadcast({
       type: 'nova_mensagem',
-      data: { conversa_id: target_conversa_id, mensagem },
+      data: { conversa_id: original.conversa_id, mensagem, categoria: original.categoria, tipo: original.tipo },
     });
 
     sseManager.broadcast({
       type: 'conversa_atualizada',
       data: {
-        conversa_id: target_conversa_id,
+        conversa_id: original.conversa_id,
         ultima_msg: conteudoOriginal.substring(0, 200),
         nao_lida: 0,
       },
@@ -183,7 +188,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, mensagem });
   } catch (err) {
-    console.error('[api/mensagens/forward] Erro:', err);
+    console.error('[api/mensagens/resend] Erro:', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

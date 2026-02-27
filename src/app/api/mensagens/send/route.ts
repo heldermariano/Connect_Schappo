@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
 
 // Categorias permitidas por grupo de atendimento
 const GRUPO_CATEGORIAS: Record<string, string[]> = {
@@ -137,8 +137,9 @@ export async function POST(request: NextRequest) {
       // Grupo: usar wa_chatid (ex: 120363xxx@g.us)
       destinatario = conversa.wa_chatid;
     } else {
-      // Individual: usar telefone ou extrair do wa_chatid
-      destinatario = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+      // Individual: normalizar telefone (adicionar 9o digito BR se necessario)
+      const raw = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+      destinatario = normalizePhone(raw) || raw;
     }
 
     // Enviar via provider correto

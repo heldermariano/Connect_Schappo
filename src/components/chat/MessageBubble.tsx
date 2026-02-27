@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useState, useRef, useEffect } from 'react';
 import { Mensagem } from '@/lib/types';
 import MediaPreview from './MediaPreview';
 import QuotedMessage from './QuotedMessage';
@@ -11,6 +11,7 @@ interface MessageBubbleProps {
   showSender: boolean; // Em grupos, mostra nome do remetente
   isAdmin?: boolean;
   onDelete?: (msgId: number) => void;
+  onResend?: (msgId: number) => void;
   onContextMenu?: (data: { x: number; y: number; mensagem: Mensagem }) => void;
 }
 
@@ -19,7 +20,29 @@ function formatTime(dateStr: string): string {
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function StatusIcon({ status }: { status: string }) {
+const STATUS_LABELS: Record<string, string> = {
+  sent: 'Enviada',
+  delivered: 'Entregue',
+  read: 'Lida',
+  failed: 'Falha no envio',
+};
+
+function StatusIcon({ status, metadata }: { status: string; metadata?: Record<string, unknown> }) {
+  const [showPopover, setShowPopover] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Fechar popover ao clicar fora
+  useEffect(() => {
+    if (!showPopover) return;
+    const handleClick = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowPopover(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showPopover]);
+
   // Check unico (enviada)
   const singleCheck = (
     <svg className="w-4 h-3.5" viewBox="0 0 16 11" fill="none">
@@ -34,25 +57,73 @@ function StatusIcon({ status }: { status: string }) {
     </svg>
   );
 
+  let icon: ReactNode = null;
+  let colorClass = '';
   switch (status) {
     case 'sent':
-      return <span className="text-gray-400 inline-flex" title="Enviada">{singleCheck}</span>;
+      icon = singleCheck;
+      colorClass = 'text-gray-400';
+      break;
     case 'delivered':
-      return <span className="text-gray-400 inline-flex" title="Entregue">{doubleCheck}</span>;
+      icon = doubleCheck;
+      colorClass = 'text-gray-400';
+      break;
     case 'read':
-      return <span className="text-blue-500 inline-flex" title="Lida">{doubleCheck}</span>;
+      icon = doubleCheck;
+      colorClass = 'text-blue-500';
+      break;
     case 'failed':
-      return (
-        <span className="text-red-500 inline-flex" title="Falha">
-          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
-            <path d="M8 4v5M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </span>
+      icon = (
+        <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
+          <path d="M8 4v5M8 11h.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
       );
+      colorClass = 'text-red-500';
+      break;
     default:
       return null;
   }
+
+  // Construir historico de status
+  const statusHistory = (metadata?.status_history as Array<{ status: string; timestamp: string }>) || [];
+  const resentAt = metadata?.resent_at as string | undefined;
+  const resentBy = metadata?.resent_by as string | undefined;
+  const hasDetails = statusHistory.length > 0 || resentAt;
+
+  return (
+    <span className={`${colorClass} inline-flex relative`}>
+      <button
+        onClick={(e) => { e.stopPropagation(); if (hasDetails) setShowPopover(!showPopover); }}
+        className={`inline-flex ${hasDetails ? 'cursor-pointer hover:opacity-70' : 'cursor-default'}`}
+        title={STATUS_LABELS[status] || status}
+      >
+        {icon}
+      </button>
+      {showPopover && hasDetails && (
+        <div
+          ref={popoverRef}
+          className="absolute bottom-full right-0 mb-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 min-w-[160px] z-50 text-left"
+        >
+          <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Status da mensagem</div>
+          {statusHistory.map((entry, i) => (
+            <div key={i} className="flex items-center gap-2 py-0.5">
+              <span className="text-[10px] text-gray-400 w-10">{formatTime(entry.timestamp)}</span>
+              <span className={`text-[10px] font-medium ${entry.status === 'read' ? 'text-blue-500' : entry.status === 'failed' ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                {STATUS_LABELS[entry.status] || entry.status}
+              </span>
+            </div>
+          ))}
+          {resentAt && (
+            <div className="flex items-center gap-2 py-0.5 border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
+              <span className="text-[10px] text-gray-400 w-10">{formatTime(resentAt)}</span>
+              <span className="text-[10px] font-medium text-amber-600">Reenviada{resentBy ? ` por ${resentBy}` : ''}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -168,7 +239,7 @@ function renderTextWithMentions(text: string, mencoesResolvidas?: Record<string,
   return parts.length > 0 ? parts : [text];
 }
 
-export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete, onContextMenu }: MessageBubbleProps) {
+export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete, onResend, onContextMenu }: MessageBubbleProps) {
   const isMe = mensagem.from_me;
   const tipoNorm = mensagem.tipo_mensagem.toLowerCase().replace('message', '');
   const hasMedia = ['image', 'audio', 'video', 'document', 'sticker'].includes(mensagem.tipo_mensagem)
@@ -218,7 +289,9 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
       <div className={`relative max-w-[70%] min-w-[80px] ${hasReactions ? 'mb-3' : ''}`}>
       <div
         className={`rounded-lg px-3 py-2 ${
-          isMe ? 'bg-green-100 dark:bg-green-900/40 text-gray-900 dark:text-gray-100' : 'bg-white dark:bg-black text-gray-900 dark:text-gray-100 shadow-sm'
+          isMe && mensagem.status === 'failed'
+            ? 'bg-red-50 dark:bg-red-950/30 text-gray-900 dark:text-gray-100 ring-1 ring-red-300 dark:ring-red-800'
+            : isMe ? 'bg-green-100 dark:bg-green-900/40 text-gray-900 dark:text-gray-100' : 'bg-white dark:bg-black text-gray-900 dark:text-gray-100 shadow-sm'
         }`}
       >
         {/* Nome do remetente em grupos (com cor unica por pessoa) */}
@@ -268,8 +341,21 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
             <span className="text-[10px] text-gray-400 italic mr-1">editada</span>
           )}
           <span className="text-[10px] text-gray-400">{formatTime(mensagem.created_at)}</span>
-          {isMe && <StatusIcon status={mensagem.status} />}
+          {isMe && <StatusIcon status={mensagem.status} metadata={mensagem.metadata} />}
         </div>
+
+        {/* Alerta de falha + botao reenviar */}
+        {isMe && mensagem.status === 'failed' && onResend && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onResend(mensagem.id); }}
+            className="flex items-center gap-1.5 mt-1.5 px-2 py-1 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors text-[11px] font-medium w-full justify-center"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Reenviar mensagem
+          </button>
+        )}
       </div>
       {/* Botao excluir mensagem (admin only, hover) */}
       {isAdmin && onDelete && (

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
-import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
 
     const conversa = conversaResult.rows[0];
     const isGroup = conversa.tipo === 'grupo';
-    const destinatario = isGroup ? conversa.wa_chatid : (conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', ''));
+    const rawDest = conversa.telefone || conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    const destinatario = isGroup ? conversa.wa_chatid : (normalizePhone(rawDest) || rawDest);
 
     // Enviar reacao via provider
     // UAZAPI: POST /message/react { number, text (emoji), id (wa_message_id) }

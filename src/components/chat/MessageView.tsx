@@ -134,6 +134,29 @@ export default function MessageView({
     setContextMenu(null);
   }, [contextMenu]);
 
+  const doResend = useCallback(async (msgId: number) => {
+    try {
+      const res = await fetch('/api/mensagens/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem_id: msgId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('[resend] Erro:', body.error || res.status);
+      }
+    } catch (err) {
+      console.error('[resend] Erro:', err);
+    }
+  }, []);
+
+  const handleResend = useCallback(async () => {
+    if (!contextMenu || !conversa) return;
+    const msg = contextMenu.mensagem;
+    setContextMenu(null);
+    await doResend(msg.id);
+  }, [contextMenu, conversa, doResend]);
+
   const handleEdit = useCallback(() => {
     if (!contextMenu) return;
     setEditingMsg(contextMenu.mensagem);
@@ -317,6 +340,7 @@ export default function MessageView({
               showSender={isGroup}
               isAdmin={currentUserRole === 'admin'}
               onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+              onResend={doResend}
               onContextMenu={handleContextMenu}
             />
           ))
@@ -337,6 +361,7 @@ export default function MessageView({
           onReply={handleReply}
           onForward={handleForward}
           onReact={handleReact}
+          onResend={handleResend}
           onEdit={onEditMensagem ? handleEdit : undefined}
           onDelete={handleDelete}
           onClose={() => setContextMenu(null)}
