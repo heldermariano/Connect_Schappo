@@ -141,12 +141,14 @@ export default function Sidebar() {
         const isConversas = item.icon === 'chat';
 
         if (isConversas) {
+          // Supervisor nao ve flyout de canais nem badge
+          const showFlyout = userRole !== 'supervisor';
           return (
             <div
               key={item.href}
               className="relative"
-              onMouseEnter={handleMouseEnter}
-              onMouseLeave={handleMouseLeave}
+              onMouseEnter={showFlyout ? handleMouseEnter : undefined}
+              onMouseLeave={showFlyout ? handleMouseLeave : undefined}
             >
               <Link
                 href="/conversas"
@@ -158,15 +160,15 @@ export default function Sidebar() {
                 }`}
               >
                 <NavIcon icon={item.icon} active={active} />
-                {totalUnread > 0 && (
+                {showFlyout && totalUnread > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold shadow-sm">
                     {totalUnread > 99 ? '99+' : totalUnread}
                   </span>
                 )}
               </Link>
 
-              {/* Flyout submenu — apenas canais */}
-              {flyoutOpen && (
+              {/* Flyout submenu — apenas canais (oculto para supervisor) */}
+              {showFlyout && flyoutOpen && (
                 <>
                   {/* Ponte invisivel entre sidebar e flyout */}
                   <div className="absolute left-full top-0 w-2 h-full" />
