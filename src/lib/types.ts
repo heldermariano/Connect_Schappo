@@ -222,7 +222,7 @@ export type SipCallState = 'idle' | 'calling' | 'ringing' | 'in-call' | 'on-hold
 
 export type SSEEvent =
   | { type: 'nova_mensagem'; data: { conversa_id: number; mensagem: Mensagem; categoria?: string; tipo?: string } }
-  | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg: string; nao_lida: number; atendente_id?: number | null; atendente_nome?: string | null; ultima_msg_from_me?: boolean } }
+  | { type: 'conversa_atualizada'; data: { conversa_id: number; ultima_msg?: string; nao_lida?: number; atendente_id?: number | null; atendente_nome?: string | null; ultima_msg_from_me?: boolean; is_archived?: boolean } }
   | { type: 'chamada_nova'; data: { chamada: Chamada } }
   | { type: 'chamada_atualizada'; data: { chamada_id: number; status: string; duracao?: number } }
   | { type: 'ramal_status'; data: { ramal: string; status: 'online' | 'offline' | 'busy' } }

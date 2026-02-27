@@ -52,7 +52,13 @@ export async function GET(request: NextRequest) {
   }
 
   const historico = params.get('historico'); // 'true' — buscar conversas finalizadas
-  const conditions: string[] = [historico === 'true' ? 'c.is_archived = TRUE' : 'c.is_archived = FALSE'];
+  const conditions: string[] = [];
+
+  // Quando ha busca, nao filtrar por is_archived (buscar em tudo: ativas + resolvidas)
+  // Caso contrario, respeitar filtro historico/ativo
+  if (!busca) {
+    conditions.push(historico === 'true' ? 'c.is_archived = TRUE' : 'c.is_archived = FALSE');
+  }
   const values: unknown[] = [];
   let paramIndex = 1;
 

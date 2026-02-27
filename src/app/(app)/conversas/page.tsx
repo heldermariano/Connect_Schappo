@@ -248,6 +248,17 @@ export default function ConversasPage() {
     if (conversa.nao_lida > 0) {
       marcarComoLida(conversa.id);
     }
+    // Desarquivar conversa resolvida ao abrir (inicia nova conversa)
+    if (conversa.is_archived) {
+      fetch(`/api/conversas/${conversa.id}/atribuir`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reabrir: true }),
+      }).then(() => {
+        updateConversa(conversa.id, { is_archived: false });
+        setSelectedConversa((prev) => prev ? { ...prev, is_archived: false } : null);
+      }).catch(() => {});
+    }
     // Limpar badge de mencao ao abrir a conversa
     setMencionadoEm((prev) => {
       const next = new Set(prev);

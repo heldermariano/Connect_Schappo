@@ -97,13 +97,18 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
           </div>
         </div>
         {/* Badge de atribuição */}
-        <div className="mt-0.5">
+        <div className="mt-0.5 flex items-center gap-1.5">
+          {conversa.is_archived && (
+            <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+              Resolvida
+            </span>
+          )}
           {conversa.atendente_id ? (
             <span className="text-[10px] text-green-600">
               Respondido por <span className="font-semibold">{(conversa as Conversa & { atendente_nome?: string }).atendente_nome || 'Operador'}</span>
             </span>
           ) : (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">Não atribuída</span>
+            !conversa.is_archived && <span className="text-[10px] text-gray-400 dark:text-gray-500">Não atribuída</span>
           )}
         </div>
       </div>

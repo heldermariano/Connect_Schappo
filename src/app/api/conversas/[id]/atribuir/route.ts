@@ -21,7 +21,24 @@ export async function PATCH(
   }
 
   try {
-    const { atendente_id } = await request.json();
+    const { atendente_id, reabrir } = await request.json();
+
+    // Reabrir conversa arquivada (busca → abrir conversa resolvida)
+    if (reabrir) {
+      const result = await pool.query(
+        `UPDATE atd.conversas SET is_archived = FALSE, updated_at = NOW()
+         WHERE id = $1 RETURNING id, ultima_mensagem, nao_lida, atendente_id`,
+        [conversaId],
+      );
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: 'Conversa nao encontrada' }, { status: 404 });
+      }
+      sseManager.broadcast({
+        type: 'conversa_atualizada',
+        data: { conversa_id: conversaId, is_archived: false },
+      });
+      return NextResponse.json({ success: true });
+    }
 
     // atendente_id null = desatribuir
     if (atendente_id !== null && atendente_id !== undefined) {
