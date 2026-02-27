@@ -20,7 +20,7 @@ const CAMPOS_OBRIGATORIOS: Record<string, string> = {
 };
 
 // Mapeamento campo XML -> coluna real no banco externo
-// CORRIGIDO: companion_name = tecnico responsavel (nao exams.technician que raramente e preenchido)
+// Tecnico: COALESCE(exams.technician, patients.companion_name) — ambos podem conter o nome
 const CAMPO_COLUNA: Record<string, { tabela: 'exams' | 'patients'; coluna: string }> = {
   DataExame: { tabela: 'exams', coluna: 'exam_date' },
   Nome: { tabela: 'patients', coluna: 'name' },
@@ -64,6 +64,10 @@ interface ExamRow {
   requesting_doctor: string | null;
   previous_exams: string | null;
   created_at: string;
+  // Campos denormalizados em exams (as vezes mais completos que patients)
+  patient_phone: string | null;
+  patient_email: string | null;
+  patient_responsible: string | null;
 }
 
 function delay(ms: number): Promise<void> {
@@ -150,7 +154,10 @@ class FichaValidator {
           e.cid,
           e.requesting_doctor,
           e.previous_exams,
-          e.created_at
+          e.created_at,
+          e.patient_phone,
+          e.patient_email,
+          e.patient_responsible
         FROM exams e
         JOIN patients p ON p.id = e.patient_id
         WHERE e.exam_date::date = CURRENT_DATE
@@ -202,10 +209,10 @@ class FichaValidator {
       Sexo: row.sex,
       Endereco: row.location_code,
       Cidade: row.device_model,
-      Pais: row.responsible,
-      Celular: row.phone,
-      Profissao: row.companion_name,
-      Email: row.email,
+      Pais: row.patient_responsible || row.responsible,
+      Celular: row.patient_phone || row.phone,
+      Profissao: row.technician || row.companion_name,
+      Email: row.patient_email || row.email,
       Indicacao: row.indication,
       Cid: row.cid,
       Medico: row.requesting_doctor,
@@ -295,9 +302,8 @@ class FichaValidator {
   }
 
   private async sendAlerts(row: ExamRow, missing: string[]): Promise<void> {
-    // Usar companion_name como campo principal do tecnico (campo real preenchido)
-    // Fallback para exams.technician caso companion_name esteja vazio
-    const tecnicoNaFicha = row.companion_name?.trim() || row.technician?.trim() || '';
+    // Priorizar exams.technician (campo correto) com fallback para companion_name
+    const tecnicoNaFicha = row.technician?.trim() || row.companion_name?.trim() || '';
     const tecnicoIdentificado = tecnicoNaFicha.length > 0;
     // Limpar nome para busca no hub_usuarios:
     // - Remover prefixo "TEC." ou "TEC "
@@ -489,7 +495,10 @@ Cl\u00EDnica Schappo \u2014 Sistema de Gest\u00E3o EEG`;
             e.cid,
             e.requesting_doctor,
             e.previous_exams,
-            e.created_at
+            e.created_at,
+            e.patient_phone,
+            e.patient_email,
+            e.patient_responsible
           FROM exams e
           JOIN patients p ON p.id = e.patient_id
           WHERE e.id = $1`,

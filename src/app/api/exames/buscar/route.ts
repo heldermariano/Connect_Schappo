@@ -36,7 +36,10 @@ export async function GET(request: NextRequest) {
            e.exam_type AS tipo_exame,
            e.exam_date AS data_exame,
            e.status AS exam_status,
-           e.location_code AS local
+           e.location_code AS local,
+           COALESCE(e.technician, p.companion_name) AS tecnico,
+           COALESCE(e.patient_phone, p.phone) AS telefone_paciente,
+           e.convenio
          FROM patients p
          JOIN exams e ON e.patient_id = p.id
          WHERE LOWER(p.name_normalized) LIKE LOWER('%' || $1 || '%')
@@ -49,6 +52,9 @@ export async function GET(request: NextRequest) {
          le.data_exame,
          le.exam_status,
          le.local,
+         le.tecnico,
+         le.telefone_paciente,
+         le.convenio,
          cr.status AS laudo_status,
          r.report_type AS arquivo_tipo,
          r.filename AS arquivo_nome,
@@ -70,6 +76,9 @@ export async function GET(request: NextRequest) {
       data_exame: string;
       status: string;
       local: string | null;
+      tecnico: string | null;
+      telefone_paciente: string | null;
+      convenio: string | null;
       arquivos: { tipo: string; nome: string; download_url: string }[];
     }>();
 
@@ -102,6 +111,9 @@ export async function GET(request: NextRequest) {
           data_exame: dataExame,
           status,
           local: row.local || null,
+          tecnico: row.tecnico || null,
+          telefone_paciente: row.telefone_paciente || null,
+          convenio: row.convenio || null,
           arquivos: [],
         });
       }

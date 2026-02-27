@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
+import examesPool from '@/lib/db-exames';
+import { HubUsuario } from '@/lib/types';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -9,11 +11,69 @@ export async function GET() {
     return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
   }
 
-  const result = await pool.query(
-    `SELECT * FROM atd.hub_usuarios WHERE ativo = TRUE ORDER BY nome`,
-  );
+  // Queries em paralelo: tecnicos + alertas de hoje + exames de hoje
+  const [tecnicosRes, alertasRes, examesRes] = await Promise.all([
+    pool.query(`SELECT * FROM atd.hub_usuarios WHERE ativo = TRUE ORDER BY nome`),
 
-  return NextResponse.json({ usuarios: result.rows });
+    pool.query(`
+      SELECT tecnico_id,
+        COUNT(*)::int AS alertas_hoje,
+        COUNT(*) FILTER (WHERE corrigido = FALSE)::int AS pendentes,
+        COUNT(*) FILTER (WHERE corrigido = TRUE)::int AS corrigidos
+      FROM atd.eeg_alertas_ficha
+      WHERE created_at::date = CURRENT_DATE AND tecnico_id IS NOT NULL
+      GROUP BY tecnico_id
+    `),
+
+    examesPool.query(`
+      SELECT COALESCE(e.technician, p.companion_name) AS tecnico_nome, COUNT(*)::int AS exames_hoje
+      FROM exams e
+      JOIN patients p ON p.id = e.patient_id
+      WHERE e.exam_date::date = CURRENT_DATE AND p.birth_date IS NOT NULL
+      GROUP BY COALESCE(e.technician, p.companion_name)
+    `).catch(() => ({ rows: [] as Array<{ tecnico_nome: string; exames_hoje: number }> })),
+  ]);
+
+  // Indexar alertas por tecnico_id
+  const alertasMap = new Map<number, { alertas_hoje: number; pendentes: number; corrigidos: number }>();
+  for (const row of alertasRes.rows) {
+    alertasMap.set(row.tecnico_id, {
+      alertas_hoje: row.alertas_hoje,
+      pendentes: row.pendentes,
+      corrigidos: row.corrigidos,
+    });
+  }
+
+  // Indexar exames por nome do tecnico (partial match case-insensitive)
+  const examesRows = examesRes.rows as Array<{ tecnico_nome: string; exames_hoje: number }>;
+
+  // Enriquecer cada tecnico com resumo
+  const usuarios = tecnicosRes.rows.map((u: HubUsuario) => {
+    const alerta = alertasMap.get(u.id) || { alertas_hoje: 0, pendentes: 0, corrigidos: 0 };
+
+    // Match exames por nome (companion_name pode conter o nome completo ou parcial)
+    let exames_hoje = 0;
+    const nomeNorm = u.nome.toLowerCase().trim();
+    for (const ex of examesRows) {
+      if (!ex.tecnico_nome) continue;
+      const companion = ex.tecnico_nome.toLowerCase().trim();
+      if (companion.includes(nomeNorm) || nomeNorm.includes(companion)) {
+        exames_hoje += ex.exames_hoje;
+      }
+    }
+
+    return {
+      ...u,
+      resumo: {
+        exames_hoje,
+        alertas_hoje: alerta.alertas_hoje,
+        pendentes: alerta.pendentes,
+        corrigidos: alerta.corrigidos,
+      },
+    };
+  });
+
+  return NextResponse.json({ usuarios });
 }
 
 export async function POST(request: NextRequest) {
