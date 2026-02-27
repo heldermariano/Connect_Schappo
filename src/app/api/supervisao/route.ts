@@ -120,6 +120,7 @@ export async function GET() {
       `),
 
       // Ranking por operador: conversas atendidas hoje + tempo medio resposta
+      // Tempo conta apenas a partir de quando o operador ficou disponivel (login/retorno de pausa)
       pool.query(`
         WITH respostas AS (
           SELECT
@@ -132,9 +133,11 @@ export async function GET() {
               WHERE m2.conversa_id = m.conversa_id
                 AND m2.from_me = false
                 AND m2.created_at < m.created_at
-            ) AS pergunta_at
+            ) AS pergunta_at,
+            a.disponivel_desde
           FROM atd.mensagens m
           JOIN atd.conversas c ON c.id = m.conversa_id
+          JOIN atd.atendentes a ON a.id = c.atendente_id
           WHERE m.from_me = true
             AND m.created_at >= $1
             AND c.tipo = 'individual'
@@ -146,12 +149,15 @@ export async function GET() {
           COALESCE(
             AVG(
               CASE WHEN pergunta_at IS NOT NULL
-                THEN EXTRACT(EPOCH FROM (resposta_at - pergunta_at)) / 60
+                THEN EXTRACT(EPOCH FROM (
+                  resposta_at - GREATEST(pergunta_at, COALESCE(disponivel_desde, pergunta_at))
+                )) / 60
               END
             )::int,
             0
           ) AS tempo_medio_min
         FROM respostas
+        WHERE pergunta_at IS NOT NULL
         GROUP BY atendente_id
       `, [hoje.toISOString()]),
     ]);

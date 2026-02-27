@@ -29,11 +29,18 @@ export async function PATCH(request: NextRequest) {
     );
     const currentStatus = currentResult.rows[0]?.status_presenca;
 
-    // Atualizar no banco
-    await pool.query(
-      `UPDATE atd.atendentes SET status_presenca = $1, updated_at = NOW() WHERE id = $2`,
-      [status, atendenteId],
-    );
+    // Atualizar no banco (setar disponivel_desde quando fica disponivel)
+    if (status === 'disponivel') {
+      await pool.query(
+        `UPDATE atd.atendentes SET status_presenca = $1, updated_at = NOW(), disponivel_desde = NOW() WHERE id = $2`,
+        [status, atendenteId],
+      );
+    } else {
+      await pool.query(
+        `UPDATE atd.atendentes SET status_presenca = $1, updated_at = NOW() WHERE id = $2`,
+        [status, atendenteId],
+      );
+    }
 
     // Tracking de pausas (pausa, almoco, cafe, lanche)
     const pauseStatuses = ['pausa', 'almoco', 'cafe', 'lanche'];
