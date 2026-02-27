@@ -105,15 +105,11 @@ export async function GET() {
        ORDER BY nome`,
     );
 
-    // Cross-check: se atendente nao tem conexao SSE ativa, forcar offline
+    // Cross-check visual: se atendente nao tem conexao SSE ativa, mostrar como offline
+    // Nao altera o banco — o SSE Manager.removeClient() ja cuida disso ao desconectar
     const connectedIds = sseManager.getConnectedAtendenteIds();
     const atendentes = result.rows.map((a) => {
       if (a.status_presenca !== 'offline' && !connectedIds.has(a.id)) {
-        // Correcao lazy: atualizar banco em background
-        pool.query(
-          `UPDATE atd.atendentes SET status_presenca = 'offline', updated_at = NOW() WHERE id = $1 AND status_presenca != 'offline'`,
-          [a.id],
-        ).catch(() => {});
         return { ...a, status_presenca: 'offline' };
       }
       return a;

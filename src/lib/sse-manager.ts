@@ -118,8 +118,10 @@ class SSEManager {
 }
 
 // Singleton global — sobrevive entre requests no mesmo processo
+// IMPORTANTE: precisa persistir em production tambem, senao getConnectedAtendenteIds() retorna vazio
+// e o cross-check forca todos para offline
 const globalForSSE = globalThis as unknown as { sseManager: SSEManager };
-export const sseManager = globalForSSE.sseManager || new SSEManager();
-if (process.env.NODE_ENV !== 'production') {
-  globalForSSE.sseManager = sseManager;
+if (!globalForSSE.sseManager) {
+  globalForSSE.sseManager = new SSEManager();
 }
+export const sseManager = globalForSSE.sseManager;

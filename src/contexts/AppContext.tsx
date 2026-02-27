@@ -74,8 +74,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Fetch inicial
+  // Fetch inicial: status do operador + unread counts
   useEffect(() => {
+    // Buscar status real do banco e setar como 'disponivel' (login)
+    const initStatus = async () => {
+      try {
+        // Setar status para 'disponivel' ao abrir o app (equivalente a fazer login)
+        const res = await fetch('/api/atendentes/status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'disponivel' }),
+        });
+        if (res.ok) {
+          setOperatorStatus('disponivel');
+        }
+      } catch {
+        // Falha silenciosa
+      }
+    };
+    initStatus();
     fetchUnreadCounts();
     fetchChatInternoUnread();
   }, [fetchUnreadCounts, fetchChatInternoUnread]);
