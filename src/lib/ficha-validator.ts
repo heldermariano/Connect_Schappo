@@ -40,6 +40,8 @@ const CAMPO_COLUNA: Record<string, { tabela: 'exams' | 'patients'; coluna: strin
 
 const SUPERVISAO_TELEFONE = '5561996628353';
 const INTERVALO_MS = 120_000; // 2 minutos
+// Prazo apos registro para enviar alerta de correcao (10 minutos)
+const PRAZO_CORRECAO_MIN = 10;
 // Delay entre mensagens WhatsApp para evitar rate limit da Meta/360Dialog
 const WHATSAPP_DELAY_MS = 8000;
 
@@ -94,7 +96,7 @@ class FichaValidator {
       });
     }, INTERVALO_MS);
 
-    console.log('[FichaValidator] Iniciado — verificacao a cada 2 minutos (filtro por exam_date)');
+    console.log(`[FichaValidator] Iniciado — verificacao a cada 2 minutos (prazo: ${PRAZO_CORRECAO_MIN}min apos registro)`);
   }
 
   stop(): void {
@@ -128,6 +130,7 @@ class FichaValidator {
     try {
       // Buscar TODOS os exames de HOJE no banco externo
       // Filtro por exam_date (nao created_at) — imune a migracoes de dados antigos
+      // So alerta exames registrados ha mais de PRAZO_CORRECAO_MIN minutos (periodo de adaptacao)
       const examsResult = await examesPool.query<ExamRow>(
         `SELECT
           e.id AS exam_id,
@@ -152,7 +155,9 @@ class FichaValidator {
         JOIN patients p ON p.id = e.patient_id
         WHERE e.exam_date::date = CURRENT_DATE
           AND p.birth_date IS NOT NULL
+          AND e.created_at <= NOW() - make_interval(mins => $1)
         ORDER BY e.created_at ASC`,
+        [PRAZO_CORRECAO_MIN],
       );
 
       if (examsResult.rows.length === 0) return;
