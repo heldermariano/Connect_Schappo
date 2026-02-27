@@ -117,7 +117,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
       const existente = conversasPorCanal[categoria];
       if (existente) {
         onClose();
-        router.push(`/conversas?id=${existente.id}`);
+        router.push(`/conversas?canal=${categoria}&id=${existente.id}`);
         return;
       }
 
@@ -130,7 +130,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
       if (res.ok) {
         const data = await res.json();
         onClose();
-        router.push(`/conversas?id=${data.conversa.id}`);
+        router.push(`/conversas?canal=${categoria}&id=${data.conversa.id}`);
       } else {
         setError('Erro ao criar conversa');
       }
@@ -171,7 +171,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
         const existente = mapa[canal];
         if (existente) {
           onClose();
-          router.push(`/conversas?id=${existente.id}`);
+          router.push(`/conversas?canal=${canal}&id=${existente.id}`);
         } else {
           // Vai criar via abrirOuCriarConversa
           setLoadingConversas(false);
