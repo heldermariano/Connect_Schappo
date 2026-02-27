@@ -52,6 +52,11 @@ class SSEManager {
          RETURNING nome`,
         [atendenteId],
       );
+      // Fechar pausas abertas ao ficar offline
+      await pool.query(
+        `UPDATE atd.atendente_pausas SET fim_at = NOW() WHERE atendente_id = $1 AND fim_at IS NULL`,
+        [atendenteId],
+      ).catch(() => {});
       if (result.rowCount && result.rowCount > 0) {
         console.log(`[SSE] Atendente ${atendenteId} (${result.rows[0].nome}) marcado offline (sem conexao SSE)`);
         this.broadcast({

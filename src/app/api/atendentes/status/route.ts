@@ -22,11 +22,37 @@ export async function PATCH(request: NextRequest) {
 
     const atendenteId = parseInt(session.user.id);
 
+    // Buscar status atual antes de atualizar
+    const currentResult = await pool.query(
+      `SELECT status_presenca FROM atd.atendentes WHERE id = $1`,
+      [atendenteId],
+    );
+    const currentStatus = currentResult.rows[0]?.status_presenca;
+
     // Atualizar no banco
     await pool.query(
       `UPDATE atd.atendentes SET status_presenca = $1, updated_at = NOW() WHERE id = $2`,
       [status, atendenteId],
     );
+
+    // Tracking de pausas
+    if (status === 'pausa' || status === 'ausente') {
+      // Fechar pausa anterior aberta (se houver) e abrir nova
+      await pool.query(
+        `UPDATE atd.atendente_pausas SET fim_at = NOW() WHERE atendente_id = $1 AND fim_at IS NULL`,
+        [atendenteId],
+      );
+      await pool.query(
+        `INSERT INTO atd.atendente_pausas (atendente_id, tipo) VALUES ($1, $2)`,
+        [atendenteId, status],
+      );
+    } else if ((status === 'disponivel' || status === 'offline') && (currentStatus === 'pausa' || currentStatus === 'ausente')) {
+      // Fechar pausa aberta
+      await pool.query(
+        `UPDATE atd.atendente_pausas SET fim_at = NOW() WHERE atendente_id = $1 AND fim_at IS NULL`,
+        [atendenteId],
+      );
+    }
 
     // Se tem ramal, enviar QueuePause ao AMI
     if (session.user.ramal) {

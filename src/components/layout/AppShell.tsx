@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import PauseScreen from '@/components/layout/PauseScreen';
+import InactivityAlert from '@/components/layout/InactivityAlert';
 import { AppProvider, useAppContext } from '@/contexts/AppContext';
 import { useSSE } from '@/hooks/useSSE';
 import { requestNotificationPermission } from '@/lib/desktop-notification';
@@ -30,6 +31,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const [chatInternoSSE, setChatInternoSSE] = useState<ChatInternoSSEData | null>(null);
   const [chatInternoReacaoSSE, setChatInternoReacaoSSE] = useState<ChatInternoReacaoSSEData | null>(null);
   const [autoOpenChat, setAutoOpenChat] = useState<{ chat_id: number; sender_id: number; sender_name: string } | null>(null);
+  const [inactivityData, setInactivityData] = useState<{ pendingCount: number; minutesInactive: number; channelToOpen: string } | null>(null);
   const router = useRouter();
   const userId = session?.user?.id ? parseInt(session.user.id as string) : 0;
   const operatorStatusRef = useRef(operatorStatus);
@@ -42,6 +44,36 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     requestNotificationPermission();
+  }, []);
+
+  // Check de inatividade a cada 30s
+  useEffect(() => {
+    const checkInactivity = async () => {
+      if (operatorStatusRef.current !== 'disponivel') {
+        setInactivityData(null);
+        return;
+      }
+      try {
+        const res = await fetch('/api/supervisao/me');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.minutos_sem_resposta >= 10 && data.conversas_pendentes > 0) {
+          setInactivityData({
+            pendingCount: data.conversas_pendentes,
+            minutesInactive: data.minutos_sem_resposta,
+            channelToOpen: data.canal_mais_pendente || 'geral',
+          });
+        } else {
+          setInactivityData(null);
+        }
+      } catch {
+        // silenciar erros de rede
+      }
+    };
+
+    checkInactivity();
+    const interval = setInterval(checkInactivity, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // SSE global para atualizar badges e toasts
@@ -132,8 +164,22 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     }
   }, [setOperatorStatus]);
 
+  const handleInactivityConfirm = useCallback(() => {
+    const channel = inactivityData?.channelToOpen || 'geral';
+    setInactivityData(null);
+    router.push(`/conversas?canal=${channel}`);
+  }, [inactivityData, router]);
+
   return (
     <div className="flex h-screen">
+      {inactivityData && (
+        <InactivityAlert
+          pendingCount={inactivityData.pendingCount}
+          minutesInactive={inactivityData.minutesInactive}
+          channelToOpen={inactivityData.channelToOpen}
+          onConfirm={handleInactivityConfirm}
+        />
+      )}
       {(operatorStatus === 'pausa' || operatorStatus === 'ausente') && (
         <PauseScreen status={operatorStatus as 'pausa' | 'ausente'} onResume={handleResume} />
       )}
