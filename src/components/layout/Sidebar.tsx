@@ -127,7 +127,16 @@ export default function Sidebar() {
       <div className="mb-4">
         <SidebarLogo />
       </div>
-      {NAV_ITEMS.filter((item) => (item.icon !== 'tecnicos' && item.icon !== 'supervisao') || userRole === 'admin').map((item) => {
+      {NAV_ITEMS.filter((item) => {
+        // Admin ve tudo
+        if (userRole === 'admin') return true;
+        // Supervisor ve apenas: conversas, contatos, tecnicos
+        if (userRole === 'supervisor') {
+          return ['chat', 'contacts', 'tecnicos'].includes(item.icon);
+        }
+        // Atendentes nao veem tecnicos nem supervisao
+        return item.icon !== 'tecnicos' && item.icon !== 'supervisao';
+      }).map((item) => {
         const active = pathname.startsWith(item.href);
         const isConversas = item.icon === 'chat';
 
