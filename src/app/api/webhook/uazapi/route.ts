@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
 async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
   // Evento de status (sent, delivered, read) — atualizar mensagem
-  if (payload.EventType === 'status') {
+  if (payload.EventType === 'status' || payload.EventType === 'message_ack') {
     const msgId = payload.message?.messageid || payload.message?.id;
     const status = (payload.message as Record<string, unknown>)?.status as string | undefined;
     if (!msgId || !status) return;
