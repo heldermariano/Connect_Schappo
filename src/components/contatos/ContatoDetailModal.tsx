@@ -25,6 +25,8 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
   const [criandoConversa, setCriandoConversa] = useState(false);
   const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [conversasPorCanal, setConversasPorCanal] = useState<Record<string, { id: number; is_archived: boolean }>>({});
+  const [loadingConversas, setLoadingConversas] = useState(false);
 
   useEffect(() => {
     if (contato) {
@@ -106,11 +108,20 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
     }
   }, [contato, syncing, onSaved]);
 
-  const criarConversaNoCanal = useCallback(async (categoria: string) => {
+  const abrirOuCriarConversa = useCallback(async (categoria: string) => {
     if (!contato?.telefone) return;
     setCriandoConversa(true);
     setShowChannelPicker(false);
     try {
+      // Se ja existe conversa neste canal, navegar direto
+      const existente = conversasPorCanal[categoria];
+      if (existente) {
+        onClose();
+        router.push(`/conversas?id=${existente.id}`);
+        return;
+      }
+
+      // Criar nova conversa
       const res = await fetch('/api/conversas/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,25 +140,53 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
     } finally {
       setCriandoConversa(false);
     }
-  }, [contato, router, onClose]);
+  }, [contato, router, onClose, conversasPorCanal]);
+
+  const buscarConversasExistentes = useCallback(async (telefone: string): Promise<Record<string, { id: number; is_archived: boolean }>> => {
+    try {
+      const res = await fetch(`/api/conversas/por-telefone?telefone=${encodeURIComponent(telefone)}`);
+      if (!res.ok) return {};
+      const data = await res.json();
+      const mapa: Record<string, { id: number; is_archived: boolean }> = {};
+      for (const c of data.conversas || []) {
+        mapa[c.categoria] = { id: c.id, is_archived: c.is_archived };
+      }
+      return mapa;
+    } catch {
+      return {};
+    }
+  }, []);
 
   const handleEnviarMensagem = useCallback(async () => {
     if (!contato?.telefone) return;
 
-    // Se operador so tem 1 canal disponivel, ir direto
-    if (availableChannels.length <= 1) {
-      if (contato.conversa_id) {
-        onClose();
-        router.push(`/conversas?id=${contato.conversa_id}`);
-      } else {
-        criarConversaNoCanal(availableChannels[0]?.id || 'geral');
-      }
-      return;
-    }
+    setLoadingConversas(true);
+    try {
+      const mapa = await buscarConversasExistentes(contato.telefone);
+      setConversasPorCanal(mapa);
 
-    // Mostrar seletor de canal
-    setShowChannelPicker(true);
-  }, [contato, router, onClose, availableChannels, criarConversaNoCanal]);
+      // Se operador so tem 1 canal disponivel, ir direto
+      if (availableChannels.length <= 1) {
+        const canal = availableChannels[0]?.id || 'geral';
+        const existente = mapa[canal];
+        if (existente) {
+          onClose();
+          router.push(`/conversas?id=${existente.id}`);
+        } else {
+          // Vai criar via abrirOuCriarConversa
+          setLoadingConversas(false);
+          abrirOuCriarConversa(canal);
+          return;
+        }
+        return;
+      }
+
+      // Mostrar seletor de canal com info de conversas existentes
+      setShowChannelPicker(true);
+    } finally {
+      setLoadingConversas(false);
+    }
+  }, [contato, router, onClose, availableChannels, buscarConversasExistentes, abrirOuCriarConversa]);
 
   if (!open || !contato) return null;
 
@@ -208,41 +247,55 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
                     Cancelar
                   </button>
                 </div>
-                {availableChannels.map((channel) => (
-                  <button
-                    key={channel.id}
-                    onClick={() => criarConversaNoCanal(channel.id)}
-                    disabled={criandoConversa}
-                    className="w-full px-4 py-2.5 text-sm font-medium text-left bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/30 hover:border-green-300 border border-gray-200 dark:border-gray-600 disabled:opacity-50 transition-colors flex items-center gap-3"
-                  >
-                    <svg className="w-4 h-4 text-green-600 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-                      <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 01-4.243-1.214l-.257-.154-2.833.842.842-2.833-.154-.257A8 8 0 1112 20z" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{channel.label}</div>
-                      <div className="text-xs text-gray-500">{formatPhone(channel.phone)}</div>
-                    </div>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                      channel.provider === 'uazapi'
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                        : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                    }`}>
-                      {channel.provider === 'uazapi' ? 'UAZAPI' : '360Dialog'}
-                    </span>
-                  </button>
-                ))}
+                {availableChannels.map((channel) => {
+                  const conv = conversasPorCanal[channel.id];
+                  const temHistorico = !!conv;
+                  const arquivada = conv?.is_archived ?? false;
+                  return (
+                    <button
+                      key={channel.id}
+                      onClick={() => abrirOuCriarConversa(channel.id)}
+                      disabled={criandoConversa}
+                      className={`w-full px-4 py-2.5 text-sm font-medium text-left rounded-lg border disabled:opacity-50 transition-colors flex items-center gap-3 ${
+                        temHistorico
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/40'
+                          : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:bg-green-50 dark:hover:bg-green-900/30 hover:border-green-300'
+                      }`}
+                    >
+                      <svg className="w-4 h-4 text-green-600 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                        <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 01-4.243-1.214l-.257-.154-2.833.842.842-2.833-.154-.257A8 8 0 1112 20z" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{channel.label}</div>
+                        <div className="text-xs text-gray-500">{formatPhone(channel.phone)}</div>
+                        {temHistorico && (
+                          <div className="text-[10px] text-green-600 dark:text-green-400 mt-0.5">
+                            {arquivada ? 'Conversa existente (arquivada)' : 'Conversa existente'}
+                          </div>
+                        )}
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                        channel.provider === 'uazapi'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                      }`}>
+                        {channel.provider === 'uazapi' ? 'UAZAPI' : '360Dialog'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <button
                 onClick={handleEnviarMensagem}
-                disabled={criandoConversa}
+                disabled={criandoConversa || loadingConversas}
                 className="w-full px-4 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                {criandoConversa ? 'Abrindo...' : 'Enviar Mensagem'}
+                {loadingConversas ? 'Buscando...' : criandoConversa ? 'Abrindo...' : 'Enviar Mensagem'}
               </button>
             )}
           </div>
