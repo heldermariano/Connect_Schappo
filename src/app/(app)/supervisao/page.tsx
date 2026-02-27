@@ -43,6 +43,59 @@ function getMinutesSince(dateStr: string | null): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
 }
 
+const SETOR_LABELS: Record<string, string> = {
+  eeg: 'Secretarias',
+  recepcao: 'Recepção',
+  todos: 'Supervisão',
+};
+
+function getSetorLabel(grupo: string): string {
+  return SETOR_LABELS[grupo] || grupo;
+}
+
+interface SetorMetricas {
+  label: string;
+  online: number;
+  total: number;
+  conversas_atendidas: number;
+  pendentes: number;
+  tempo_medio_min: number;
+  pausas: number;
+  tempo_pausa_min: number;
+}
+
+function computeSetorMetricas(atendentes: SupervisaoAtendente[]): SetorMetricas[] {
+  const setores = ['eeg', 'recepcao'];
+  return setores.map((setor) => {
+    // Incluir operadores com grupo 'todos' em ambos os setores (supervisores)
+    const membros = atendentes.filter((a) => a.grupo === setor || a.grupo === 'todos');
+    const onlineMembros = membros.filter((a) => a.status !== 'offline');
+    const comAtendimento = membros.filter((a) => a.conversas_atendidas > 0);
+    const totalConversas = membros.reduce((sum, a) => sum + a.conversas_atendidas, 0);
+    const totalPendentes = membros.reduce((sum, a) => sum + a.conversas_pendentes, 0);
+    const totalPausas = membros.reduce((sum, a) => sum + a.pausas_hoje, 0);
+    const totalTempoPausa = membros.reduce((sum, a) => sum + a.duracao_pausas_min, 0);
+
+    // Media ponderada do tempo medio
+    let tempoMedio = 0;
+    if (comAtendimento.length > 0) {
+      const somaTempoXConversas = comAtendimento.reduce((sum, a) => sum + a.tempo_medio_min * a.conversas_atendidas, 0);
+      tempoMedio = totalConversas > 0 ? Math.round(somaTempoXConversas / totalConversas) : 0;
+    }
+
+    return {
+      label: getSetorLabel(setor),
+      online: onlineMembros.length,
+      total: membros.length,
+      conversas_atendidas: totalConversas,
+      pendentes: totalPendentes,
+      tempo_medio_min: tempoMedio,
+      pausas: totalPausas,
+      tempo_pausa_min: totalTempoPausa,
+    };
+  });
+}
+
 function MetricCard({ label, value, sublabel, color }: { label: string; value: string | number; sublabel?: string; color: string }) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-5">
@@ -109,6 +162,9 @@ export default function SupervisaoPage() {
     .filter((a) => a.conversas_atendidas > 0)
     .sort((a, b) => b.conversas_atendidas - a.conversas_atendidas);
 
+  // Metricas por setor
+  const setores = computeSetorMetricas(atendentes);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -152,7 +208,50 @@ export default function SupervisaoPage() {
               />
             </div>
 
-            {/* Secao 2: Tabela de operadores */}
+            {/* Secao 2: Comparativo por Setor */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Comparativo por Setor</h2>
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-800">
+                {setores.map((setor) => (
+                  <div key={setor.label} className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{setor.label}</h3>
+                      <span className="text-xs text-gray-400">{setor.online} online / {setor.total} total</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                        <div className="text-[10px] font-medium text-gray-400 uppercase">Atendidas</div>
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400 mt-0.5">{setor.conversas_atendidas}</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                        <div className="text-[10px] font-medium text-gray-400 uppercase">Pendentes</div>
+                        <div className={`text-2xl font-bold mt-0.5 ${setor.pendentes > 3 ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>{setor.pendentes}</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                        <div className="text-[10px] font-medium text-gray-400 uppercase">Tempo Medio</div>
+                        <div className={`text-2xl font-bold mt-0.5 ${
+                          setor.tempo_medio_min > 15 ? 'text-red-600 dark:text-red-400' :
+                          setor.tempo_medio_min > 5 ? 'text-amber-600 dark:text-amber-400' :
+                          'text-green-600 dark:text-green-400'
+                        }`}>{setor.tempo_medio_min > 0 ? `${setor.tempo_medio_min}m` : '-'}</div>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                        <div className="text-[10px] font-medium text-gray-400 uppercase">Pausas</div>
+                        <div className="text-2xl font-bold text-gray-600 dark:text-gray-300 mt-0.5">{setor.pausas}</div>
+                        {setor.tempo_pausa_min > 0 && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">{setor.tempo_pausa_min} min</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Secao 3: Tabela de operadores */}
+
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
                 <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Operadores</h2>
@@ -188,7 +287,7 @@ export default function SupervisaoPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-gray-900 dark:text-gray-100">{a.nome}</span>
-                            <span className="text-[10px] text-gray-400 uppercase">{a.grupo}</span>
+                            <span className="text-[10px] text-gray-400 uppercase">{getSetorLabel(a.grupo)}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
