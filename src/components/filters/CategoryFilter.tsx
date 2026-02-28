@@ -11,6 +11,8 @@ interface CategoryFilterProps {
   busca?: string;
   onBuscaChange?: (value: string) => void;
   onListarGrupos?: () => void;
+  historico?: boolean;
+  onToggleHistorico?: () => void;
 }
 
 const ALL_FILTERS = [
@@ -35,6 +37,8 @@ export default function CategoryFilter({
   busca = '',
   onBuscaChange,
   onListarGrupos,
+  historico = false,
+  onToggleHistorico,
 }: CategoryFilterProps) {
   const [pendentesAtivo, setPendentesAtivo] = useState(false);
   const prevFilterRef = useRef(selected);
@@ -163,6 +167,28 @@ export default function CategoryFilter({
               />
             </svg>
           </button>
+
+          {/* Icone Historico (conversas finalizadas) */}
+          {onToggleHistorico && (
+            <button
+              onClick={onToggleHistorico}
+              title={historico ? 'Voltar para conversas ativas' : 'Ver historico (finalizadas)'}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors shrink-0 ${
+                historico
+                  ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-500/40'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </button>
+          )}
 
           {/* Icone Listar Grupos (so quando tab=grupo e nao 360dialog) */}
           {isGrupoTab && !is360 && onListarGrupos && (

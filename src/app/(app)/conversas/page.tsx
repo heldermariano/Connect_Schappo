@@ -27,6 +27,7 @@ export default function ConversasPage() {
   const [filtro, setFiltro] = useState('');
   const [selectedConversa, setSelectedConversa] = useState<Conversa | null>(null);
   const [showGrupoList, setShowGrupoList] = useState(false);
+  const [showHistorico, setShowHistorico] = useState(false);
   const [activeCalls, setActiveCalls] = useState<Chamada[]>([]);
   // Set de conversa_ids onde o atendente foi mencionado (nao lidas)
   const [mencionadoEm, setMencionadoEm] = useState<Set<number>>(new Set());
@@ -50,6 +51,7 @@ export default function ConversasPage() {
     if (canal !== prevCanalRef.current) {
       setFiltro(canal ? 'individual' : '');
       setBuscaPainel('');
+      setShowHistorico(false);
       prevCanalRef.current = canal;
     }
   }, [canal]);
@@ -81,6 +83,7 @@ export default function ConversasPage() {
   const { conversas, loading, updateConversa, updateConversasByAtendente, refresh, marcarComoLida } = useConversas({
     ...filterParams,
     busca: buscaPainel || undefined,
+    historico: showHistorico ? 'true' : undefined,
   });
 
   // Cachear nomes de grupo
@@ -259,8 +262,9 @@ export default function ConversasPage() {
     if (conversa.nao_lida > 0) {
       marcarComoLida(conversa.id);
     }
-    // Desarquivar conversa resolvida ao abrir (inicia nova conversa)
-    if (conversa.is_archived) {
+    // Desarquivar conversa resolvida ao abrir — apenas se NAO estiver no modo historico
+    // No modo historico, so visualizar mensagens sem reabrir
+    if (conversa.is_archived && !showHistorico) {
       fetch(`/api/conversas/${conversa.id}/atribuir`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -515,6 +519,8 @@ export default function ConversasPage() {
             busca={buscaPainel}
             onBuscaChange={setBuscaPainel}
             onListarGrupos={() => setShowGrupoList(true)}
+            historico={showHistorico}
+            onToggleHistorico={() => setShowHistorico((prev) => !prev)}
           />
           <ConversaList
             conversas={conversas}
