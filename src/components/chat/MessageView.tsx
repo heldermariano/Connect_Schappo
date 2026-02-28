@@ -79,10 +79,32 @@ export default function MessageView({
     setSyncedMemberCount(null);
   }, [conversa?.id]);
 
-  // Auto-scroll para ultima mensagem
+  // Track contagem anterior para distinguir nova msg vs loadMore
+  const prevCountRef = useRef(0);
+  const prevFirstIdRef = useRef<number | null>(null);
+
+  // Auto-scroll para ultima mensagem (apenas quando nova msg chega no final, nao no loadMore)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [mensagens.length]);
+    if (mensagens.length === 0) {
+      prevCountRef.current = 0;
+      prevFirstIdRef.current = null;
+      return;
+    }
+
+    const firstId = mensagens[0]?.id;
+    const isLoadMore = prevCountRef.current > 0 && firstId !== prevFirstIdRef.current && mensagens.length > prevCountRef.current;
+
+    if (!isLoadMore) {
+      // Nova mensagem no final ou troca de conversa — scroll para o final
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      // LoadMore (mensagens antigas no inicio) — preservar posicao do scroll
+      // O containerRef mantem a posicao naturalmente pois novas msgs sao adicionadas acima
+    }
+
+    prevCountRef.current = mensagens.length;
+    prevFirstIdRef.current = firstId;
+  }, [mensagens]);
 
   // Marcar como lida ao selecionar conversa
   useEffect(() => {

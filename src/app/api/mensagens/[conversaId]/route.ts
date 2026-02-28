@@ -60,7 +60,7 @@ export async function GET(
   const { conversaId } = await params;
   const searchParams = request.nextUrl.searchParams;
   const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200);
-  const before = searchParams.get('before'); // ID para paginacao cursor
+  const before = searchParams.get('before'); // created_at ISO para paginacao cursor
 
   const id = parseInt(conversaId);
   if (isNaN(id)) {
@@ -72,13 +72,14 @@ export async function GET(
     let values: unknown[];
 
     if (before) {
+      // Cursor por created_at (nao por id) — mensagens importadas tem id alto mas created_at antigo
       query = `
         SELECT * FROM atd.mensagens
-        WHERE conversa_id = $1 AND id < $2
+        WHERE conversa_id = $1 AND created_at < $2
         ORDER BY created_at DESC
         LIMIT $3
       `;
-      values = [id, parseInt(before), limit];
+      values = [id, before, limit];
     } else {
       query = `
         SELECT * FROM atd.mensagens

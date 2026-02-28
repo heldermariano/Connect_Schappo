@@ -49,9 +49,10 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
   const loadMore = useCallback(async () => {
     if (!conversaId || !hasMore || mensagens.length === 0) return;
 
-    const oldestId = mensagens[0].id;
+    // Cursor por created_at (nao por id) — mensagens importadas tem id alto mas created_at antigo
+    const oldestCreatedAt = mensagens[0].created_at;
     try {
-      const res = await fetch(`/api/mensagens/${conversaId}?before=${oldestId}`);
+      const res = await fetch(`/api/mensagens/${conversaId}?before=${encodeURIComponent(oldestCreatedAt)}`);
       if (!res.ok) return;
 
       const data = await res.json();
