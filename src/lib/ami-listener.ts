@@ -15,12 +15,27 @@ interface ActiveCall {
   startTime: Date;
 }
 
-const activeCalls = new Map<string, ActiveCall>();
+// Estado AMI em globalThis para compartilhar entre instrumentation.ts e API routes
+// (Next.js standalone pode carregar o modulo em contextos diferentes)
+interface AMIGlobalState {
+  activeCalls: Map<string, ActiveCall>;
+  amiConnected: boolean;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  amiInstance: any;
+}
 
-let amiConnected = false;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let amiInstance: any = null;
+const g = globalThis as unknown as { __ami_state?: AMIGlobalState };
+if (!g.__ami_state) {
+  g.__ami_state = {
+    activeCalls: new Map(),
+    amiConnected: false,
+    reconnectTimer: null,
+    amiInstance: null,
+  };
+}
+
+const amiState = g.__ami_state;
 
 // Determina origem baseado no contexto do Asterisk
 function getOrigem(context: string, accountcode?: string): 'whatsapp' | 'telefone' {
@@ -100,7 +115,7 @@ function handleNewchannel(evt: Record<string, string>) {
   const calledNumber = evt.exten || '';
 
   // Ignorar canais internos e sub-canais
-  if (!uniqueid || channel.includes('Local/') || activeCalls.has(uniqueid)) return;
+  if (!uniqueid || channel.includes('Local/') || amiState.activeCalls.has(uniqueid)) return;
 
   const origem = getOrigem(context, evt.accountcode);
   const direcao = getDirecao(context);
@@ -118,7 +133,7 @@ function handleNewchannel(evt: Record<string, string>) {
     startTime: new Date(),
   };
 
-  activeCalls.set(uniqueid, call);
+  amiState.activeCalls.set(uniqueid, call);
 
   // Persistir e emitir SSE
   insertChamada(call).then((dbId) => {
@@ -157,7 +172,7 @@ function handleNewchannel(evt: Record<string, string>) {
 function handleDialBegin(evt: Record<string, string>) {
   const uniqueid = evt.uniqueid;
   const destChannel = evt.destchannel || '';
-  const call = activeCalls.get(uniqueid);
+  const call = amiState.activeCalls.get(uniqueid);
   if (!call) return;
 
   const ramal = extractRamal(destChannel);
@@ -177,7 +192,7 @@ function handleDialBegin(evt: Record<string, string>) {
 // Handler: BridgeEnter — chamada atendida
 function handleBridgeEnter(evt: Record<string, string>) {
   const uniqueid = evt.uniqueid;
-  const call = activeCalls.get(uniqueid);
+  const call = amiState.activeCalls.get(uniqueid);
   if (!call) return;
 
   const ramal = extractRamal(evt.channel || '') || call.ramal;
@@ -200,7 +215,7 @@ function handleBridgeEnter(evt: Record<string, string>) {
 // Handler: Hangup — chamada encerrada
 function handleHangup(evt: Record<string, string>) {
   const uniqueid = evt.uniqueid;
-  const call = activeCalls.get(uniqueid);
+  const call = amiState.activeCalls.get(uniqueid);
   if (!call) return;
 
   const now = new Date();
@@ -240,13 +255,13 @@ function handleHangup(evt: Record<string, string>) {
     });
   }
 
-  activeCalls.delete(uniqueid);
+  amiState.activeCalls.delete(uniqueid);
 }
 
 // Handler: VoicemailStart — voicemail
 function handleVoicemail(evt: Record<string, string>) {
   const uniqueid = evt.uniqueid;
-  const call = activeCalls.get(uniqueid);
+  const call = amiState.activeCalls.get(uniqueid);
   if (!call || !call.dbId) return;
 
   updateChamada(call.dbId, { status: 'voicemail' });
@@ -273,9 +288,9 @@ export function startAMIListener(): void {
 }
 
 function connectAMI(host: string, port: number, user: string, password: string): void {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
+  if (amiState.reconnectTimer) {
+    clearTimeout(amiState.reconnectTimer);
+    amiState.reconnectTimer = null;
   }
 
   console.log(`[AMI] Conectando a ${host}:${port}...`);
@@ -284,13 +299,13 @@ function connectAMI(host: string, port: number, user: string, password: string):
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AsteriskManager = require('asterisk-manager');
     const ami = new AsteriskManager(port, host, user, password, true);
-    amiInstance = ami;
+    amiState.amiInstance = ami;
 
     ami.keepConnected();
 
     ami.on('connect', () => {
       console.log('[AMI] Conectado ao Asterisk');
-      amiConnected = true;
+      amiState.amiConnected = true;
     });
 
     ami.on('newchannel', handleNewchannel);
@@ -301,37 +316,37 @@ function connectAMI(host: string, port: number, user: string, password: string):
 
     ami.on('error', (err: Error) => {
       console.error('[AMI] Erro:', err.message);
-      amiConnected = false;
+      amiState.amiConnected = false;
       scheduleReconnect(host, port, user, password);
     });
 
     ami.on('close', () => {
       console.warn('[AMI] Conexao fechada');
-      amiConnected = false;
+      amiState.amiConnected = false;
       scheduleReconnect(host, port, user, password);
     });
   } catch (err) {
     console.error('[AMI] Falha ao conectar:', err);
-    amiConnected = false;
+    amiState.amiConnected = false;
     scheduleReconnect(host, port, user, password);
   }
 }
 
 function scheduleReconnect(host: string, port: number, user: string, password: string): void {
-  if (reconnectTimer) return;
+  if (amiState.reconnectTimer) return;
   console.log('[AMI] Reconectando em 10 segundos...');
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
+  amiState.reconnectTimer = setTimeout(() => {
+    amiState.reconnectTimer = null;
     connectAMI(host, port, user, password);
   }, 10000);
 }
 
 export function isAMIConnected(): boolean {
-  return amiConnected;
+  return amiState.amiConnected;
 }
 
 export function getActiveCallsCount(): number {
-  return activeCalls.size;
+  return amiState.activeCalls.size;
 }
 
 /**
@@ -345,7 +360,7 @@ export function originate(
   callerId?: string,
 ): Promise<{ success: boolean; actionId: string; error?: string }> {
   return new Promise((resolve) => {
-    if (!amiConnected || !amiInstance) {
+    if (!amiState.amiConnected || !amiState.amiInstance) {
       resolve({ success: false, actionId: '', error: 'AMI nao disponivel' });
       return;
     }
@@ -353,7 +368,7 @@ export function originate(
     const actionId = `originate-${Date.now()}-${ramal}`;
 
     try {
-      amiInstance.action(
+      amiState.amiInstance.action(
         {
           action: 'Originate',
           channel: `SIP/${ramal}`,
@@ -402,13 +417,13 @@ export function getSipPeers(
   maxRamal: number,
 ): Promise<{ ramal: string; status: 'online' | 'offline' }[]> {
   return new Promise((resolve) => {
-    if (!amiConnected || !amiInstance) {
+    if (!amiState.amiConnected || !amiState.amiInstance) {
       resolve([]);
       return;
     }
 
     try {
-      amiInstance.action(
+      amiState.amiInstance.action(
         { action: 'Command', command: 'sip show peers' },
         (err: Error | null, res: Record<string, string>) => {
           if (err) {
@@ -448,7 +463,7 @@ export function getSipPeers(
 }
 
 export function pauseQueue(ramal: string, paused: boolean, reason?: string): void {
-  if (!amiConnected || !amiInstance) {
+  if (!amiState.amiConnected || !amiState.amiInstance) {
     console.warn(`[AMI] QueuePause ignorado (AMI offline) — ramal=${ramal} paused=${paused}`);
     return;
   }
@@ -463,7 +478,7 @@ export function pauseQueue(ramal: string, paused: boolean, reason?: string): voi
       action.reason = reason;
     }
 
-    amiInstance.action(action, (err: Error | null) => {
+    amiState.amiInstance.action(action, (err: Error | null) => {
       if (err) {
         console.error(`[AMI] Erro ao executar QueuePause ramal=${ramal}:`, err.message);
       } else {
