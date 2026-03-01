@@ -316,6 +316,8 @@ export interface WebhookPayload360Dialog {
           contacts?: Array<{ name: { formatted_name: string }; phones?: Array<{ phone: string }> }>;
           sticker?: { id: string; mime_type: string };
           reaction?: { message_id: string; emoji: string };
+          interactive?: { type: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string } };
+          context?: { from?: string; id?: string };
         }>;
         contacts?: Array<{
           profile: { name: string };
@@ -371,6 +373,56 @@ export function getUazapiToken(categoria: string): string {
   }
   // Fallback: token padrao
   return process.env.UAZAPI_TOKEN || '';
+}
+
+// --- Agenda / Confirmacao ---
+
+export interface MedicoAgenda {
+  id_medico: number;
+  nom_medico: string;
+  nom_guerra: string | null;
+  num_crm: string | null;
+}
+
+export interface AgendamentoPaciente {
+  chave: number;
+  dat_agenda: string;
+  des_hora: string;
+  ind_status: string | null;
+  des_procedimento: string | null;
+  mem_obs: string | null;
+  cod_paciente: number;
+  nom_paciente_completo: string | null;
+  des_email: string | null;
+  telefones: Array<{ ddd: string; numero: string; tipo: string }>;
+  dat_nascimento: string | null;
+  nom_resp: string | null;
+  convenio: string | null;
+  // Dados de confirmacao local
+  confirmacao?: {
+    id: number;
+    telefone_envio: string | null;
+    wa_message_id: string | null;
+    status: string;
+    enviado_at: string;
+    respondido_at: string | null;
+    enviado_por: number | null;
+  } | null;
+  // Telefone normalizado para WhatsApp
+  telefone_whatsapp: string | null;
+}
+
+export interface DisparoResult {
+  enviados: number;
+  falhas: number;
+  sem_telefone: number;
+  detalhes: Array<{
+    chave: number;
+    paciente: string;
+    telefone: string | null;
+    status: 'enviado' | 'falha' | 'sem_telefone';
+    erro?: string;
+  }>;
 }
 
 // --- Canais WhatsApp ---

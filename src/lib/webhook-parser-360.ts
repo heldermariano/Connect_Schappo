@@ -19,6 +19,9 @@ export interface Parsed360Message {
   nome_contato: string | null;
   telefone: string;
   metadata: Record<string, unknown>;
+  // Resposta de botao interativo (button_reply)
+  button_reply_id?: string;
+  context_message_id?: string;
 }
 
 export interface Parsed360Status {
@@ -91,14 +94,33 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             case 'reaction':
               conteudo = msg.reaction?.emoji || null;
               break;
+            case 'interactive':
+              // Resposta de botao interativo (confirmacao agendamento)
+              if (msg.interactive?.button_reply) {
+                conteudo = msg.interactive.button_reply.title;
+              } else if (msg.interactive?.list_reply) {
+                conteudo = msg.interactive.list_reply.title;
+              }
+              break;
             default:
               break;
           }
 
           // Metadata: incluir media_id da 360Dialog para download via API
           const metadata: Record<string, unknown> = { provider: '360dialog' };
+          let buttonReplyId: string | undefined;
+          let contextMessageId: string | undefined;
           if (msg.type === 'reaction' && msg.reaction?.message_id) {
             metadata.reacted_to = msg.reaction.message_id;
+          }
+          if (msg.type === 'interactive' && msg.interactive?.button_reply) {
+            buttonReplyId = msg.interactive.button_reply.id;
+            metadata.button_reply_id = buttonReplyId;
+            metadata.button_reply_title = msg.interactive.button_reply.title;
+          }
+          if (msg.context?.id) {
+            contextMessageId = msg.context.id;
+            metadata.context_message_id = contextMessageId;
           }
           // Salvar media_id para o media proxy baixar depois
           const mediaObj = msg.image || msg.audio || msg.video || msg.document || msg.sticker;
@@ -112,7 +134,7 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             from_me: false,
             sender_phone: msg.from,
             sender_name: senderName,
-            tipo_mensagem: msg.type,
+            tipo_mensagem: msg.type === 'interactive' ? 'text' : msg.type,
             conteudo,
             media_url: null, // Media precisa ser baixada via API separada
             media_mimetype,
@@ -123,6 +145,8 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             nome_contato: senderName,
             telefone: normalizedFrom,
             metadata,
+            button_reply_id: buttonReplyId,
+            context_message_id: contextMessageId,
           });
         }
       }

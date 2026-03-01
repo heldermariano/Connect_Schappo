@@ -10,6 +10,7 @@ import ForwardModal from './ForwardModal';
 import AtribuirDropdown from './AtribuirDropdown';
 import Avatar from '@/components/ui/Avatar';
 import CallButton from '@/components/calls/CallButton';
+import PacienteBanner from './PacienteBanner';
 
 interface MessageViewProps {
   conversa: Conversa | null;
@@ -332,6 +333,9 @@ export default function MessageView({
           <CallButton telefone={conversa.telefone} size="md" label="Ligar" />
         )}
       </div>
+
+      {/* Banner do paciente (ERP lookup) */}
+      <PacienteBanner telefone={conversa.telefone} tipo={conversa.tipo} />
 
       {/* Area de mensagens */}
       <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-3">

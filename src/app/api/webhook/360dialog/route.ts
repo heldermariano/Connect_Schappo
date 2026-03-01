@@ -83,6 +83,28 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
       );
     }
 
+    // Auto-atualizar confirmacao de agendamento quando paciente clica botao
+    if (parsed.button_reply_id && parsed.context_message_id) {
+      const replyId = parsed.button_reply_id.toUpperCase();
+      let novoStatus: string | null = null;
+      if (replyId === 'CONFIRMAR') novoStatus = 'confirmado';
+      else if (replyId === 'DESMARCAR') novoStatus = 'desmarcou';
+      else if (replyId === 'REAGENDAR') novoStatus = 'reagendar';
+
+      if (novoStatus) {
+        try {
+          await pool.query(
+            `UPDATE atd.confirmacao_agendamento
+             SET status = $1, respondido_at = NOW()
+             WHERE wa_message_id = $2 AND status = 'enviado'`,
+            [novoStatus, parsed.context_message_id],
+          );
+        } catch (err) {
+          console.error('[webhook/360dialog] Erro ao atualizar confirmacao:', err);
+        }
+      }
+    }
+
     // 3. Buscar mensagem completa
     const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);
 
