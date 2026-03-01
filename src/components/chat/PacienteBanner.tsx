@@ -37,7 +37,7 @@ export default function PacienteBanner({ telefone, tipo }: PacienteBannerProps) 
   if (!data.encontrado) {
     return (
       <div className="px-4 py-1.5 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-        <span className="text-xs text-gray-400">Novo contato — paciente nao encontrado no ERP</span>
+        <span className="text-xs text-gray-400">Novo contato — paciente nao encontrado no Konsyst</span>
       </div>
     );
   }
@@ -60,11 +60,6 @@ export default function PacienteBanner({ telefone, tipo }: PacienteBannerProps) 
 
         {/* Nome paciente */}
         <span className="font-medium text-gray-700 dark:text-gray-300">{pac.nome}</span>
-
-        {/* Nascimento */}
-        {pac.nascimento && (
-          <span className="text-gray-400">Nasc: {formatDate(pac.nascimento)}</span>
-        )}
 
         {/* Proximo agendamento */}
         {prox && (

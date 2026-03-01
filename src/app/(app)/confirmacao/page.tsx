@@ -111,6 +111,7 @@ export default function ConfirmacaoPage() {
   const [showSalvarTemplate, setShowSalvarTemplate] = useState(false);
   const [nomeNovoTemplate, setNomeNovoTemplate] = useState('');
   const [salvandoTemplate, setSalvandoTemplate] = useState(false);
+  const [showCalendario, setShowCalendario] = useState(false);
 
   // Carregar medicos ao montar
   useEffect(() => {
@@ -279,61 +280,78 @@ export default function ConfirmacaoPage() {
       </div>
 
       {/* Filtros */}
-      <div className="px-6 py-4 border-b border-gray-800 flex flex-wrap gap-4 items-start">
+      <div className="px-6 py-4 border-b border-gray-800 flex flex-wrap gap-4 items-end">
         {/* Seletor de medico com busca */}
-        <div className="flex flex-col gap-3">
-          <div className="relative min-w-[250px] max-w-[400px]">
-            <label className="block text-xs text-gray-400 mb-1">Medico</label>
-            <input
-              type="text"
-              placeholder={loadingMedicos ? 'Carregando...' : 'Buscar medico...'}
-              value={medicoSelecionado && !showDropdown ? (medicoSelecionado.nom_guerra || medicoSelecionado.nom_medico) : buscaMedico}
-              onChange={(e) => {
-                setBuscaMedico(e.target.value);
-                setShowDropdown(true);
-                if (!e.target.value) setMedicoId(null);
-              }}
-              onFocus={() => setShowDropdown(true)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-schappo-500"
-            />
-            {showDropdown && medicosFiltrados.length > 0 && (
-              <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                {medicosFiltrados.map(m => (
-                  <button
-                    key={m.id_medico}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-700 flex justify-between"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setMedicoId(m.id_medico);
-                      setBuscaMedico('');
-                      setShowDropdown(false);
-                    }}
-                  >
-                    <span>{m.nom_guerra || m.nom_medico}</span>
-                    {m.num_crm && <span className="text-gray-500 text-xs">CRM {m.num_crm}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Buscar */}
-          <button
-            onClick={handleBuscar}
-            disabled={!medicoId || !data || loading}
-            className="px-4 py-2 bg-schappo-500 text-white rounded-lg text-sm font-medium hover:bg-schappo-600 disabled:opacity-50 disabled:cursor-not-allowed w-full"
-          >
-            {loading ? 'Buscando...' : 'Buscar agendamentos'}
-          </button>
+        <div className="relative flex-1 min-w-[250px] max-w-[400px]">
+          <label className="block text-xs text-gray-400 mb-1">Medico</label>
+          <input
+            type="text"
+            placeholder={loadingMedicos ? 'Carregando...' : 'Buscar medico...'}
+            value={medicoSelecionado && !showDropdown ? (medicoSelecionado.nom_guerra || medicoSelecionado.nom_medico) : buscaMedico}
+            onChange={(e) => {
+              setBuscaMedico(e.target.value);
+              setShowDropdown(true);
+              if (!e.target.value) setMedicoId(null);
+            }}
+            onFocus={() => setShowDropdown(true)}
+            onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-schappo-500"
+          />
+          {showDropdown && medicosFiltrados.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+              {medicosFiltrados.map(m => (
+                <button
+                  key={m.id_medico}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-700 flex justify-between"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setMedicoId(m.id_medico);
+                    setBuscaMedico('');
+                    setShowDropdown(false);
+                  }}
+                >
+                  <span>{m.nom_guerra || m.nom_medico}</span>
+                  {m.num_crm && <span className="text-gray-500 text-xs">CRM {m.num_crm}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Calendario */}
-        <CalendarioMedico
-          medicoId={medicoId}
-          dataSelecionada={data}
-          onSelectDate={(d) => setData(d)}
-        />
+        {/* Data — botao com popover de calendario */}
+        <div className="relative">
+          <label className="block text-xs text-gray-400 mb-1">Data</label>
+          <button
+            onClick={() => setShowCalendario(!showCalendario)}
+            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white hover:border-schappo-500 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>{formatDate(data)}</span>
+          </button>
+          {showCalendario && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowCalendario(false)} />
+              <div className="absolute z-50 mt-1 right-0">
+                <CalendarioMedico
+                  medicoId={medicoId}
+                  dataSelecionada={data}
+                  onSelectDate={(d) => { setData(d); setShowCalendario(false); }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Buscar */}
+        <button
+          onClick={handleBuscar}
+          disabled={!medicoId || !data || loading}
+          className="px-4 py-2 bg-schappo-500 text-white rounded-lg text-sm font-medium hover:bg-schappo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Buscando...' : 'Buscar'}
+        </button>
       </div>
 
       {/* Erro */}
