@@ -58,6 +58,7 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const autoRegisteredRef = useRef(false);
 
   // Inicializar audio elements (lazy)
   const getRemoteAudio = useCallback(() => {
@@ -327,6 +328,7 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
             break;
           case RegistererState.Terminated:
             setRegistrationState('unregistered');
+            autoRegisteredRef.current = false;
             break;
         }
       });
@@ -498,13 +500,47 @@ export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
     }
   }, [callState]);
 
+  // Auto-registro: quando sipSettings carrega com sip_enabled=true, registrar automaticamente
+  useEffect(() => {
+    if (
+      sipSettings &&
+      sipSettings.sip_enabled &&
+      sipSettings.sip_server &&
+      sipSettings.sip_username &&
+      sipSettings.sip_password &&
+      !autoRegisteredRef.current &&
+      registrationState === 'unregistered' &&
+      operatorStatus !== 'offline'
+    ) {
+      autoRegisteredRef.current = true;
+      register();
+    }
+  }, [sipSettings, registrationState, operatorStatus, register]);
+
   // Integrar com status do operador
   useEffect(() => {
     if (operatorStatus === 'offline' && registrationState === 'registered') {
+      autoRegisteredRef.current = false;
       unregister();
     }
-    // Nao auto-registrar ao voltar para disponivel - deixar manual
   }, [operatorStatus, registrationState, unregister]);
+
+  // Re-registrar ao voltar de offline
+  useEffect(() => {
+    if (
+      operatorStatus &&
+      operatorStatus !== 'offline' &&
+      sipSettings?.sip_enabled &&
+      sipSettings?.sip_server &&
+      sipSettings?.sip_username &&
+      sipSettings?.sip_password &&
+      registrationState === 'unregistered' &&
+      !autoRegisteredRef.current
+    ) {
+      autoRegisteredRef.current = true;
+      register();
+    }
+  }, [operatorStatus, sipSettings, registrationState, register]);
 
   // Carregar settings ao montar
   useEffect(() => {
