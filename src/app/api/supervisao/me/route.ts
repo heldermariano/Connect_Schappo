@@ -12,7 +12,17 @@ export async function GET() {
   }
 
   try {
-    const atendenteId = parseInt(session.user.id as string);
+    const role = (session.user as { role?: string }).role || 'atendente';
+    // Supervisores e admins nao passam pelo fluxo de inatividade
+    if (role === 'admin' || role === 'supervisor') {
+      return NextResponse.json({
+        conversas_pendentes: 0,
+        ultima_resposta_at: new Date().toISOString(),
+        canal_mais_pendente: null,
+        minutos_sem_resposta: 0,
+      });
+    }
+
     const grupo = (session.user as { grupo?: string }).grupo || 'todos';
     const allowedChannels = GRUPO_CHANNELS[grupo] || GRUPO_CHANNELS.todos;
 
@@ -26,7 +36,7 @@ export async function GET() {
           WHERE c2.nao_lida > 0
             AND c2.tipo = 'individual'
             AND c2.is_archived = false
-            AND c2.categoria = ANY($2)
+            AND c2.categoria = ANY($1)
           GROUP BY c2.categoria
           ORDER BY COUNT(*) DESC
           LIMIT 1
@@ -35,18 +45,20 @@ export async function GET() {
       WHERE c.nao_lida > 0
         AND c.tipo = 'individual'
         AND c.is_archived = false
-        AND c.categoria = ANY($2)
-    `, [atendenteId, allowedChannels]);
+        AND c.categoria = ANY($1)
+    `, [allowedChannels]);
 
-    // Ultima resposta from_me em conversas individuais
+    // Ultima resposta from_me em conversas individuais do atendente
+    const nome = (session.user as { nome?: string }).nome || '';
     const respostaResult = await pool.query(`
       SELECT MAX(m.created_at) AS ultima_resposta_at
       FROM atd.mensagens m
       JOIN atd.conversas c ON c.id = m.conversa_id
       WHERE m.from_me = true
+        AND m.sender_name = $1
         AND c.tipo = 'individual'
         AND c.categoria = ANY($2)
-    `, [atendenteId, allowedChannels]);
+    `, [nome, allowedChannels]);
 
     const pendentes = pendentesResult.rows[0]?.total || 0;
     const canalPendente = pendentesResult.rows[0]?.canal_mais_pendente || null;
