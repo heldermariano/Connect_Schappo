@@ -3,9 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { queryLatin1 } from '@/lib/db-agenda';
 import pool from '@/lib/db';
-import { normalizePhone } from '@/lib/types';
+import { getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 
-// Delay entre envios (rate limit API)
+// Delay entre envios (rate limit UAZAPI)
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
       agendaMap.set(row.chave, row);
     }
 
-    // 360Dialog (numero Geral) — envia com botoes interativos
-    const dialog360Url = process.env.DIALOG360_API_URL || 'https://waba-v2.360dialog.io';
-    const dialog360Key = process.env.DIALOG360_API_KEY || '';
+    // Enviar via UAZAPI (Recepcao) — sem limitacao de janela de 24h
+    const uazapiUrl = process.env.UAZAPI_URL;
+    const uazapiToken = getUazapiToken('recepcao');
     const atendenteId = parseInt(session.user.id as string);
 
     const detalhes: Array<{
@@ -120,51 +120,34 @@ export async function POST(request: NextRequest) {
         .replace(/\{nome_medico\}/g, nomeMedico)
         .replace(/\{procedimento\}/g, procedimento);
 
-      // Enviar via 360Dialog com botoes interativos
+      // Enviar via UAZAPI (Recepcao)
       try {
-        const payload360 = {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: telefoneWhatsapp,
-          type: 'interactive',
-          interactive: {
-            type: 'button',
-            body: { text: textoFinal },
-            action: {
-              buttons: [
-                { type: 'reply', reply: { id: 'CONFIRMAR', title: 'Confirmar' } },
-                { type: 'reply', reply: { id: 'DESMARCAR', title: 'Desmarcar' } },
-                { type: 'reply', reply: { id: 'REAGENDAR', title: 'Reagendar' } },
-              ],
-            },
-          },
-        };
-
-        const res = await fetch(`${dialog360Url}/v1/messages`, {
+        const res = await fetch(`${uazapiUrl}/send/text`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'D360-API-KEY': dialog360Key,
+            token: uazapiToken,
           },
-          body: JSON.stringify(payload360),
+          body: JSON.stringify({ number: telefoneWhatsapp, text: textoFinal }),
         });
 
         if (!res.ok) {
           const body = await res.text();
-          console.error(`[disparo] Falha 360Dialog chave=${chave}:`, res.status, body);
-          detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'falha', erro: `360Dialog ${res.status}` });
+          console.error(`[disparo] Falha UAZAPI chave=${chave}:`, res.status, body);
+          detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'falha', erro: `UAZAPI ${res.status}` });
           falhas++;
           continue;
         }
 
         const responseData = await res.json();
-        const waMessageId = responseData.messages?.[0]?.id || '';
+        const ids = extractUazapiMessageIds(responseData);
+        console.log(`[disparo] UAZAPI OK chave=${chave} to=${telefoneWhatsapp} msgId=${ids.shortId}`);
 
         // Registrar no banco local
         await pool.query(
           `INSERT INTO atd.confirmacao_agendamento
            (chave_agenda, cod_paciente, id_medico, dat_agenda, telefone_envio, wa_message_id, status, enviado_por, provider)
-           VALUES ($1, $2, $3, $4, $5, $6, 'enviado', $7, '360dialog')
+           VALUES ($1, $2, $3, $4, $5, $6, 'enviado', $7, 'uazapi')
            ON CONFLICT (chave_agenda) DO UPDATE SET
              telefone_envio = EXCLUDED.telefone_envio,
              wa_message_id = EXCLUDED.wa_message_id,
@@ -172,8 +155,8 @@ export async function POST(request: NextRequest) {
              enviado_por = EXCLUDED.enviado_por,
              enviado_at = NOW(),
              respondido_at = NULL,
-             provider = '360dialog'`,
-          [chave, agenda.cod_paciente, medico_id, data, telefoneWhatsapp, waMessageId, atendenteId]
+             provider = 'uazapi'`,
+          [chave, agenda.cod_paciente, medico_id, data, telefoneWhatsapp, ids.shortId, atendenteId]
         );
 
         detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'enviado' });
@@ -186,7 +169,7 @@ export async function POST(request: NextRequest) {
 
       // Delay entre envios (exceto ultimo)
       if (i < chaves.length - 1) {
-        await sleep(2000);
+        await sleep(3000);
       }
     }
 

@@ -105,6 +105,32 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
       }
     }
 
+    // Auto-atualizar confirmacao por texto (respostas "1", "2", "confirmo", etc.)
+    if (!parsed.from_me && parsed.telefone && parsed.conteudo) {
+      const textoResposta = parsed.conteudo.trim().toLowerCase();
+      if (textoResposta === '1' || textoResposta === '2' || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar') {
+        let novoStatus: string | null = null;
+        if (textoResposta === '1' || textoResposta === 'confirmo' || textoResposta === 'confirmar') novoStatus = 'confirmado';
+        else if (textoResposta === '2' || textoResposta === 'remarcar' || textoResposta === 'reagendar') novoStatus = 'reagendar';
+        else if (textoResposta === 'desmarcar' || textoResposta === 'cancelar') novoStatus = 'desmarcou';
+
+        if (novoStatus) {
+          try {
+            await pool.query(
+              `UPDATE atd.confirmacao_agendamento
+               SET status = $1, respondido_at = NOW()
+               WHERE telefone_envio = $2
+                 AND status = 'enviado'
+                 AND enviado_at > NOW() - INTERVAL '7 days'`,
+              [novoStatus, parsed.telefone],
+            );
+          } catch (err) {
+            console.error('[webhook/360dialog] Erro ao atualizar confirmacao por texto:', err);
+          }
+        }
+      }
+    }
+
     // 3. Buscar mensagem completa
     const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);
 

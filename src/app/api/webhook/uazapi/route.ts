@@ -217,6 +217,58 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
        WHERE id = $1 AND (atendente_id IS NOT NULL OR is_archived = TRUE OR ultima_msg_from_me = TRUE)`,
       [conversaId],
     );
+
+    // Auto-atualizar confirmacao de agendamento quando paciente responde
+    // Detectar respostas "1" (confirmar) ou "2" (remarcar) pelo telefone do remetente
+    const textoResposta = (parsed.conteudo || '').trim().toLowerCase();
+    if (parsed.telefone && (textoResposta === '1' || textoResposta === '2' || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar')) {
+      try {
+        let novoStatus: string | null = null;
+        if (textoResposta === '1' || textoResposta === 'confirmo' || textoResposta === 'confirmar') {
+          novoStatus = 'confirmado';
+        } else if (textoResposta === '2' || textoResposta === 'remarcar' || textoResposta === 'reagendar') {
+          novoStatus = 'reagendar';
+        } else if (textoResposta === 'desmarcar' || textoResposta === 'cancelar') {
+          novoStatus = 'desmarcou';
+        }
+
+        if (novoStatus) {
+          // Buscar confirmacao pendente (enviado) para este telefone nos ultimos 7 dias
+          // Comparar com e sem 9o digito (UAZAPI pode normalizar diferente)
+          let tel = parsed.telefone.replace(/\D/g, '');
+          let telAlt = tel;
+          if (tel.length === 13 && tel.startsWith('55')) {
+            // Com 9o digito: 55 + DD + 9XXXX → remover o 9
+            telAlt = tel.substring(0, 4) + tel.substring(5);
+          } else if (tel.length === 12 && tel.startsWith('55')) {
+            // Sem 9o digito: 55 + DD + XXXX → adicionar 9
+            telAlt = tel.substring(0, 4) + '9' + tel.substring(4);
+          }
+          const confirmResult = await pool.query(
+            `UPDATE atd.confirmacao_agendamento
+             SET status = $1, respondido_at = NOW()
+             WHERE (telefone_envio = $2 OR telefone_envio = $3)
+               AND status = 'enviado'
+               AND enviado_at > NOW() - INTERVAL '7 days'
+             RETURNING id, chave_agenda`,
+            [novoStatus, tel, telAlt],
+          );
+
+          if (confirmResult.rowCount && confirmResult.rowCount > 0) {
+            console.log(`[webhook/uazapi] Confirmacao auto-atualizada: telefone=${parsed.telefone} status=${novoStatus} chaves=${confirmResult.rows.map(r => r.chave_agenda).join(',')}`);
+            // Broadcast SSE para atualizar pagina de confirmacao
+            sseManager.broadcast({
+              type: 'confirmacao_atualizada' as 'conversa_atualizada',
+              data: {
+                confirmacoes: confirmResult.rows.map(r => ({ id: r.id, chave_agenda: r.chave_agenda, status: novoStatus })),
+              } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[webhook/uazapi] Erro ao atualizar confirmacao:', err);
+      }
+    }
   }
 
   // Cache de participante de grupo (nao bloqueia o fluxo)

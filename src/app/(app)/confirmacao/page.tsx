@@ -118,6 +118,15 @@ export default function ConfirmacaoPage() {
     fetchMedicos();
   }, [fetchMedicos]);
 
+  // Auto-refresh: recarregar agendamentos a cada 15s para detectar respostas
+  useEffect(() => {
+    if (!medicoId || !data) return;
+    const interval = setInterval(() => {
+      fetchAgendamentos(medicoId, data);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [medicoId, data, fetchAgendamentos]);
+
   // Buscar agendamentos quando medico ou data mudam
   const handleBuscar = useCallback(() => {
     if (medicoId && data) {
@@ -548,7 +557,7 @@ export default function ConfirmacaoPage() {
             <div className="px-6 py-4 flex-1 overflow-y-auto">
               <div className="mb-4">
                 <p className="text-sm text-gray-400 mb-2">
-                  Sera enviada para <strong className="text-white">{selecionados.size} paciente(s)</strong> pelo WhatsApp Geral (360Dialog) com botoes interativos.
+                  Sera enviada para <strong className="text-white">{selecionados.size} paciente(s)</strong> pelo WhatsApp Recepcao.
                 </p>
                 <p className="text-xs text-gray-500 mb-3">
                   Variaveis disponiveis: {'{nome_paciente}'}, {'{nome_paciente_completo}'}, {'{data}'}, {'{hora}'}, {'{nome_medico}'}, {'{procedimento}'}
