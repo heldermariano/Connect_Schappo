@@ -62,6 +62,12 @@ export default function MessageView({
   // Edit state
   const [editingMsg, setEditingMsg] = useState<Mensagem | null>(null);
 
+  // Search state
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
+  const msgRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
   // Sync state (UAZAPI /chat/details)
   const [syncedName, setSyncedName] = useState<string | null>(null);
   const [syncedAvatar, setSyncedAvatar] = useState<string | null>(null);
@@ -75,6 +81,9 @@ export default function MessageView({
     setReactionTarget(null);
     setForwardingMsg(null);
     setEditingMsg(null);
+    setSearchOpen(false);
+    setSearchTerm('');
+    setSearchIndex(0);
     setSyncedName(null);
     setSyncedAvatar(null);
     setSyncedMemberCount(null);
@@ -240,6 +249,39 @@ export default function MessageView({
     }
   }, [conversa, syncing]);
 
+  // Search matches
+  const searchMatches = searchTerm.length >= 2
+    ? mensagens.filter(m => m.conteudo && m.conteudo.toLowerCase().includes(searchTerm.toLowerCase()))
+    : [];
+
+  // Scroll to current match
+  useEffect(() => {
+    if (searchMatches.length === 0 || !searchOpen) return;
+    const matchMsg = searchMatches[searchIndex];
+    if (!matchMsg) return;
+    const el = msgRefs.current.get(matchMsg.id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'background-color 0.3s';
+      el.style.backgroundColor = 'rgba(245, 130, 32, 0.15)';
+      setTimeout(() => { el.style.backgroundColor = ''; }, 1500);
+    }
+  }, [searchIndex, searchMatches, searchOpen]);
+
+  const handleSearchNav = useCallback((dir: 'prev' | 'next') => {
+    if (searchMatches.length === 0) return;
+    setSearchIndex(i => dir === 'next'
+      ? (i + 1) % searchMatches.length
+      : (i - 1 + searchMatches.length) % searchMatches.length
+    );
+  }, [searchMatches.length]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchTerm('');
+    setSearchIndex(0);
+  }, []);
+
   if (!conversa) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black text-gray-400 dark:text-gray-500">
@@ -286,6 +328,16 @@ export default function MessageView({
             </svg>
           </button>
         )}
+        {/* Botao busca mensagens */}
+        <button
+          onClick={() => { setSearchOpen(o => !o); if (searchOpen) closeSearch(); }}
+          className={`p-2 transition-colors ${searchOpen ? 'text-schappo-600' : 'text-gray-400 hover:text-schappo-600'}`}
+          title="Buscar mensagens"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
         <AtribuirDropdown
           conversaId={conversa.id}
           atendenteId={conversa.atendente_id}
@@ -334,6 +386,41 @@ export default function MessageView({
         )}
       </div>
 
+      {/* Barra de busca */}
+      {searchOpen && (
+        <div className="h-11 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-3 gap-2 shrink-0">
+          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            autoFocus
+            type="text"
+            placeholder="Buscar na conversa..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setSearchIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') closeSearch();
+              if (e.key === 'Enter') handleSearchNav(e.shiftKey ? 'prev' : 'next');
+            }}
+            className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none"
+          />
+          {searchTerm.length >= 2 && (
+            <span className="text-xs text-gray-500 shrink-0">
+              {searchMatches.length > 0 ? `${searchIndex + 1}/${searchMatches.length}` : '0/0'}
+            </span>
+          )}
+          <button onClick={() => handleSearchNav('prev')} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" disabled={searchMatches.length === 0}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+          </button>
+          <button onClick={() => handleSearchNav('next')} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" disabled={searchMatches.length === 0}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          <button onClick={closeSearch} className="p-1 text-gray-400 hover:text-gray-600">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
       {/* Banner do paciente (ERP lookup) */}
       <PacienteBanner telefone={conversa.telefone} tipo={conversa.tipo} />
 
@@ -360,15 +447,16 @@ export default function MessageView({
           </div>
         ) : (
           mensagens.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              mensagem={msg}
-              showSender={isGroup}
-              isAdmin={currentUserRole === 'admin'}
-              onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
-              onResend={doResend}
-              onContextMenu={handleContextMenu}
-            />
+            <div key={msg.id} ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}>
+              <MessageBubble
+                mensagem={msg}
+                showSender={isGroup}
+                isAdmin={currentUserRole === 'admin'}
+                onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+                onResend={doResend}
+                onContextMenu={handleContextMenu}
+              />
+            </div>
           ))
         )}
 
