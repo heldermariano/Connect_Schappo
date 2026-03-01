@@ -9,6 +9,7 @@ import {
   validateWebhookToken,
 } from '@/lib/webhook-parser-uazapi';
 import { upsertParticipant } from '@/lib/participant-cache';
+import { atualizarStatusKonsyst } from '@/lib/db-agenda';
 
 export async function POST(request: NextRequest) {
   // Responder rapido — processar async
@@ -256,6 +257,14 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
 
           if (confirmResult.rowCount && confirmResult.rowCount > 0) {
             console.log(`[webhook/uazapi] Confirmacao auto-atualizada: telefone=${parsed.telefone} status=${novoStatus} chaves=${confirmResult.rows.map(r => r.chave_agenda).join(',')}`);
+
+            // Atualizar status no Konsyst (banco ERP externo)
+            for (const row of confirmResult.rows) {
+              atualizarStatusKonsyst(row.chave_agenda, novoStatus as 'confirmado' | 'desmarcou' | 'reagendar').catch(err =>
+                console.error(`[webhook/uazapi] Erro Konsyst chave=${row.chave_agenda}:`, err),
+              );
+            }
+
             // Broadcast SSE para atualizar pagina de confirmacao
             sseManager.broadcast({
               type: 'confirmacao_atualizada' as 'conversa_atualizada',

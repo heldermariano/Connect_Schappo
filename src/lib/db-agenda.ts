@@ -63,4 +63,52 @@ export async function queryLatin1<T extends QueryResultRow = QueryResultRow>(
   return result;
 }
 
+/**
+ * Atualiza o status do agendamento no banco Konsyst (arq_agendal).
+ * Mapeamento: confirmado → ind_status='C', desmarcou → ind_status='D'+ind_desmarcou='P',
+ *             reagendar → ind_status='D'+ind_desmarcou='R'
+ * Requer GRANT UPDATE no arq_agendal para o usuario do pool.
+ */
+export async function atualizarStatusKonsyst(
+  chaveAgenda: number,
+  statusConnect: 'confirmado' | 'desmarcou' | 'reagendar',
+): Promise<boolean> {
+  try {
+    let indStatus: string;
+    let indDesmarcou: string | null;
+
+    switch (statusConnect) {
+      case 'confirmado':
+        indStatus = 'C';
+        indDesmarcou = null;
+        break;
+      case 'desmarcou':
+        indStatus = 'D';
+        indDesmarcou = 'P';
+        break;
+      case 'reagendar':
+        indStatus = 'D';
+        indDesmarcou = 'R';
+        break;
+      default:
+        return false;
+    }
+
+    const result = await agendaPool.query(
+      `UPDATE arq_agendal SET ind_status = $1, ind_desmarcou = $2 WHERE chave = $3`,
+      [indStatus, indDesmarcou, chaveAgenda],
+    );
+
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[db-agenda] Konsyst atualizado: chave=${chaveAgenda} ind_status=${indStatus} ind_desmarcou=${indDesmarcou || 'null'}`);
+      return true;
+    }
+    console.warn(`[db-agenda] Konsyst: chave ${chaveAgenda} nao encontrada`);
+    return false;
+  } catch (err) {
+    console.error(`[db-agenda] Erro ao atualizar Konsyst chave=${chaveAgenda}:`, err);
+    return false;
+  }
+}
+
 export default agendaPool;

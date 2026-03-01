@@ -3,6 +3,7 @@ import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 import { WebhookPayload360Dialog } from '@/lib/types';
 import { parse360DialogPayload } from '@/lib/webhook-parser-360';
+import { atualizarStatusKonsyst } from '@/lib/db-agenda';
 
 export async function POST(request: NextRequest) {
   try {
@@ -93,12 +94,19 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
 
       if (novoStatus) {
         try {
-          await pool.query(
+          const btnResult = await pool.query(
             `UPDATE atd.confirmacao_agendamento
              SET status = $1, respondido_at = NOW()
-             WHERE wa_message_id = $2 AND status = 'enviado'`,
+             WHERE wa_message_id = $2 AND status = 'enviado'
+             RETURNING id, chave_agenda`,
             [novoStatus, parsed.context_message_id],
           );
+          // Atualizar Konsyst
+          for (const row of btnResult.rows) {
+            atualizarStatusKonsyst(row.chave_agenda, novoStatus as 'confirmado' | 'desmarcou' | 'reagendar').catch(err =>
+              console.error(`[webhook/360dialog] Erro Konsyst chave=${row.chave_agenda}:`, err),
+            );
+          }
         } catch (err) {
           console.error('[webhook/360dialog] Erro ao atualizar confirmacao:', err);
         }
@@ -116,14 +124,21 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
 
         if (novoStatus) {
           try {
-            await pool.query(
+            const txtResult = await pool.query(
               `UPDATE atd.confirmacao_agendamento
                SET status = $1, respondido_at = NOW()
                WHERE telefone_envio = $2
                  AND status = 'enviado'
-                 AND enviado_at > NOW() - INTERVAL '7 days'`,
+                 AND enviado_at > NOW() - INTERVAL '7 days'
+               RETURNING id, chave_agenda`,
               [novoStatus, parsed.telefone],
             );
+            // Atualizar Konsyst
+            for (const row of txtResult.rows) {
+              atualizarStatusKonsyst(row.chave_agenda, novoStatus as 'confirmado' | 'desmarcou' | 'reagendar').catch(err =>
+                console.error(`[webhook/360dialog] Erro Konsyst chave=${row.chave_agenda}:`, err),
+              );
+            }
           } catch (err) {
             console.error('[webhook/360dialog] Erro ao atualizar confirmacao por texto:', err);
           }
