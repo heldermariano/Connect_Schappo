@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
+import { getUazapiToken } from '@/lib/types';
 
 const UAZAPI_URL = process.env.UAZAPI_URL || '';
-const UAZAPI_TOKEN = process.env.UAZAPI_TOKEN || '';
 const DIALOG360_API_URL = process.env.DIALOG360_API_URL || '';
 const DIALOG360_API_KEY = process.env.DIALOG360_API_KEY || '';
 
@@ -79,9 +79,13 @@ export async function GET(
   }
 
   try {
-    // Buscar mensagem no banco (incluir metadata para message_id_full e provider)
+    // Buscar mensagem no banco (incluir metadata para message_id_full e provider, categoria para token)
     const result = await pool.query(
-      `SELECT wa_message_id, tipo_mensagem, media_mimetype, media_filename, metadata FROM atd.mensagens WHERE id = $1`,
+      `SELECT m.wa_message_id, m.tipo_mensagem, m.media_mimetype, m.media_filename, m.metadata,
+              c.categoria
+       FROM atd.mensagens m
+       LEFT JOIN atd.conversas c ON m.conversa_id = c.id
+       WHERE m.id = $1`,
       [id],
     );
 
@@ -129,10 +133,13 @@ export async function GET(
         }
       }
     } else {
-      // === UAZAPI: fluxo original ===
+      // === UAZAPI: baixar via /message/download ===
       const waMessageId = meta.message_id_full || msg.wa_message_id;
+      // Token correto da instancia (EEG vs Recepcao)
+      const uazapiToken = getUazapiToken(msg.categoria || 'geral');
 
-      if (!waMessageId || !UAZAPI_URL || !UAZAPI_TOKEN) {
+      if (!waMessageId || !UAZAPI_URL || !uazapiToken) {
+        console.error(`[media proxy] UAZAPI config ausente: msgId=${waMessageId} url=${!!UAZAPI_URL} token=${!!uazapiToken}`);
         return NextResponse.json({ error: 'media_unavailable' }, { status: 404 });
       }
 
@@ -144,24 +151,22 @@ export async function GET(
       }
 
       if (!fileUrl) {
-        const isAudio = msg.tipo_mensagem === 'audio';
-        const generateMp3 = isAudio ? 'true' : 'false';
-
+        // NAO usar generate_mp3 — servir formato original (ogg/opus)
+        // para evitar mismatch entre Content-Type do banco e formato real do arquivo
         const downloadResp = await fetch(`${UAZAPI_URL}/message/download`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            token: UAZAPI_TOKEN,
+            token: uazapiToken,
           },
           body: JSON.stringify({
             id: waMessageId,
             return_link: true,
-            generate_mp3: generateMp3,
           }),
         });
 
         if (!downloadResp.ok) {
-          console.error(`[media proxy] UAZAPI download falhou: ${downloadResp.status}`);
+          console.error(`[media proxy] UAZAPI download falhou: ${downloadResp.status} msgId=${waMessageId} cat=${msg.categoria}`);
           const errStatus = downloadResp.status === 404 ? 404 : 502;
           return NextResponse.json({ error: 'media_unavailable', message: 'Midia nao disponivel' }, { status: errStatus });
         }
@@ -170,6 +175,7 @@ export async function GET(
         fileUrl = data.fileURL || data.fileUrl || data.url;
 
         if (!fileUrl) {
+          console.error(`[media proxy] UAZAPI sem URL no retorno: ${JSON.stringify(data).substring(0, 200)}`);
           return NextResponse.json({ error: 'no_url_returned' }, { status: 502 });
         }
 
@@ -179,11 +185,10 @@ export async function GET(
       fileResp = await fetch(fileUrl);
       if (!fileResp.ok && cached) {
         urlCache.delete(id);
-        const isAudioRetry = msg.tipo_mensagem === 'audio';
         const retryResp = await fetch(`${UAZAPI_URL}/message/download`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
-          body: JSON.stringify({ id: waMessageId, return_link: true, generate_mp3: isAudioRetry ? 'true' : 'false' }),
+          headers: { 'Content-Type': 'application/json', token: uazapiToken },
+          body: JSON.stringify({ id: waMessageId, return_link: true }),
         });
         if (retryResp.ok) {
           const retryData = await retryResp.json();
@@ -201,7 +206,14 @@ export async function GET(
       return NextResponse.json({ error: 'media_unavailable', message: 'Midia nao disponivel no momento' }, { status: 404 });
     }
 
-    const contentType = msg.media_mimetype || fileResp.headers.get('content-type') || 'application/octet-stream';
+    // Preferir mimetype do banco (classificado corretamente no webhook/envio)
+    // O CDN da UAZAPI pode retornar Content-Type errado (ex: audio/mpeg para um PDF)
+    // Usar resposta da rede apenas como fallback quando DB nao tem mimetype
+    const respType = fileResp.headers.get('content-type');
+    const dbMime = msg.media_mimetype ? msg.media_mimetype.split(';')[0].trim() : null;
+    const contentType = dbMime
+      || (respType && !respType.includes('octet-stream') ? respType : null)
+      || 'application/octet-stream';
     const filename = msg.media_filename || 'arquivo';
 
     // PDFs e midias inline abrem no browser, outros tipos fazem download

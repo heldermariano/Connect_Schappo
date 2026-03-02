@@ -15,11 +15,23 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 }
 
+// Verifica se a rota /api/eeg/* tem token bot valido no header
+function hasBotToken(request: NextRequest): boolean {
+  const botToken = request.headers.get('x-bot-token');
+  const secret = process.env.WEBHOOK_SECRET;
+  return !!botToken && !!secret && botToken === secret;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Libera rotas publicas
   if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Libera /api/eeg/* com token bot (N8N)
+  if (pathname.startsWith('/api/eeg/') && hasBotToken(request)) {
     return NextResponse.next();
   }
 
