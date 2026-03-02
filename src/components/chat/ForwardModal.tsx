@@ -52,7 +52,13 @@ export default function ForwardModal({ mensagens, onClose }: ForwardModalProps) 
     const sorted = [...mensagens].sort((a, b) => a.id - b.id);
 
     for (let i = 0; i < sorted.length; i++) {
+      // Delay entre envios para evitar rate limiting do provider
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+
       try {
+        console.log(`[forward] Enviando ${i + 1}/${sorted.length}: msgId=${sorted[i].id} para conversa=${selected.id}`);
         const res = await fetch('/api/mensagens/forward', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -64,9 +70,12 @@ export default function ForwardModal({ mensagens, onClose }: ForwardModalProps) 
         if (res.ok) {
           successCount++;
         } else {
+          const err = await res.json().catch(() => ({}));
+          console.error(`[forward] Erro msg ${sorted[i].id}: status=${res.status}`, err);
           errorCount++;
         }
-      } catch {
+      } catch (err) {
+        console.error(`[forward] Erro rede msg ${sorted[i].id}:`, err);
         errorCount++;
       }
       setProgress(i + 1);
@@ -83,8 +92,8 @@ export default function ForwardModal({ mensagens, onClose }: ForwardModalProps) 
   }, [mensagens, selected, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') onClose();
-  }, [onClose]);
+    if (e.key === 'Escape' && !sending) onClose();
+  }, [onClose, sending]);
 
   const count = mensagens.length;
   const previewText = count === 1
@@ -94,7 +103,7 @@ export default function ForwardModal({ mensagens, onClose }: ForwardModalProps) 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !sending) onClose(); }}
       onKeyDown={handleKeyDown}
     >
       <div className="bg-white dark:bg-black rounded-xl shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[80vh]">

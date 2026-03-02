@@ -317,12 +317,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!sendResult.success) {
+      console.error(`[forward] Falha ao encaminhar msg ${source_message_id} para conversa ${target_conversa_id}: ${sendResult.error}`);
       return NextResponse.json({ error: sendResult.error || 'Falha ao encaminhar' }, { status: 502 });
     }
 
-    // Salvar no banco
+    console.log(`[forward] Envio OK: msg ${source_message_id} → conversa ${target_conversa_id}, messageId=${sendResult.messageId}`);
+
+    // Salvar no banco — usar crypto para fallback ID unico
     const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `fwd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const waMessageId = sendResult.messageId || `fwd_${Date.now()}_${Math.random().toString(36).slice(2, 10)}_${source_message_id}`;
 
     const metadata: Record<string, unknown> = {
       forwarded_from_msg_id: source_message_id,
@@ -358,6 +361,7 @@ export async function POST(request: NextRequest) {
     );
 
     if (newMsgResult.rows.length === 0) {
+      console.error(`[forward] Duplicada: wa_message_id=${waMessageId} para msg ${source_message_id}`);
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
