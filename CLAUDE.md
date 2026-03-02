@@ -61,7 +61,7 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Finalizar atendimento (arquiva conversa, reaparece com nova msg) | DONE |
 | Busca de exames via # (banco externo NeuroSchappo) | DONE |
 | Download e envio de laudos/tracados PDF | DONE |
-| Exclusao de conversas e mensagens (admin) | DONE |
+| Exclusao de conversas (admin) e mensagens (soft-delete) | DONE |
 | Mencoes (@) em grupos com notificacao sonora | DONE |
 | Softphone WebRTC (SIP.js + PJSIP/Issabel) | DONE |
 | Tons DTMF no teclado (Web Audio API) | DONE |
@@ -100,6 +100,10 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Templates de confirmacao (sistema + por operador) | DONE |
 | Deteccao flexivel de resposta confirmacao (startsWith) | DONE |
 | Validacao de midia vazia + erro visivel no envio (audio/imagem/doc) | DONE |
+| Encaminhamento de midia (imagem/audio/video/documento cross-provider) | DONE |
+| Selecao multipla de mensagens (checkboxes + encaminhamento em lote) | DONE |
+| Soft-delete de mensagens (is_deleted + auditoria, sem hard delete) | DONE |
+| SSE eventos expandidos (editada, removida, confirmacao, chat_interno_reacao) | DONE |
 
 ### Pendente / Proximo
 
@@ -200,7 +204,8 @@ connect-schappo/
 │   ├── 015_normalize_telefones.sql     # Normalizacao telefones (funcao + triggers)
 │   ├── 016_atendente_pausas.sql        # Tabela atendente_pausas (rastreio pausas)
 │   ├── 016_template_confirmacao.sql    # Templates de mensagem confirmacao
-│   └── 017_sip_webrtc_operadores.sql   # Ramais PJSIP individuais (251-259, sip_enabled)
+│   ├── 017_sip_webrtc_operadores.sql   # Ramais PJSIP individuais (251-259, sip_enabled)
+│   └── 019_mensagens_soft_delete.sql   # Soft-delete: is_deleted, deleted_at, deleted_by
 │
 ├── config/
 │   ├── pjsip-whatsapp.conf            # Config PJSIP para trunk WhatsApp Voz
@@ -354,7 +359,8 @@ connect-schappo/
     │   │   ├── AudioRecorder.tsx          # Gravacao audio PTT (ogg/webm, guard Strict Mode)
     │   │   ├── GrupoListModal.tsx        # Modal listar/sync grupos do canal UAZAPI
     │   │   ├── AtribuirDropdown.tsx      # Dropdown atribuir conversa a atendente
-    │   │   └── MessageContextMenu.tsx    # Menu de contexto (copiar, responder, reagir, encaminhar, editar, deletar)
+    │   │   ├── MessageContextMenu.tsx    # Menu de contexto (copiar, responder, reagir, encaminhar, selecionar, editar, deletar)
+    │   │   └── ForwardModal.tsx          # Modal encaminhar mensagens (single ou multi-select com delay)
     │   │
     │   ├── calls/
     │   │   ├── CallLog.tsx               # Lista historico chamadas
@@ -453,19 +459,20 @@ postgresql://connect_dev:SENHA@localhost:5432/connect_schappo
 Schema: atd
 ```
 
-### Tabelas (14)
+### Tabelas (15)
 
 | Tabela | Descricao | Colunas-chave |
 |--------|-----------|---------------|
 | `atd.atendentes` | Operadores/atendentes | id, nome, username, password_hash, ramal, grupo_atendimento, role, status_presenca, sip_*, disponivel_desde, sip_enabled |
 | `atd.conversas` | Chats WhatsApp | id, wa_chatid (UNIQUE), tipo, categoria, provider, telefone, nao_lida, atendente_id, is_archived |
-| `atd.mensagens` | Mensagens | id, conversa_id (FK), wa_message_id (UNIQUE), from_me, tipo_mensagem, conteudo, media_*, mencoes[], edited_at |
+| `atd.mensagens` | Mensagens | id, conversa_id (FK), wa_message_id (UNIQUE), from_me, tipo_mensagem, conteudo, media_*, mencoes[], edited_at, is_deleted, deleted_at, deleted_by |
 | `atd.chamadas` | Log chamadas | id, conversa_id, origem, direcao, caller/called_number, status, duracao_seg, asterisk_id |
 | `atd.contatos` | Contatos salvos | id, nome, telefone (UNIQUE), email, notas, chatwoot_id |
 | `atd.participantes_grupo` | Membros de grupos | id, wa_phone + wa_chatid (UNIQUE), nome_whatsapp, avatar_url |
 | `atd.respostas_prontas` | Quick replies por operador | id, atendente_id (FK), atalho (UNIQUE c/ atendente), conteudo |
 | `atd.hub_usuarios` | Diretorio de tecnicos EEG | id, nome, telefone (UNIQUE), cargo, setor, ativo |
 | `atd.eeg_alertas_ficha` | Alertas de fichas EEG | id, exam_id (UNIQUE), tecnico_id (FK), campos_faltantes[], corrigido, paciente_nome, data_exame |
+| `atd.eeg_exame_ficha_vinculo` | Vinculo exame-ficha EEG | id, exam_id, ficha_id |
 | `atd.chat_interno` | Chats 1:1 entre operadores | id, participante1_id, participante2_id (UNIQUE pair) |
 | `atd.chat_interno_mensagens` | Mensagens do chat interno | id, chat_id (FK), remetente_id, conteudo, tipo, media_*, reacoes (JSONB), reply_to_id |
 | `atd.confirmacao_agendamento` | Confirmacoes de agendamento | id, chave_agenda (UNIQUE), cod_paciente, telefone_envio, wa_message_id, status, enviado_por, provider |
@@ -480,7 +487,7 @@ Schema: atd
 | `atd.registrar_mensagem()` | Insert mensagem + update conversa (ultima_msg, nao_lida) |
 | `atd.normalize_phone()` | Normalizar telefone BR (55 + DDD + 9o digito) — usada por triggers |
 
-### Migracoes: `sql/001` a `sql/017` (executar em ordem)
+### Migracoes: `sql/001` a `sql/019` (executar em ordem)
 
 ---
 
@@ -505,10 +512,10 @@ Schema: atd
 | `/api/conversas/[id]/atribuir` | PATCH | Atribuir atendente / finalizar (is_archived) |
 | `/api/conversas/[id]` | DELETE | Excluir conversa (admin) |
 | `/api/mensagens/[conversaId]` | GET | Mensagens paginadas (cursor) + mencoes resolvidas |
-| `/api/mensagens/[conversaId]/[msgId]` | DELETE | Excluir mensagem (admin) |
+| `/api/mensagens/[conversaId]/[msgId]` | DELETE | Soft-delete mensagem (admin ou from_me) |
 | `/api/mensagens/send` | POST | Enviar texto via UAZAPI ou 360Dialog |
 | `/api/mensagens/send-media` | POST | Enviar midia (UAZAPI + 360Dialog, conversao audio via ffmpeg) |
-| `/api/mensagens/forward` | POST | Encaminhar mensagem para outro contato/conversa |
+| `/api/mensagens/forward` | POST | Encaminhar mensagem (texto + midia cross-provider) |
 | `/api/mensagens/react` | POST | Reagir com emoji a mensagem existente |
 | `/api/mensagens/send-contact` | POST | Enviar contato (vCard) via WhatsApp |
 | `/api/mensagens/send-location` | POST | Enviar localizacao (lat/lng) via WhatsApp |
@@ -723,10 +730,16 @@ Endpoint: `GET /api/events` (TextEventStream, auto-reconnect 3s)
 |--------|------|---------|
 | `nova_mensagem` | conversa_id, mensagem | Webhook recebe msg |
 | `conversa_atualizada` | conversa_id, ultima_msg, nao_lida | Webhook ou acao usuario |
+| `mensagem_status` | conversa_id, mensagem_id, status | Webhook status update |
+| `mensagem_editada` | conversa_id, mensagem_id, conteudo | Edicao de mensagem |
+| `mensagem_removida` | conversa_id, mensagem_id | Soft-delete de mensagem |
+| `confirmacao_atualizada` | chave_agenda, status | Resposta confirmacao agendamento |
 | `chamada_nova` | chamada | AMI Newchannel ou webhook call |
 | `chamada_atualizada` | chamada_id, status, duracao | AMI BridgeEnter/Hangup |
 | `ramal_status` | ramal, status | AMI DeviceStateChange |
 | `atendente_status` | atendente_id, presenca | PATCH /api/atendentes/status |
+| `chat_interno_mensagem` | chat_id, mensagem | Nova mensagem chat interno |
+| `chat_interno_reacao` | chat_id, mensagem_id, reacoes | Reacao no chat interno |
 
 ---
 
@@ -823,6 +836,10 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 12. **Deteccao de resposta flexivel** — Webhook usa `startsWith('1')` e `startsWith('2')` (nao match exato) para capturar respostas como "1 - Confirmo".
 13. **Banco ERP LATIN1** — Usar `queryLatin1()` de `db-agenda.ts` para queries ao banco schappo. Campos bytea sao convertidos automaticamente.
 14. **Validacao de midia no frontend** — Sempre validar `file.size > 0` antes de enviar. Logar erros com `console.error` para debug.
+15. **Soft-delete de mensagens** — DELETE em `mensagens` faz `UPDATE SET is_deleted=TRUE, deleted_at=NOW(), deleted_by=userId`. Queries de listagem filtram `is_deleted IS NOT TRUE`. Admin ou `from_me` pode deletar.
+16. **Encaminhamento de midia** — Forward baixa midia do provider original (UAZAPI ou 360Dialog) e re-envia ao destino. Suporte cross-provider. Fallback para texto se download falhar.
+17. **Multi-forward com delay** — Encaminhamento em lote usa delay de 1.5s entre envios sequenciais para evitar rate limiting do provider. Modal bloqueia fechamento durante envio.
+18. **360Dialog janela 24h** — Mensagens de texto livre so sao entregues se o destinatario enviou mensagem ao numero 360Dialog nas ultimas 24h. Fora da janela, usar templates aprovados pela Meta.
 
 ---
 
