@@ -130,6 +130,12 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
         // Enviar cada arquivo sequencialmente
         for (let i = 0; i < attachments.length; i++) {
           const file = attachments[i];
+
+          // Validar arquivo antes de enviar
+          if (!file || file.size === 0) {
+            throw new Error(`Arquivo "${file?.name || 'desconhecido'}" esta vazio`);
+          }
+
           const formData = new FormData();
           formData.append('conversa_id', String(conversaId));
           formData.append('file', file);
@@ -144,8 +150,8 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
           });
 
           if (!res.ok) {
-            const data = await res.json().catch(() => ({ error: 'Erro ao enviar midia' }));
-            throw new Error(data.error || `Erro ao enviar ${file.name}`);
+            const data = await res.json().catch(() => ({ error: `Erro ao enviar midia (${res.status})` }));
+            throw new Error(data.error || `Erro ao enviar ${file.name} (${res.status})`);
           }
         }
 
@@ -157,7 +163,9 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
           textareaRef.current.style.height = 'auto';
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro ao enviar midia');
+        const msg = err instanceof Error ? err.message : 'Erro ao enviar midia';
+        setError(msg);
+        console.error('[handleSend/media] Falha:', msg, err);
       } finally {
         setSending(false);
         textareaRef.current?.focus();
