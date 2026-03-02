@@ -53,7 +53,7 @@ export function showMentionToast(senderName: string, groupName?: string): void {
   // Remover apos 4 segundos
   setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-20px)';
+    toast.style.transform = 'translateY(-100%)';
     toast.style.transition = 'all 0.3s ease';
     setTimeout(() => toast.remove(), 300);
   }, 4000);
@@ -81,7 +81,7 @@ export function showToastNotification(
   const container = document.getElementById('toast-container') || createToastContainer();
 
   const toast = document.createElement('div');
-  toast.style.cssText = 'animation: toast-slide-in 0.35s cubic-bezier(0.16,1,0.3,1) forwards; opacity: 0; transform: translateY(-20px); background:#000; color:#fff; border-radius:12px; padding:12px 16px; margin-bottom:8px; max-width:360px; cursor:pointer; box-shadow:0 8px 30px rgba(0,0,0,0.4); display:flex; align-items:flex-start; gap:10px;';
+  toast.style.cssText = 'animation: toast-slide-in 0.35s cubic-bezier(0.16,1,0.3,1) forwards; opacity: 0; transform: translateY(-100%); background:#000; color:#fff; border-radius:12px; padding:12px 16px; margin-bottom:8px; max-width:360px; cursor:pointer; box-shadow:0 8px 30px rgba(0,0,0,0.4); display:flex; align-items:flex-start; gap:10px;';
 
   // Iniciais do remetente
   const initials = title
@@ -141,12 +141,12 @@ function ensureToastStyles(): void {
   const style = document.createElement('style');
   style.textContent = `
     @keyframes toast-slide-in {
-      from { opacity: 0; transform: translateY(-20px); }
+      from { opacity: 0; transform: translateY(-100%); }
       to { opacity: 1; transform: translateY(0); }
     }
     @keyframes toast-slide-out {
       from { opacity: 1; transform: translateY(0); }
-      to { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 0; transform: translateY(-100%); }
     }
   `;
   document.head.appendChild(style);

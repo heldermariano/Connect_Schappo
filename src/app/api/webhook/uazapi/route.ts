@@ -222,12 +222,12 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
     // Auto-atualizar confirmacao de agendamento quando paciente responde
     // Detectar respostas "1" (confirmar) ou "2" (remarcar) pelo telefone do remetente
     const textoResposta = (parsed.conteudo || '').trim().toLowerCase();
-    if (parsed.telefone && (textoResposta === '1' || textoResposta === '2' || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar')) {
+    if (parsed.telefone && (textoResposta.startsWith('1') || textoResposta.startsWith('2') || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar')) {
       try {
         let novoStatus: string | null = null;
-        if (textoResposta === '1' || textoResposta === 'confirmo' || textoResposta === 'confirmar') {
+        if (textoResposta.startsWith('1') || textoResposta === 'confirmo' || textoResposta === 'confirmar') {
           novoStatus = 'confirmado';
-        } else if (textoResposta === '2' || textoResposta === 'remarcar' || textoResposta === 'reagendar') {
+        } else if (textoResposta.startsWith('2') || textoResposta === 'remarcar' || textoResposta === 'reagendar') {
           novoStatus = 'reagendar';
         } else if (textoResposta === 'desmarcar' || textoResposta === 'cancelar') {
           novoStatus = 'desmarcou';

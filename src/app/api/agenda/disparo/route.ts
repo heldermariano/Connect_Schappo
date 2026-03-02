@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { queryLatin1 } from '@/lib/db-agenda';
 import pool from '@/lib/db';
 import { getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { sseManager } from '@/lib/sse-manager';
 
 // Delay entre envios (rate limit UAZAPI)
 function sleep(ms: number) {
@@ -158,6 +159,58 @@ export async function POST(request: NextRequest) {
              provider = 'uazapi'`,
           [chave, agenda.cod_paciente, medico_id, data, telefoneWhatsapp, ids.shortId, atendenteId]
         );
+
+        // Registrar mensagem no painel de conversas (atd.conversas + atd.mensagens)
+        try {
+          const waChatId = telefoneWhatsapp + '@s.whatsapp.net';
+          const conversaRes = await pool.query(
+            `SELECT atd.upsert_conversa($1, $2, $3, $4, $5, NULL, $6, NULL) AS id`,
+            [waChatId, 'individual', 'recepcao', 'uazapi', pacienteNome, telefoneWhatsapp],
+          );
+          const conversaId = conversaRes.rows[0].id;
+
+          const meta = JSON.stringify({ source: 'confirmacao_agendamento', chave_agenda: chave });
+          const msgRes = await pool.query(
+            `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) AS id`,
+            [conversaId, ids.shortId, true, null, null, 'text', textoFinal, null, null, null, meta, null],
+          );
+          const msgId = msgRes.rows[0].id;
+
+          if (msgId && msgId > 0) {
+            // Marcar ultima_msg_from_me
+            await pool.query(
+              `UPDATE atd.conversas SET ultima_msg_from_me = TRUE WHERE id = $1`,
+              [conversaId],
+            );
+
+            // Buscar mensagem e conversa atualizadas para SSE
+            const [msgData, convData] = await Promise.all([
+              pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]),
+              pool.query(`SELECT * FROM atd.conversas WHERE id = $1`, [conversaId]),
+            ]);
+
+            if (msgData.rows[0]) {
+              sseManager.broadcast({
+                type: 'nova_mensagem',
+                data: { conversa_id: conversaId, mensagem: msgData.rows[0] },
+              });
+            }
+            if (convData.rows[0]) {
+              sseManager.broadcast({
+                type: 'conversa_atualizada',
+                data: {
+                  conversa_id: conversaId,
+                  ultima_msg: textoFinal,
+                  nao_lida: convData.rows[0].nao_lida,
+                  ultima_msg_from_me: true,
+                },
+              });
+            }
+          }
+        } catch (regErr) {
+          console.error(`[disparo] Erro ao registrar no painel chave=${chave}:`, regErr);
+          // Nao falhar o disparo se o registro no painel falhar
+        }
 
         detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'enviado' });
         enviados++;
