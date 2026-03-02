@@ -89,12 +89,22 @@ Funcionalidades ja implementadas (alem do plano original da Fase 1):
 | Painel conversas redesenhado (2 tabs + busca inline + pendentes) | DONE |
 | Busca profunda em mensagens (conteudo) | DONE |
 | Listagem de grupos do canal (modal sync UAZAPI) | DONE |
+| Confirmacao de agendamento via WhatsApp (integracao ERP Schappo) | DONE |
+| Chat interno entre operadores (1:1 + broadcast) | DONE |
+| Painel de supervisao (metricas, pausas, SLA) | DONE |
+| Reenvio de mensagens com falha | DONE |
+| Migracao Chatwoot (conversas + mensagens + contatos) | DONE |
+| Normalizacao automatica de telefones (triggers SQL) | DONE |
+| Ramais WebRTC individuais por operador (PJSIP 251-259) | DONE |
+| Rastreio de pausas de operadores | DONE |
+| Templates de confirmacao (sistema + por operador) | DONE |
+| Deteccao flexivel de resposta confirmacao (startsWith) | DONE |
+| Validacao de midia vazia + erro visivel no envio (audio/imagem/doc) | DONE |
 
 ### Pendente / Proximo
 
 | Feature | Detalhes |
 |---------|----------|
-| Dashboard de metricas | Tempo resposta, volume, SLA |
 | Campanhas de mensagens | Envio em massa |
 | Fila de atendimento inteligente | Distribuicao automatica |
 | Gravacoes de chamadas | Player inline |
@@ -181,7 +191,16 @@ connect-schappo/
 │   ├── 010_respostas_prontas.sql       # Respostas prontas (atalhos por operador)
 │   ├── 011_mensagens_edited.sql        # Campo edited_at em mensagens
 │   ├── 012_hub_usuarios_alertas_ficha.sql  # Hub tecnicos + alertas fichas EEG
-│   └── 013_fix_timestamps_tz.sql       # Timezone America/Sao_Paulo + TIMESTAMPTZ
+│   ├── 013_fix_timestamps_tz.sql       # Timezone America/Sao_Paulo + TIMESTAMPTZ
+│   ├── 014_alertas_ficha_paciente_data.sql # Paciente nome + data exame em alertas EEG
+│   ├── 007_chat_interno.sql            # Tabelas chat_interno + chat_interno_mensagens
+│   ├── 015_chat_interno_media.sql      # Midia, reacoes e replies no chat interno
+│   ├── 015_confirmacao_agendamento.sql # Tabela confirmacao_agendamento
+│   ├── 015_disponivel_desde.sql        # Campo disponivel_desde em atendentes
+│   ├── 015_normalize_telefones.sql     # Normalizacao telefones (funcao + triggers)
+│   ├── 016_atendente_pausas.sql        # Tabela atendente_pausas (rastreio pausas)
+│   ├── 016_template_confirmacao.sql    # Templates de mensagem confirmacao
+│   └── 017_sip_webrtc_operadores.sql   # Ramais PJSIP individuais (251-259, sip_enabled)
 │
 ├── config/
 │   ├── pjsip-whatsapp.conf            # Config PJSIP para trunk WhatsApp Voz
@@ -216,7 +235,10 @@ connect-schappo/
     │   │   ├── chamadas/page.tsx       # Log de chamadas + status ramais
     │   │   ├── contatos/page.tsx       # Lista contatos + modal detalhes
     │   │   ├── respostas-prontas/page.tsx # Gerenciamento respostas prontas (CRUD)
-    │   │   └── tecnicos/page.tsx       # Gerenciamento tecnicos EEG (admin)
+    │   │   ├── tecnicos/page.tsx       # Gerenciamento tecnicos EEG (admin)
+    │   │   ├── confirmacao/page.tsx    # Disparo de confirmacao de agendamento via WhatsApp
+    │   │   ├── supervisao/page.tsx     # Dashboard supervisao (metricas, pausas, operadores)
+    │   │   └── chat-interno/page.tsx   # Chat interno entre operadores
     │   │
     │   └── api/
     │       ├── auth/[...nextauth]/route.ts      # NextAuth handler
@@ -230,6 +252,9 @@ connect-schappo/
     │       │
     │       ├── conversas/
     │       │   ├── route.ts                     # GET: lista com filtros + JOIN contatos
+    │       │   ├── create/route.ts              # POST: criar/retornar conversa por telefone
+    │       │   ├── por-telefone/route.ts        # GET: conversas individuais por telefone
+    │       │   ├── unread-counts/route.ts       # GET: contagem nao-lidas por categoria
     │       │   └── [id]/
     │       │       ├── read/route.ts            # PATCH: marcar como lida
     │       │       └── atribuir/route.ts        # PATCH: atribuir atendente
@@ -242,7 +267,8 @@ connect-schappo/
     │       │   ├── forward/route.ts             # POST: encaminhar mensagem
     │       │   ├── react/route.ts               # POST: reagir com emoji
     │       │   ├── send-contact/route.ts        # POST: enviar contato (vCard)
-    │       │   └── send-location/route.ts       # POST: enviar localizacao
+    │       │   ├── send-location/route.ts       # POST: enviar localizacao
+    │       │   └── resend/route.ts              # POST: reenviar mensagem com falha
     │       │
     │       ├── exames/
     │       │   ├── buscar/route.ts              # GET: busca exames no banco externo (NeuroSchappo)
@@ -269,6 +295,37 @@ connect-schappo/
     │       │
     │       ├── ficha-validator/
     │       │   └── route.ts                     # GET/POST: status e controle do validador de fichas (admin)
+    │       │
+    │       ├── agenda/
+    │       │   ├── medicos/route.ts             # GET: listar medicos ativos (banco externo schappo)
+    │       │   ├── agendamentos/route.ts        # GET: agendamentos por medico+data (LATIN1→UTF8)
+    │       │   ├── dias-atendimento/route.ts    # GET: dias disponiveis/ocupados por medico+mes
+    │       │   ├── paciente/route.ts            # GET: buscar paciente por telefone no ERP
+    │       │   ├── templates/route.ts           # GET/POST: templates de mensagem de confirmacao
+    │       │   ├── templates/[id]/route.ts      # PUT: editar template (valida ownership)
+    │       │   ├── [chave]/status/route.ts      # PATCH: atualizar status confirmacao agendamento
+    │       │   └── disparo/route.ts             # POST: disparo em lote de confirmacoes WhatsApp
+    │       │
+    │       ├── chat-interno/
+    │       │   ├── route.ts                     # GET: listar chats + POST: enviar mensagem
+    │       │   ├── [id]/mensagens/route.ts      # GET: mensagens paginadas do chat
+    │       │   ├── [id]/media/route.ts          # GET: proxy midia do chat interno
+    │       │   ├── [id]/react/route.ts          # POST: reagir com emoji
+    │       │   ├── broadcast/route.ts           # POST: broadcast para multiplos operadores
+    │       │   └── unread-count/route.ts        # GET: total nao-lidas do chat interno
+    │       │
+    │       ├── supervisao/
+    │       │   ├── route.ts                     # GET: metricas supervisor (pendentes, SLA, pausas)
+    │       │   └── me/route.ts                  # GET: metricas do operador logado
+    │       │
+    │       ├── grupos/
+    │       │   └── sync/route.ts                # POST: sync grupos WhatsApp via UAZAPI
+    │       │
+    │       ├── participantes/
+    │       │   └── [chatId]/route.ts            # GET: participantes de grupo (nomes, avatares, LID)
+    │       │
+    │       ├── migration/
+    │       │   └── chatwoot/route.ts            # POST: migrar conversas/mensagens/contatos do Chatwoot
     │       │
     │       └── atendentes/
     │           ├── sip/route.ts                 # GET/PUT: config SIP (encrypted)
@@ -322,6 +379,17 @@ connect-schappo/
     │   │   ├── AddContatoModal.tsx        # Modal novo contato
     │   │   └── ImportCsvModal.tsx         # Import CSV Chatwoot
     │   │
+    │   ├── chat-interno/
+    │   │   ├── ChatInternoList.tsx        # Lista sidebar com chats recentes
+    │   │   ├── ChatInternoView.tsx        # Thread de mensagens (reply/react/audio/media)
+    │   │   ├── ChatInternoMessage.tsx     # Balao de mensagem interna (texto/midia/reacoes)
+    │   │   ├── ChatInternoPopup.tsx       # Popup flutuante do chat interno (integrado no AppShell)
+    │   │   ├── OperatorList.tsx           # Seletor de operador para novo chat
+    │   │   └── BroadcastModal.tsx         # Modal broadcast para multiplos operadores
+    │   │
+    │   ├── agenda/
+    │   │   └── CalendarioMedico.tsx       # Calendario interativo com dias disponiveis
+    │   │
     │   ├── tecnicos/
     │   │   └── TecnicoModal.tsx           # Modal criar/editar tecnico EEG
     │   │
@@ -345,7 +413,10 @@ connect-schappo/
     │   ├── useContatos.ts                # Fetch + busca + sync contatos
     │   ├── useRespostasProntas.ts        # CRUD respostas prontas
     │   ├── useHubUsuarios.ts             # CRUD tecnicos EEG
-    │   └── useSipPhone.ts                # SIP completo: register, call, hold, mute, DTMF
+    │   ├── useSipPhone.ts                # SIP completo: register, call, hold, mute, DTMF
+    │   ├── useAgenda.ts                  # Fluxo completo: medicos, agendamentos, confirmacoes
+    │   ├── usePacienteInfo.ts            # Buscar paciente por telefone no ERP
+    │   └── useChatInterno.ts             # Chat CRUD, mensagens, reacoes, midia
     │
     ├── contexts/
     │   └── AppContext.tsx                 # operatorStatus compartilhado (Header ↔ Softphone)
@@ -353,6 +424,7 @@ connect-schappo/
     ├── lib/
     │   ├── db.ts                         # pg.Pool (search_path = atd, timezone America/Sao_Paulo)
     │   ├── db-exames.ts                  # pg.Pool externo (neuro_schappo, read-only, max 5, timezone America/Sao_Paulo)
+    │   ├── db-agenda.ts                  # pg.Pool externo (schappo ERP, LATIN1, read-only, max 3)
     │   ├── auth.ts                       # NextAuth config (CredentialsProvider, JWT 12h)
     │   ├── types.ts                      # Interfaces: Conversa, Mensagem, Chamada, Contato, etc.
     │   ├── sse-manager.ts                # Broadcast SSE server-side
@@ -381,11 +453,11 @@ postgresql://connect_dev:SENHA@localhost:5432/connect_schappo
 Schema: atd
 ```
 
-### Tabelas (9)
+### Tabelas (14)
 
 | Tabela | Descricao | Colunas-chave |
 |--------|-----------|---------------|
-| `atd.atendentes` | Operadores/atendentes | id, nome, username, password_hash, ramal, grupo_atendimento, role, status_presenca, sip_* |
+| `atd.atendentes` | Operadores/atendentes | id, nome, username, password_hash, ramal, grupo_atendimento, role, status_presenca, sip_*, disponivel_desde, sip_enabled |
 | `atd.conversas` | Chats WhatsApp | id, wa_chatid (UNIQUE), tipo, categoria, provider, telefone, nao_lida, atendente_id, is_archived |
 | `atd.mensagens` | Mensagens | id, conversa_id (FK), wa_message_id (UNIQUE), from_me, tipo_mensagem, conteudo, media_*, mencoes[], edited_at |
 | `atd.chamadas` | Log chamadas | id, conversa_id, origem, direcao, caller/called_number, status, duracao_seg, asterisk_id |
@@ -393,7 +465,12 @@ Schema: atd
 | `atd.participantes_grupo` | Membros de grupos | id, wa_phone + wa_chatid (UNIQUE), nome_whatsapp, avatar_url |
 | `atd.respostas_prontas` | Quick replies por operador | id, atendente_id (FK), atalho (UNIQUE c/ atendente), conteudo |
 | `atd.hub_usuarios` | Diretorio de tecnicos EEG | id, nome, telefone (UNIQUE), cargo, setor, ativo |
-| `atd.eeg_alertas_ficha` | Alertas de fichas EEG | id, exam_id (UNIQUE), tecnico_id (FK), campos_faltantes[], corrigido |
+| `atd.eeg_alertas_ficha` | Alertas de fichas EEG | id, exam_id (UNIQUE), tecnico_id (FK), campos_faltantes[], corrigido, paciente_nome, data_exame |
+| `atd.chat_interno` | Chats 1:1 entre operadores | id, participante1_id, participante2_id (UNIQUE pair) |
+| `atd.chat_interno_mensagens` | Mensagens do chat interno | id, chat_id (FK), remetente_id, conteudo, tipo, media_*, reacoes (JSONB), reply_to_id |
+| `atd.confirmacao_agendamento` | Confirmacoes de agendamento | id, chave_agenda (UNIQUE), cod_paciente, telefone_envio, wa_message_id, status, enviado_por, provider |
+| `atd.template_confirmacao` | Templates de mensagem | id, nome, conteudo, atendente_id (NULL = sistema), is_default |
+| `atd.atendente_pausas` | Rastreio de pausas | id, atendente_id (FK), tipo, inicio_at, fim_at, duracao calculada |
 
 ### Funcoes SQL
 
@@ -401,8 +478,9 @@ Schema: atd
 |--------|-----------|
 | `atd.upsert_conversa()` | Insert/update conversa por wa_chatid |
 | `atd.registrar_mensagem()` | Insert mensagem + update conversa (ultima_msg, nao_lida) |
+| `atd.normalize_phone()` | Normalizar telefone BR (55 + DDD + 9o digito) — usada por triggers |
 
-### Migracoes: `sql/001` a `sql/013` (executar em ordem)
+### Migracoes: `sql/001` a `sql/017` (executar em ordem)
 
 ---
 
@@ -420,6 +498,9 @@ Schema: atd
 | Rota | Metodo | Descricao |
 |------|--------|-----------|
 | `/api/conversas` | GET | Lista com filtros (categoria, tipo, busca profunda em mensagens) + JOIN contatos |
+| `/api/conversas/create` | POST | Criar/retornar conversa existente por telefone |
+| `/api/conversas/por-telefone` | GET | Conversas individuais por telefone (seletor de canal) |
+| `/api/conversas/unread-counts` | GET | Contagem nao-lidas por categoria (grupo-aware) |
 | `/api/conversas/[id]/read` | PATCH | Marcar como lida |
 | `/api/conversas/[id]/atribuir` | PATCH | Atribuir atendente / finalizar (is_archived) |
 | `/api/conversas/[id]` | DELETE | Excluir conversa (admin) |
@@ -431,6 +512,7 @@ Schema: atd
 | `/api/mensagens/react` | POST | Reagir com emoji a mensagem existente |
 | `/api/mensagens/send-contact` | POST | Enviar contato (vCard) via WhatsApp |
 | `/api/mensagens/send-location` | POST | Enviar localizacao (lat/lng) via WhatsApp |
+| `/api/mensagens/resend` | POST | Reenviar mensagem com falha |
 
 ### Exames (autenticado)
 
@@ -491,9 +573,56 @@ Schema: atd
 | `/api/ficha-validator` | GET | Status do validador (running, last_check, stats) |
 | `/api/ficha-validator` | POST | Iniciar/parar validador (action: start/stop) |
 
+### Agenda / Confirmacao (autenticado)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/agenda/medicos` | GET | Listar medicos ativos (banco externo schappo ERP) |
+| `/api/agenda/agendamentos` | GET | Agendamentos por medico + data (LATIN1→UTF8) |
+| `/api/agenda/dias-atendimento` | GET | Dias disponiveis/ocupados por medico + mes |
+| `/api/agenda/paciente` | GET | Buscar paciente por telefone no ERP |
+| `/api/agenda/templates` | GET/POST | Templates de mensagem de confirmacao |
+| `/api/agenda/templates/[id]` | PUT | Editar template (valida ownership) |
+| `/api/agenda/[chave]/status` | PATCH | Atualizar status confirmacao (confirmado/desmarcou/reagendar) |
+| `/api/agenda/disparo` | POST | Disparo em lote de confirmacoes WhatsApp (rate-limited + SSE) |
+
+### Chat Interno (autenticado)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/chat-interno` | GET | Listar chats do operador logado com nao-lidas |
+| `/api/chat-interno` | POST | Enviar mensagem (cria chat se nao existe) |
+| `/api/chat-interno/[id]/mensagens` | GET | Mensagens paginadas do chat (cursor) |
+| `/api/chat-interno/[id]/media` | GET | Proxy midia do chat interno |
+| `/api/chat-interno/[id]/react` | POST | Reagir com emoji a mensagem interna |
+| `/api/chat-interno/broadcast` | POST | Broadcast para multiplos operadores |
+| `/api/chat-interno/unread-count` | GET | Total nao-lidas do chat interno |
+
+### Supervisao (admin)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/supervisao` | GET | Metricas supervisor (pendentes, SLA, pausas) |
+| `/api/supervisao/me` | GET | Metricas do operador logado (inatividade, pendentes) |
+
+### Outros (complementares)
+
+| Rota | Metodo | Descricao |
+|------|--------|-----------|
+| `/api/grupos/sync` | POST | Sync grupos WhatsApp via UAZAPI |
+| `/api/participantes/[chatId]` | GET | Participantes de grupo (nomes, avatares, LID) |
+| `/api/migration/chatwoot` | POST | Migrar conversas/mensagens/contatos do Chatwoot |
+
 ---
 
 ## APIs Externas
+
+### Schappo ERP (banco externo agendamento)
+
+- **Host**: `AGENDA_DB_HOST:5432` | **DB**: `schappo` | **Encoding**: LATIN1
+- Pool read-only (max 3 conexoes) via `lib/db-agenda.ts`
+- Funcao `queryLatin1()` converte campos LATIN1→UTF8 automaticamente
+- Tabelas consultadas: `arq_agendal`, `arq_paciente`, `arq_medico`
 
 ### UAZAPI (numeros EEG + Recepcao)
 
@@ -642,6 +771,13 @@ EXAMES_DB_NAME=neuro_schappo
 EXAMES_DB_USER=neuro_schappo
 EXAMES_DB_PASSWORD=senha
 
+# Banco externo de agendamento (Schappo ERP — LATIN1, somente leitura)
+AGENDA_DB_HOST=ip_servidor
+AGENDA_DB_PORT=5432
+AGENDA_DB_NAME=schappo
+AGENDA_DB_USER=usuario
+AGENDA_DB_PASSWORD=senha
+
 # Timezone
 TZ=America/Sao_Paulo
 
@@ -683,6 +819,10 @@ NEXT_PUBLIC_APP_NAME=Connect Schappo
 8. **UAZAPI endpoints especificos** — Usar `/send/document`, `/send/image`, etc. (nao `/send/media`) para filename funcionar
 9. **Audio 360Dialog** — Sempre converter para `audio/ogg` antes de enviar. Browser grava webm/mp4 que WhatsApp nao reproduz. Usar ffmpeg-static (`convertToOgg`).
 10. **Media proxy dual-provider** — Detectar provider via `metadata.provider` ou `metadata.dialog360_media_id`. 360Dialog: reescrever URLs Facebook CDN para proxy 360Dialog.
+11. **Disparo de confirmacao** — Apos enviar via UAZAPI, registrar em `atd.conversas`/`atd.mensagens` + broadcast SSE para aparecer no painel.
+12. **Deteccao de resposta flexivel** — Webhook usa `startsWith('1')` e `startsWith('2')` (nao match exato) para capturar respostas como "1 - Confirmo".
+13. **Banco ERP LATIN1** — Usar `queryLatin1()` de `db-agenda.ts` para queries ao banco schappo. Campos bytea sao convertidos automaticamente.
+14. **Validacao de midia no frontend** — Sempre validar `file.size > 0` antes de enviar. Logar erros com `console.error` para debug.
 
 ---
 
