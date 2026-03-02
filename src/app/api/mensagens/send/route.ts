@@ -97,11 +97,13 @@ async function sendVia360Dialog(to: string, text: string): Promise<{ success: bo
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
+    console.error('[send] Sessao nao autenticada');
     return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
   }
 
   try {
     const { conversa_id, conteudo, mencoes, quoted_msg_id } = await request.json();
+    console.log(`[send] Inicio: conversa=${conversa_id} user=${session.user.nome}`);
 
     if (!conversa_id || !conteudo || typeof conteudo !== 'string' || !conteudo.trim()) {
       return NextResponse.json({ error: 'conversa_id e conteudo sao obrigatorios' }, { status: 400 });
@@ -157,9 +159,12 @@ export async function POST(request: NextRequest) {
         })
       : undefined;
 
+    console.log(`[send] Provider=${conversa.provider} categoria=${conversa.categoria} dest=${destinatario}`);
+
     if (conversa.provider === '360dialog') {
       // 360Dialog: numero sem @s.whatsapp.net
       const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
+      console.log(`[send] 360Dialog: to=${to}`);
       sendResult = await sendVia360Dialog(to, textToSend);
     } else {
       // UAZAPI: aceita numero ou chatid — usar token da instancia correta
@@ -169,8 +174,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!sendResult.success) {
+      console.error(`[send] Falha: ${sendResult.error} provider=${conversa.provider} conversa=${conversa_id}`);
       return NextResponse.json({ error: sendResult.error || 'Falha ao enviar mensagem' }, { status: 502 });
     }
+    console.log(`[send] OK: messageId=${sendResult.messageId} provider=${conversa.provider}`);
 
     // Salvar mensagem no banco
     // wa_message_id: usar short ID (sem prefixo owner) para match com status updates UAZAPI
