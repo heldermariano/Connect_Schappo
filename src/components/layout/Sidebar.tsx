@@ -143,6 +143,10 @@ export default function Sidebar() {
         if (userRole === 'supervisor') {
           return ['chat', 'contacts', 'tecnicos'].includes(item.icon);
         }
+        // Confirmacao visivel para recepcao e todos
+        if (item.icon === 'confirmacao') {
+          return userGrupo === 'recepcao' || userGrupo === 'todos';
+        }
         // Atendentes nao veem tecnicos nem supervisao
         return item.icon !== 'tecnicos' && item.icon !== 'supervisao';
       }).map((item) => {
