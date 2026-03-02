@@ -22,11 +22,15 @@ export function useSSE(onEvent: SSEHandler) {
       'nova_mensagem',
       'conversa_atualizada',
       'mensagem_status',
+      'mensagem_editada',
+      'mensagem_removida',
+      'confirmacao_atualizada',
       'chamada_nova',
       'chamada_atualizada',
       'ramal_status',
       'atendente_status',
       'chat_interno_mensagem',
+      'chat_interno_reacao',
     ];
 
     for (const type of eventTypes) {

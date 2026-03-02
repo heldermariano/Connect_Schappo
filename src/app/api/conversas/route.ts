@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 
     // Busca profunda: incluir conteudo de mensagens (apenas para buscas >= 3 chars)
     if (busca.length >= 3) {
-      buscaCondition += ` OR c.id IN (SELECT DISTINCT conversa_id FROM atd.mensagens WHERE conteudo ILIKE $${paramIndex} LIMIT 50)`;
+      buscaCondition += ` OR c.id IN (SELECT DISTINCT conversa_id FROM atd.mensagens WHERE conteudo ILIKE $${paramIndex} AND is_deleted IS NOT TRUE LIMIT 50)`;
     }
 
     buscaCondition += ')';

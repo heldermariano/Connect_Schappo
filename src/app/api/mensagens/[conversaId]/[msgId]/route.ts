@@ -131,10 +131,6 @@ export async function DELETE(
     return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
   }
 
-  if (session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Apenas administradores podem excluir mensagens' }, { status: 403 });
-  }
-
   const { conversaId, msgId } = await params;
   const cId = parseInt(conversaId, 10);
   const mId = parseInt(msgId, 10);
@@ -142,10 +138,32 @@ export async function DELETE(
     return NextResponse.json({ error: 'IDs invalidos' }, { status: 400 });
   }
 
+  const isAdmin = session.user.role === 'admin';
+  const userId = parseInt(session.user.id as string);
+
   try {
-    const result = await pool.query(
-      'DELETE FROM atd.mensagens WHERE id = $1 AND conversa_id = $2 RETURNING id',
+    // Buscar mensagem para verificar permissao
+    const msgCheck = await pool.query(
+      'SELECT id, from_me, sender_phone FROM atd.mensagens WHERE id = $1 AND conversa_id = $2',
       [mId, cId],
+    );
+
+    if (msgCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Mensagem nao encontrada' }, { status: 404 });
+    }
+
+    // Admin pode apagar qualquer mensagem; operador so pode apagar from_me
+    if (!isAdmin && !msgCheck.rows[0].from_me) {
+      return NextResponse.json({ error: 'Voce so pode apagar mensagens enviadas por voce' }, { status: 403 });
+    }
+
+    // Soft-delete: manter no banco para auditoria
+    const result = await pool.query(
+      `UPDATE atd.mensagens
+       SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $3
+       WHERE id = $1 AND conversa_id = $2
+       RETURNING id`,
+      [mId, cId, userId],
     );
 
     if (result.rows.length === 0) {

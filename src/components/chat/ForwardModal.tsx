@@ -5,15 +5,16 @@ import { Conversa, Mensagem } from '@/lib/types';
 import Avatar from '@/components/ui/Avatar';
 
 interface ForwardModalProps {
-  mensagem: Mensagem;
+  mensagens: Mensagem[];
   onClose: () => void;
 }
 
-export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
+export default function ForwardModal({ mensagens, onClose }: ForwardModalProps) {
   const [busca, setBusca] = useState('');
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [selected, setSelected] = useState<Conversa | null>(null);
 
   // Fetch conversas
@@ -40,35 +41,55 @@ export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
   }, [busca]);
 
   const handleForward = useCallback(async () => {
-    if (!selected) return;
+    if (!selected || mensagens.length === 0) return;
     setSending(true);
-    try {
-      const res = await fetch('/api/mensagens/forward', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_message_id: mensagem.id,
-          target_conversa_id: selected.id,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: 'Erro ao encaminhar' }));
-        alert(data.error || 'Erro ao encaminhar mensagem');
-        return;
+    setProgress(0);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Encaminhar mensagens em ordem cronologica
+    const sorted = [...mensagens].sort((a, b) => a.id - b.id);
+
+    for (let i = 0; i < sorted.length; i++) {
+      try {
+        const res = await fetch('/api/mensagens/forward', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_message_id: sorted[i].id,
+            target_conversa_id: selected.id,
+          }),
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      } catch {
+        errorCount++;
       }
-      onClose();
-    } catch {
-      alert('Erro ao encaminhar mensagem');
-    } finally {
-      setSending(false);
+      setProgress(i + 1);
     }
-  }, [mensagem, selected, onClose]);
+
+    if (errorCount > 0 && successCount === 0) {
+      alert('Erro ao encaminhar mensagens');
+    } else if (errorCount > 0) {
+      alert(`${successCount} encaminhada(s), ${errorCount} com erro`);
+    }
+
+    setSending(false);
+    onClose();
+  }, [mensagens, selected, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') onClose();
   }, [onClose]);
 
-  const preview = mensagem.conteudo?.slice(0, 80) || `[${mensagem.tipo_mensagem}]`;
+  const count = mensagens.length;
+  const previewText = count === 1
+    ? (mensagens[0].conteudo?.slice(0, 80) || `[${mensagens[0].tipo_mensagem}]`)
+    : `${count} mensagens selecionadas`;
 
   return (
     <div
@@ -79,7 +100,9 @@ export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
       <div className="bg-white dark:bg-black rounded-xl shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Encaminhar mensagem</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Encaminhar {count > 1 ? `${count} mensagens` : 'mensagem'}
+          </h3>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -89,8 +112,8 @@ export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
 
         {/* Preview da mensagem */}
         <div className="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-800">
-          <div className="text-xs text-gray-400">Mensagem:</div>
-          <div className="text-sm text-gray-700 dark:text-gray-300 truncate">{preview}</div>
+          <div className="text-xs text-gray-400">{count > 1 ? 'Mensagens:' : 'Mensagem:'}</div>
+          <div className="text-sm text-gray-700 dark:text-gray-300 truncate">{previewText}</div>
         </div>
 
         {/* Busca */}
@@ -144,9 +167,13 @@ export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-800">
+          {sending && count > 1 && (
+            <span className="text-xs text-gray-400 mr-auto">{progress}/{count}</span>
+          )}
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+            disabled={sending}
+            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -157,7 +184,7 @@ export default function ForwardModal({ mensagem, onClose }: ForwardModalProps) {
                        hover:bg-schappo-700 disabled:bg-gray-300 disabled:cursor-not-allowed
                        transition-colors"
           >
-            {sending ? 'Enviando...' : 'Encaminhar'}
+            {sending ? 'Enviando...' : count > 1 ? `Encaminhar ${count}` : 'Encaminhar'}
           </button>
         </div>
       </div>

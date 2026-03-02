@@ -16,6 +16,7 @@ interface MessageContextMenuProps {
   onResend?: () => void;
   onEdit?: () => void;
   onDelete: () => void;
+  onSelect?: () => void;
   onClose: () => void;
 }
 
@@ -29,7 +30,7 @@ interface MenuOption {
 
 export default function MessageContextMenu({
   x, y, mensagem, isAdmin, isOwnMessage,
-  onCopy, onReply, onForward, onReact, onResend, onEdit, onDelete, onClose,
+  onCopy, onReply, onForward, onReact, onResend, onEdit, onDelete, onSelect, onClose,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -132,6 +133,16 @@ export default function MessageContextMenu({
       ),
       onClick: () => onEdit?.(),
       visible: isOwnMessage && mensagem.tipo_mensagem === 'text' && !!onEdit,
+    },
+    {
+      label: 'Selecionar',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      onClick: () => onSelect?.(),
+      visible: !!onSelect,
     },
     {
       label: 'Apagar',

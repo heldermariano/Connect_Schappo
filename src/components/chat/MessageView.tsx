@@ -57,10 +57,13 @@ export default function MessageView({
   const [replyingTo, setReplyingTo] = useState<Mensagem | null>(null);
   // Reaction picker state
   const [reactionTarget, setReactionTarget] = useState<{ x: number; y: number; mensagem: Mensagem } | null>(null);
-  // Forward modal state
-  const [forwardingMsg, setForwardingMsg] = useState<Mensagem | null>(null);
+  // Forward modal state — agora suporta multiplas mensagens
+  const [forwardingMsgs, setForwardingMsgs] = useState<Mensagem[]>([]);
   // Edit state
   const [editingMsg, setEditingMsg] = useState<Mensagem | null>(null);
+  // Multi-select mode
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedMsgIds, setSelectedMsgIds] = useState<Set<number>>(new Set());
 
   // Search state
   const [searchOpen, setSearchOpen] = useState(false);
@@ -79,8 +82,10 @@ export default function MessageView({
     setReplyingTo(null);
     setContextMenu(null);
     setReactionTarget(null);
-    setForwardingMsg(null);
+    setForwardingMsgs([]);
     setEditingMsg(null);
+    setSelectMode(false);
+    setSelectedMsgIds(new Set());
     setSyncedName(null);
     setSyncedAvatar(null);
     setSyncedMemberCount(null);
@@ -162,9 +167,32 @@ export default function MessageView({
 
   const handleForward = useCallback(() => {
     if (!contextMenu) return;
-    setForwardingMsg(contextMenu.mensagem);
+    setForwardingMsgs([contextMenu.mensagem]);
     setContextMenu(null);
   }, [contextMenu]);
+
+  // Toggle selecao de uma mensagem
+  const handleToggleSelect = useCallback((msgId: number) => {
+    setSelectedMsgIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(msgId)) next.delete(msgId);
+      else next.add(msgId);
+      return next;
+    });
+  }, []);
+
+  // Encaminhar mensagens selecionadas
+  const handleForwardSelected = useCallback(() => {
+    const selected = mensagens.filter((m) => selectedMsgIds.has(m.id));
+    if (selected.length === 0) return;
+    setForwardingMsgs(selected);
+  }, [mensagens, selectedMsgIds]);
+
+  // Sair do modo selecao
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedMsgIds(new Set());
+  }, []);
 
   const doResend = useCallback(async (msgId: number) => {
     try {
@@ -290,7 +318,7 @@ export default function MessageView({
   const displayAvatar = syncedAvatar || conversa.avatar_url;
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-black">
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-black relative">
       {/* Header da conversa */}
       <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
         <Avatar nome={displayName} avatarUrl={displayAvatar} size="sm" isGroup={isGroup} />
@@ -431,15 +459,37 @@ export default function MessageView({
           </div>
         ) : (
           mensagens.map((msg) => (
-            <div key={msg.id} ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}>
-              <MessageBubble
-                mensagem={msg}
-                showSender={isGroup}
-                isAdmin={currentUserRole === 'admin'}
-                onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
-                onResend={doResend}
-                onContextMenu={handleContextMenu}
-              />
+            <div
+              key={msg.id}
+              ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
+              className={`flex items-start gap-1 ${selectMode ? 'cursor-pointer' : ''}`}
+              onClick={selectMode ? (e) => { e.stopPropagation(); handleToggleSelect(msg.id); } : undefined}
+            >
+              {selectMode && (
+                <div className="shrink-0 flex items-center pt-2 pl-1">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                    selectedMsgIds.has(msg.id)
+                      ? 'bg-schappo-600 border-schappo-600'
+                      : 'border-gray-300 dark:border-gray-600'
+                  }`}>
+                    {selectedMsgIds.has(msg.id) && (
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <MessageBubble
+                  mensagem={msg}
+                  showSender={isGroup}
+                  isAdmin={currentUserRole === 'admin'}
+                  onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+                  onResend={doResend}
+                  onContextMenu={selectMode ? undefined : handleContextMenu}
+                />
+              </div>
             </div>
           ))
         )}
@@ -462,6 +512,11 @@ export default function MessageView({
           onResend={handleResend}
           onEdit={onEditMensagem ? handleEdit : undefined}
           onDelete={handleDelete}
+          onSelect={() => {
+            setSelectMode(true);
+            setSelectedMsgIds(new Set([contextMenu.mensagem.id]));
+            setContextMenu(null);
+          }}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -475,11 +530,39 @@ export default function MessageView({
         />
       )}
 
+      {/* Barra flutuante de selecao */}
+      {selectMode && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-white dark:bg-gray-900 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 px-4 py-2">
+          <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+            {selectedMsgIds.size} selecionada{selectedMsgIds.size !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={handleForwardSelected}
+            disabled={selectedMsgIds.size === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-schappo-600 rounded-full hover:bg-schappo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            Encaminhar
+          </button>
+          <button
+            onClick={exitSelectMode}
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+            title="Cancelar selecao"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Forward Modal */}
-      {forwardingMsg && (
+      {forwardingMsgs.length > 0 && (
         <ForwardModal
-          mensagem={forwardingMsg}
-          onClose={() => setForwardingMsg(null)}
+          mensagens={forwardingMsgs}
+          onClose={() => { setForwardingMsgs([]); exitSelectMode(); }}
         />
       )}
 

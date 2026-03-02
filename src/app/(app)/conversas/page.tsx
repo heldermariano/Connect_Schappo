@@ -228,6 +228,12 @@ export default function ConversasPage() {
           });
         }
       }
+      if (event === 'mensagem_removida') {
+        const d = data as { conversa_id: number; mensagem_id: number };
+        if (selectedConversa && d.conversa_id === selectedConversa.id) {
+          removeMensagem(d.mensagem_id);
+        }
+      }
       if (event === 'mensagem_status') {
         const d = data as { conversa_id: number; mensagem_id: number; status: string };
         if (selectedConversa && d.conversa_id === selectedConversa.id) {
@@ -251,7 +257,7 @@ export default function ConversasPage() {
         updateConversasByAtendente(d.atendente_id, { atendente_status: d.status });
       }
     },
-    [selectedConversa, addMensagem, updateMensagem, updateConversa, updateConversasByAtendente, refresh, isMentioned, operatorStatus],
+    [selectedConversa, addMensagem, removeMensagem, updateMensagem, updateConversa, updateConversasByAtendente, refresh, isMentioned, operatorStatus],
   );
 
   useSSE(handleSSE);

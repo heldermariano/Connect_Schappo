@@ -75,7 +75,7 @@ export async function GET(
       // Cursor por created_at (nao por id) — mensagens importadas tem id alto mas created_at antigo
       query = `
         SELECT * FROM atd.mensagens
-        WHERE conversa_id = $1 AND created_at < $2
+        WHERE conversa_id = $1 AND created_at < $2 AND is_deleted IS NOT TRUE
         ORDER BY created_at DESC
         LIMIT $3
       `;
@@ -83,7 +83,7 @@ export async function GET(
     } else {
       query = `
         SELECT * FROM atd.mensagens
-        WHERE conversa_id = $1
+        WHERE conversa_id = $1 AND is_deleted IS NOT TRUE
         ORDER BY created_at DESC
         LIMIT $2
       `;
