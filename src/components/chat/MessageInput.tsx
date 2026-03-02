@@ -356,12 +356,20 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
   }, []);
 
   const handleSendAudio = useCallback(async (file: File) => {
-    if (!conversaId) return;
+    if (!conversaId) {
+      setError('Selecione uma conversa antes de enviar audio');
+      return;
+    }
     setIsRecording(false);
     setSending(true);
     setError(null);
 
     try {
+      // Validar arquivo de audio antes de enviar
+      if (!file || file.size === 0) {
+        throw new Error('Audio vazio — tente gravar novamente');
+      }
+
       const formData = new FormData();
       formData.append('conversa_id', String(conversaId));
       formData.append('file', file);
@@ -373,11 +381,13 @@ export default function MessageInput({ onSend, conversaId, disabled, chatId, tip
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: 'Erro ao enviar audio' }));
-        throw new Error(data.error || 'Erro ao enviar audio');
+        const data = await res.json().catch(() => ({ error: `Erro ao enviar audio (${res.status})` }));
+        throw new Error(data.error || `Erro ao enviar audio (${res.status})`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar audio');
+      const msg = err instanceof Error ? err.message : 'Erro ao enviar audio';
+      setError(msg);
+      console.error('[handleSendAudio] Falha:', msg, err);
     } finally {
       setSending(false);
     }
