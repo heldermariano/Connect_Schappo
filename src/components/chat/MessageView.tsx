@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
@@ -62,6 +62,12 @@ export default function MessageView({
   // Edit state
   const [editingMsg, setEditingMsg] = useState<Mensagem | null>(null);
 
+  // Search state
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
+  const msgRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
   // Sync state (UAZAPI /chat/details)
   const [syncedName, setSyncedName] = useState<string | null>(null);
   const [syncedAvatar, setSyncedAvatar] = useState<string | null>(null);
@@ -78,6 +84,9 @@ export default function MessageView({
     setSyncedName(null);
     setSyncedAvatar(null);
     setSyncedMemberCount(null);
+    setSearchOpen(false);
+    setSearchTerm('');
+    setSearchIndex(0);
   }, [conversa?.id]);
 
   // Track contagem anterior para distinguir nova msg vs loadMore
@@ -240,6 +249,26 @@ export default function MessageView({
     }
   }, [conversa, syncing]);
 
+  // Search matches
+  const searchMatches = useMemo(() => {
+    if (!searchTerm || searchTerm.length < 2) return [];
+    const term = searchTerm.toLowerCase();
+    return mensagens.filter((m) => m.conteudo?.toLowerCase().includes(term));
+  }, [mensagens, searchTerm]);
+
+  // Scroll to current match
+  useEffect(() => {
+    if (searchMatches.length === 0) return;
+    const match = searchMatches[searchIndex];
+    if (!match) return;
+    const el = msgRefs.current.get(match.id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.background = '#f59e0b33';
+      setTimeout(() => { el.style.background = ''; }, 1500);
+    }
+  }, [searchIndex, searchMatches]);
+
   if (!conversa) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black text-gray-400 dark:text-gray-500">
@@ -286,6 +315,16 @@ export default function MessageView({
             </svg>
           </button>
         )}
+        {/* Botao busca */}
+        <button
+          onClick={() => { setSearchOpen(!searchOpen); setSearchTerm(''); setSearchIndex(0); }}
+          className={`p-2 transition-colors ${searchOpen ? 'text-schappo-600' : 'text-gray-400 hover:text-schappo-600'}`}
+          title="Buscar mensagens"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
         <AtribuirDropdown
           conversaId={conversa.id}
           atendenteId={conversa.atendente_id}
@@ -334,6 +373,38 @@ export default function MessageView({
         )}
       </div>
 
+      {/* Barra de busca */}
+      {searchOpen && (
+        <div className="h-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-3 gap-2 shrink-0">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Buscar mensagens..."
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setSearchIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setSearchOpen(false); setSearchTerm(''); }
+              if (e.key === 'Enter') setSearchIndex((i) => (i + 1) % (searchMatches.length || 1));
+            }}
+            className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-900 dark:text-white outline-none focus:border-schappo-500"
+          />
+          {searchTerm.length >= 2 && (
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {searchMatches.length > 0 ? `${searchIndex + 1}/${searchMatches.length}` : '0 resultados'}
+            </span>
+          )}
+          <button onClick={() => setSearchIndex((i) => Math.max(0, i - 1))} className="p-1 text-gray-400 hover:text-gray-600" title="Anterior">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+          </button>
+          <button onClick={() => setSearchIndex((i) => Math.min(searchMatches.length - 1, i + 1))} className="p-1 text-gray-400 hover:text-gray-600" title="Proximo">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          <button onClick={() => { setSearchOpen(false); setSearchTerm(''); }} className="p-1 text-gray-400 hover:text-red-500" title="Fechar">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
       {/* Banner do paciente (ERP lookup) */}
       <PacienteBanner telefone={conversa.telefone} tipo={conversa.tipo} />
 
@@ -360,15 +431,16 @@ export default function MessageView({
           </div>
         ) : (
           mensagens.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              mensagem={msg}
-              showSender={isGroup}
-              isAdmin={currentUserRole === 'admin'}
-              onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
-              onResend={doResend}
-              onContextMenu={handleContextMenu}
-            />
+            <div key={msg.id} ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}>
+              <MessageBubble
+                mensagem={msg}
+                showSender={isGroup}
+                isAdmin={currentUserRole === 'admin'}
+                onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+                onResend={doResend}
+                onContextMenu={handleContextMenu}
+              />
+            </div>
           ))
         )}
 
