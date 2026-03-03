@@ -101,14 +101,15 @@ export function useMensagens(conversaId: number | null): UseMensagensResult {
       body: JSON.stringify(body),
     });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: 'Erro ao enviar' }));
-      throw new Error(data.error || 'Erro ao enviar mensagem');
-    }
+    const data = await res.json().catch(() => ({ error: 'Erro ao enviar' }));
 
-    const data = await res.json();
+    // Se a API salvou a mensagem com status 'failed', adicionar ao chat (mostra botao reenviar)
     if (data.mensagem) {
       addMensagem(data.mensagem);
+    }
+
+    if (!res.ok && !data.mensagem) {
+      throw new Error(data.error || 'Erro ao enviar mensagem');
     }
   }, [addMensagem]);
 

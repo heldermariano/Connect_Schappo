@@ -122,43 +122,81 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: sendResult.error || 'Falha ao reenviar' }, { status: 502 });
     }
 
-    // Salvar nova mensagem no banco
     const owner = CATEGORIA_OWNER[original.categoria] || '';
     const waMessageId = sendResult.messageId || `resend_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const newMsgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6)
-      ON CONFLICT (wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        original.conversa_id,
-        waMessageId,
-        owner,
-        session.user.nome,
-        conteudoOriginal,
-        JSON.stringify({
-          sent_by: session.user.id,
-          sent_by_name: session.user.nome,
-          resent_from: mensagem_id,
-          message_id_full: sendResult.fullMessageId || waMessageId,
-        }),
-      ],
-    );
+    let mensagem;
 
-    if (newMsgResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
+    if (original.status === 'failed') {
+      // Mensagem original falhou — atualizar in-place (evita duplicata no chat)
+      const updResult = await pool.query(
+        `UPDATE atd.mensagens SET
+          wa_message_id = $1,
+          status = 'sent',
+          metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+          created_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [
+          waMessageId,
+          JSON.stringify({
+            resent_at: new Date().toISOString(),
+            resent_by: session.user.nome,
+            message_id_full: sendResult.fullMessageId || waMessageId,
+            send_error: null,
+          }),
+          mensagem_id,
+        ],
+      );
+      mensagem = updResult.rows[0];
+
+      // Emitir SSE de status atualizado (remove o icone de falha)
+      sseManager.broadcast({
+        type: 'mensagem_status' as 'conversa_atualizada',
+        data: { conversa_id: original.conversa_id, mensagem_id: mensagem.id, status: 'sent' } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+      });
+    } else {
+      // Mensagem original ja foi enviada — criar nova (reenvio manual)
+      const newMsgResult = await pool.query(
+        `INSERT INTO atd.mensagens (
+          conversa_id, wa_message_id, from_me, sender_phone, sender_name,
+          tipo_mensagem, conteudo, status, metadata
+        ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6)
+        ON CONFLICT (wa_message_id) DO NOTHING
+        RETURNING *`,
+        [
+          original.conversa_id,
+          waMessageId,
+          owner,
+          session.user.nome,
+          conteudoOriginal,
+          JSON.stringify({
+            sent_by: session.user.id,
+            sent_by_name: session.user.nome,
+            resent_from: mensagem_id,
+            message_id_full: sendResult.fullMessageId || waMessageId,
+          }),
+        ],
+      );
+
+      if (newMsgResult.rows.length === 0) {
+        return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
+      }
+
+      mensagem = newMsgResult.rows[0];
+
+      // Marcar original com info de reenvio
+      await pool.query(
+        `UPDATE atd.mensagens SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
+        [JSON.stringify({ resent_at: new Date().toISOString(), resent_by: session.user.nome }), mensagem_id],
+      );
+
+      // Emitir SSE nova mensagem
+      sseManager.broadcast({
+        type: 'nova_mensagem',
+        data: { conversa_id: original.conversa_id, mensagem, categoria: original.categoria, tipo: original.tipo },
+      });
     }
-
-    const mensagem = newMsgResult.rows[0];
-
-    // Marcar original com info de reenvio
-    await pool.query(
-      `UPDATE atd.mensagens SET metadata = metadata || $1 WHERE id = $2`,
-      [JSON.stringify({ resent_at: new Date().toISOString(), resent_by: session.user.nome }), mensagem_id],
-    );
 
     // Atualizar conversa
     await pool.query(
@@ -171,12 +209,6 @@ export async function POST(request: NextRequest) {
        WHERE id = $2`,
       [conteudoOriginal, original.conversa_id],
     );
-
-    // Emitir SSE
-    sseManager.broadcast({
-      type: 'nova_mensagem',
-      data: { conversa_id: original.conversa_id, mensagem, categoria: original.categoria, tipo: original.tipo },
-    });
 
     sseManager.broadcast({
       type: 'conversa_atualizada',

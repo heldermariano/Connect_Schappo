@@ -173,22 +173,22 @@ export async function POST(request: NextRequest) {
       sendResult = await sendViaUAZAPI(destinatario, textToSend, uazapiToken, mentionedJid, quoted_msg_id || undefined);
     }
 
-    if (!sendResult.success) {
-      console.error(`[send] Falha: ${sendResult.error} provider=${conversa.provider} conversa=${conversa_id}`);
-      return NextResponse.json({ error: sendResult.error || 'Falha ao enviar mensagem' }, { status: 502 });
-    }
-    console.log(`[send] OK: messageId=${sendResult.messageId} provider=${conversa.provider}`);
-
-    // Salvar mensagem no banco
-    // wa_message_id: usar short ID (sem prefixo owner) para match com status updates UAZAPI
+    // Salvar mensagem no banco (mesmo em caso de falha, para permitir reenvio)
     const owner = CATEGORIA_OWNER[conversa.categoria] || '';
     const waMessageId = sendResult.messageId || `sent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const msgStatus = sendResult.success ? 'sent' : 'failed';
+
+    if (!sendResult.success) {
+      console.error(`[send] Falha: ${sendResult.error} provider=${conversa.provider} conversa=${conversa_id}`);
+    } else {
+      console.log(`[send] OK: messageId=${sendResult.messageId} provider=${conversa.provider}`);
+    }
 
     const msgResult = await pool.query(
       `INSERT INTO atd.mensagens (
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
         tipo_mensagem, conteudo, status, metadata, mencoes, quoted_msg_id
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6, $7, $8)
+      ) VALUES ($1, $2, true, $3, $4, 'text', $5, $6, $7, $8, $9)
       ON CONFLICT (wa_message_id) DO NOTHING
       RETURNING *`,
       [
@@ -197,7 +197,13 @@ export async function POST(request: NextRequest) {
         owner,
         session.user.nome,
         conteudo.trim(),
-        JSON.stringify({ sent_by: session.user.id, sent_by_name: session.user.nome, message_id_full: sendResult.fullMessageId || waMessageId }),
+        msgStatus,
+        JSON.stringify({
+          sent_by: session.user.id,
+          sent_by_name: session.user.nome,
+          message_id_full: sendResult.fullMessageId || waMessageId,
+          ...(sendResult.error ? { send_error: sendResult.error } : {}),
+        }),
         mencoesArray.length > 0 ? mencoesArray : '{}',
         quoted_msg_id || null,
       ],
@@ -209,34 +215,39 @@ export async function POST(request: NextRequest) {
 
     const mensagem = msgResult.rows[0];
 
-    // Atualizar conversa
-    await pool.query(
-      `UPDATE atd.conversas SET
-        ultima_mensagem = LEFT($1, 200),
-        ultima_msg_at = NOW(),
-        ultima_msg_from_me = TRUE,
-        nao_lida = 0,
-        updated_at = NOW()
-       WHERE id = $2`,
-      [conteudo.trim(), conversa_id],
-    );
-
-    // Emitir SSE
+    // Emitir SSE (nova_mensagem sempre — para mostrar no painel, inclusive com status failed)
     sseManager.broadcast({
       type: 'nova_mensagem',
       data: { conversa_id, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
     });
 
-    sseManager.broadcast({
-      type: 'conversa_atualizada',
-      data: {
-        conversa_id,
-        ultima_msg: conteudo.trim().substring(0, 200),
-        nao_lida: 0,
-      },
-    });
+    if (sendResult.success) {
+      // Atualizar conversa apenas quando envio foi bem-sucedido
+      await pool.query(
+        `UPDATE atd.conversas SET
+          ultima_mensagem = LEFT($1, 200),
+          ultima_msg_at = NOW(),
+          ultima_msg_from_me = TRUE,
+          nao_lida = 0,
+          updated_at = NOW()
+         WHERE id = $2`,
+        [conteudo.trim(), conversa_id],
+      );
 
-    return NextResponse.json({ success: true, mensagem });
+      sseManager.broadcast({
+        type: 'conversa_atualizada',
+        data: {
+          conversa_id,
+          ultima_msg: conteudo.trim().substring(0, 200),
+          nao_lida: 0,
+        },
+      });
+
+      return NextResponse.json({ success: true, mensagem });
+    } else {
+      // Envio falhou mas mensagem foi salva com status 'failed' — retornar a mensagem para UI mostrar botao reenviar
+      return NextResponse.json({ success: false, error: sendResult.error, mensagem }, { status: 502 });
+    }
   } catch (err) {
     console.error('[api/mensagens/send] Erro:', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });

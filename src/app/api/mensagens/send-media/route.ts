@@ -336,21 +336,23 @@ export async function POST(request: NextRequest) {
       sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, uazapiToken, captionToSend);
     }
 
-    if (!sendResult.success) {
-      return NextResponse.json({ error: sendResult.error || 'Falha ao enviar midia' }, { status: 502 });
-    }
-
-    // Salvar mensagem no banco (tipo_mensagem no banco sempre usa tipo generico, nao ptt)
+    // Salvar mensagem no banco mesmo em caso de falha (permite reenvio)
     const owner = CATEGORIA_OWNER[conversa.categoria] || '';
     const waMessageId = sendResult.messageId || `sent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const dbMediaType = mediaType === 'ptt' ? 'audio' : mediaType;
     const conteudo = caption || `[${dbMediaType === 'image' ? 'Imagem' : dbMediaType === 'audio' ? 'Audio' : dbMediaType === 'video' ? 'Video' : 'Documento'}]`;
+    const msgStatus = sendResult.success ? 'sent' : 'failed';
+
+    if (!sendResult.success) {
+      console.error(`[send-media] Falha: ${sendResult.error} provider=${conversa.provider} conversa=${conversaId}`);
+    }
 
     // Metadata: incluir provider e media_id da 360Dialog para o media proxy
     const metadata: Record<string, unknown> = {
       sent_by: session.user.id,
       sent_by_name: session.user.nome,
       provider: conversa.provider,
+      ...(sendResult.error ? { send_error: sendResult.error } : {}),
     };
     if (sendResult.mediaId) {
       metadata.dialog360_media_id = sendResult.mediaId;
@@ -363,7 +365,7 @@ export async function POST(request: NextRequest) {
       `INSERT INTO atd.mensagens (
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
         tipo_mensagem, conteudo, media_mimetype, media_filename, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, $5, $6, $7, $8, 'sent', $9)
+      ) VALUES ($1, $2, true, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (wa_message_id) DO NOTHING
       RETURNING *`,
       [
@@ -375,6 +377,7 @@ export async function POST(request: NextRequest) {
         conteudo,
         mimetype,
         file.name,
+        msgStatus,
         JSON.stringify(metadata),
       ],
     );
@@ -385,33 +388,37 @@ export async function POST(request: NextRequest) {
 
     const mensagem = msgResult.rows[0];
 
-    // Atualizar conversa
-    await pool.query(
-      `UPDATE atd.conversas SET
-        ultima_mensagem = LEFT($1, 200),
-        ultima_msg_at = NOW(),
-        nao_lida = 0,
-        updated_at = NOW()
-       WHERE id = $2`,
-      [conteudo, conversaId],
-    );
-
-    // Emitir SSE
+    // Emitir SSE (nova_mensagem sempre — para mostrar no painel, inclusive com status failed)
     sseManager.broadcast({
       type: 'nova_mensagem',
       data: { conversa_id: conversaId, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
     });
 
-    sseManager.broadcast({
-      type: 'conversa_atualizada',
-      data: {
-        conversa_id: conversaId,
-        ultima_msg: conteudo.substring(0, 200),
-        nao_lida: 0,
-      },
-    });
+    if (sendResult.success) {
+      // Atualizar conversa apenas quando envio foi bem-sucedido
+      await pool.query(
+        `UPDATE atd.conversas SET
+          ultima_mensagem = LEFT($1, 200),
+          ultima_msg_at = NOW(),
+          nao_lida = 0,
+          updated_at = NOW()
+         WHERE id = $2`,
+        [conteudo, conversaId],
+      );
 
-    return NextResponse.json({ success: true, mensagem });
+      sseManager.broadcast({
+        type: 'conversa_atualizada',
+        data: {
+          conversa_id: conversaId,
+          ultima_msg: conteudo.substring(0, 200),
+          nao_lida: 0,
+        },
+      });
+
+      return NextResponse.json({ success: true, mensagem });
+    } else {
+      return NextResponse.json({ success: false, error: sendResult.error, mensagem }, { status: 502 });
+    }
   } catch (err) {
     console.error('[api/mensagens/send-media] Erro:', err);
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
