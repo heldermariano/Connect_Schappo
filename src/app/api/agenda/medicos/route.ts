@@ -25,7 +25,8 @@ export async function GET() {
 
     return NextResponse.json({ medicos: result.rows });
   } catch (err) {
-    console.error('[api/agenda/medicos] Erro:', err);
-    return NextResponse.json({ error: 'Erro ao buscar medicos' }, { status: 500 });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[api/agenda/medicos] Erro:', errMsg, err);
+    return NextResponse.json({ error: `Erro ao buscar medicos: ${errMsg}` }, { status: 500 });
   }
 }

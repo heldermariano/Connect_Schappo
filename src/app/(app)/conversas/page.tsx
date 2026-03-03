@@ -155,13 +155,24 @@ export default function ConversasPage() {
   const handleSSE = useCallback(
     (event: string, data: unknown) => {
       if (event === 'nova_mensagem') {
-        const d = data as { conversa_id: number; mensagem: Mensagem };
+        const d = data as { conversa_id: number; mensagem: Mensagem; categoria?: string };
         if (selectedConversa && d.conversa_id === selectedConversa.id) {
           addMensagem(d.mensagem);
         }
 
+        // Filtrar por grupo de atendimento — so notificar categorias permitidas
+        const grupoAtendente = (session?.user as { grupo?: string })?.grupo || 'todos';
+        const categoriasPermitidas: Record<string, string[]> = {
+          recepcao: ['recepcao', 'geral'],
+          eeg: ['eeg'],
+          todos: ['eeg', 'recepcao', 'geral'],
+        };
+        const permitidas = categoriasPermitidas[grupoAtendente] || categoriasPermitidas.todos;
+        const categoriaMsg = d.categoria || '';
+        const pertenceAoGrupo = !categoriaMsg || permitidas.includes(categoriaMsg);
+
         // Notificacao para mensagens recebidas (nao enviadas pelo atendente)
-        if (!d.mensagem.from_me) {
+        if (!d.mensagem.from_me && pertenceAoGrupo) {
           // Pular notificacao se a conversa esta selecionada E pagina tem foco
           const isActiveAndFocused = selectedConversa && d.conversa_id === selectedConversa.id && document.hasFocus();
           if (!isActiveAndFocused) {

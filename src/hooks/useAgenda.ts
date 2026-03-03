@@ -28,7 +28,10 @@ export function useAgenda(): UseAgendaResult {
     try {
       setLoadingMedicos(true);
       const res = await fetch('/api/agenda/medicos');
-      if (!res.ok) throw new Error('Erro ao carregar medicos');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Erro ao carregar medicos (${res.status})`);
+      }
       const data = await res.json();
       setMedicos(data.medicos);
       setError(null);
@@ -44,7 +47,10 @@ export function useAgenda(): UseAgendaResult {
       setLoading(true);
       setError(null);
       const res = await fetch(`/api/agenda/agendamentos?medico=${medicoId}&data=${data}`);
-      if (!res.ok) throw new Error('Erro ao carregar agendamentos');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Erro ao carregar agendamentos (${res.status})`);
+      }
       const result = await res.json();
       setAgendamentos(result.agendamentos);
       setMedicoInfo(result.medico || null);

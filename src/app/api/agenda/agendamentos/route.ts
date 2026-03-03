@@ -148,7 +148,8 @@ export async function GET(request: NextRequest) {
       } : null,
     });
   } catch (err) {
-    console.error('[api/agenda/agendamentos] Erro:', err);
-    return NextResponse.json({ error: 'Erro ao buscar agendamentos' }, { status: 500 });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[api/agenda/agendamentos] Erro:', errMsg, err);
+    return NextResponse.json({ error: `Erro ao buscar agendamentos: ${errMsg}` }, { status: 500 });
   }
 }

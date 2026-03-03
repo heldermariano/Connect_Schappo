@@ -61,13 +61,23 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       if (event === 'nova_mensagem') {
         const d = data as { conversa_id: number; categoria?: string; tipo?: string; mensagem: { from_me: boolean; sender_name?: string; conteudo?: string; tipo_mensagem?: string } };
         if (!d.mensagem.from_me && operatorStatusRef.current === 'disponivel') {
-          // Filtrar notificacoes por perfil do operador
+          // Filtrar notificacoes por grupo de atendimento e categoria
           const userGrupo = (session?.user as { grupo?: string })?.grupo || 'todos';
           const isGrupo = d.tipo === 'grupo';
+          const categoriaMsg = d.categoria || '';
+
+          // Mapa de categorias permitidas por grupo
+          const categoriasPermitidas: Record<string, string[]> = {
+            recepcao: ['recepcao', 'geral'],
+            eeg: ['eeg'],
+            todos: ['eeg', 'recepcao', 'geral'],
+          };
+          const permitidas = categoriasPermitidas[userGrupo] || categoriasPermitidas.todos;
+          const pertenceAoGrupo = !categoriaMsg || permitidas.includes(categoriaMsg);
 
           // Recepcao: nao notifica mensagens de grupo
-          if (userGrupo === 'recepcao' && isGrupo) {
-            // skip — recepcao so recebe notificacoes de conversas individuais
+          if (!pertenceAoGrupo || (userGrupo === 'recepcao' && isGrupo)) {
+            // skip — categoria nao pertence ao grupo do operador
           } else {
             const senderName = d.mensagem.sender_name || 'Contato';
             const preview = d.mensagem.conteudo

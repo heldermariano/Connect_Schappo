@@ -21,7 +21,7 @@ export async function PATCH(
   try {
     const { status } = await request.json();
 
-    const statusValidos = ['enviado', 'confirmado', 'desmarcou', 'sem_resposta'];
+    const statusValidos = ['enviado', 'confirmado', 'desmarcou', 'sem_resposta', 'reagendar'];
     if (!status || !statusValidos.includes(status)) {
       return NextResponse.json({ error: `status invalido. Valores aceitos: ${statusValidos.join(', ')}` }, { status: 400 });
     }
