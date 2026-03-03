@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
          FROM patients p
          JOIN exams e ON e.patient_id = p.id
          WHERE LOWER(p.name_normalized) LIKE LOWER('%' || $1 || '%')
+            OR LOWER(p.name) LIKE LOWER('%' || $1 || '%')
          ORDER BY p.id, e.exam_date DESC
        )
        SELECT DISTINCT ON (le.exam_id, COALESCE(r.filename, ''))
@@ -64,7 +65,6 @@ export async function GET(request: NextRequest) {
        LEFT JOIN reports r ON r.exam_id = le.exam_id
          AND r.matched = true
          AND r.report_type IN ('laudo', 'tracado', 'laudo_tracado')
-         AND r.download_url IS NOT NULL
        ORDER BY le.exam_id, COALESCE(r.filename, ''), r.created_at DESC`,
       [nome],
     );
@@ -93,8 +93,12 @@ export async function GET(request: NextRequest) {
           status = 'assinado';
         } else if (row.laudo_status === 'reported' || row.laudo_status === 'in_progress') {
           status = 'em_laudo';
+        } else if (row.exam_status === 'reported') {
+          status = 'laudado';
         } else if (row.exam_status === 'delivered') {
           status = 'realizado';
+        } else if (row.exam_status === 'indexed') {
+          status = 'indexado';
         } else {
           status = 'registrado';
         }
@@ -118,11 +122,11 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      if (row.arquivo_nome && row.download_url) {
+      if (row.arquivo_nome) {
         examesMap.get(key)!.arquivos.push({
           tipo: row.arquivo_tipo,
           nome: row.arquivo_nome,
-          download_url: row.download_url,
+          download_url: row.download_url || '',
         });
       }
     }

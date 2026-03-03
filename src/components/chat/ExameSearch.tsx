@@ -69,15 +69,16 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: Exam
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Baixar TODOS os arquivos do exame e anexar
+  // Baixar TODOS os arquivos do exame e anexar (apenas os que tem download_url)
   const handleDownloadAll = useCallback(async (r: ExameResultado, idx: number) => {
-    if (r.arquivos.length === 0) return;
+    const downloadable = r.arquivos.filter(a => a.download_url);
+    if (downloadable.length === 0) return;
 
     setDownloadingIdx(idx);
     setError(null);
     try {
       const files: File[] = [];
-      for (const arq of r.arquivos) {
+      for (const arq of downloadable) {
         const res = await fetch(`/api/exames/download?url=${encodeURIComponent(arq.download_url)}`);
         if (!res.ok) {
           throw new Error(`Erro ao baixar ${arq.nome}: ${res.status}`);
@@ -136,8 +137,10 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: Exam
             const st = statusLabel(r.status);
             const isDownloading = downloadingIdx === idx;
             const hasFiles = r.arquivos.length > 0;
+            const downloadableFiles = r.arquivos.filter(a => a.download_url);
+            const hasDownloadable = downloadableFiles.length > 0;
             // Listar tipos de arquivo disponiveis
-            const tiposArquivo = r.arquivos.map((a) => arquivoLabel(a.tipo));
+            const tiposArquivo = downloadableFiles.map((a) => arquivoLabel(a.tipo));
 
             return (
               <div key={idx} className="px-3 py-2.5 hover:bg-gray-50/50">
@@ -173,7 +176,7 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: Exam
                   </div>
 
                   {/* Botao unico: baixa todos os arquivos do exame */}
-                  {hasFiles ? (
+                  {hasDownloadable ? (
                     <button
                       onClick={() => handleDownloadAll(r, idx)}
                       disabled={isDownloading}
@@ -201,7 +204,7 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: Exam
                     </button>
                   ) : (
                     <span className="shrink-0 px-2 py-1.5 text-[10px] text-gray-400 italic">
-                      Sem arquivos
+                      {hasFiles ? 'Sem download' : 'Sem arquivos'}
                     </span>
                   )}
                 </div>
@@ -235,8 +238,10 @@ function statusLabel(status: string): { text: string; className: string } {
   switch (status) {
     case 'entregue': return { text: 'Laudo Entregue', className: 'text-green-700 bg-green-100' };
     case 'assinado': return { text: 'Laudo Assinado', className: 'text-green-600 bg-green-50' };
+    case 'laudado': return { text: 'Laudado', className: 'text-emerald-600 bg-emerald-50' };
     case 'em_laudo': return { text: 'Em Laudo', className: 'text-yellow-700 bg-yellow-100' };
     case 'realizado': return { text: 'Realizado', className: 'text-blue-600 bg-blue-50' };
+    case 'indexado': return { text: 'Indexado', className: 'text-purple-600 bg-purple-50' };
     case 'registrado': return { text: 'Registrado', className: 'text-gray-600 bg-gray-100' };
     default: return { text: status, className: 'text-gray-600 bg-gray-100' };
   }
