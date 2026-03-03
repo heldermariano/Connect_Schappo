@@ -17,10 +17,13 @@ BEGIN
   IF p_phone IS NULL OR p_phone = '' THEN RETURN p_phone; END IF;
   IF p_phone LIKE '%@g.us%' THEN RETURN p_phone; END IF;
   cleaned := REGEXP_REPLACE(p_phone, '[^0-9]', '', 'g');
-  IF cleaned !~ '^55' AND LENGTH(cleaned) >= 10 THEN
+  -- Somente adicionar DDI 55 para numeros domesticos BR (10-11 digitos)
+  -- Numeros com 12+ digitos que nao comecam com 55 sao internacionais
+  IF cleaned !~ '^55' AND LENGTH(cleaned) <= 11 AND LENGTH(cleaned) >= 10 THEN
     cleaned := '55' || cleaned;
   END IF;
-  IF LENGTH(cleaned) = 12 AND cleaned ~ '^55[0-9]{10}$' THEN
+  -- Celular BR sem 9o digito: 55 + DD(2) + 8 digitos = 12
+  IF cleaned ~ '^55' AND LENGTH(cleaned) = 12 AND cleaned ~ '^55[0-9]{10}$' THEN
     cleaned := LEFT(cleaned, 4) || '9' || RIGHT(cleaned, 8);
   END IF;
   RETURN cleaned;

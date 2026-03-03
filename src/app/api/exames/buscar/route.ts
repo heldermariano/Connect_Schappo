@@ -123,8 +123,17 @@ export async function GET(request: NextRequest) {
       }
 
       if (row.arquivo_nome) {
+        // Inferir tipo real pelo filename (report_type pode estar errado no banco)
+        let tipo = row.arquivo_tipo || '';
+        const nomeLC = (row.arquivo_nome as string).toLowerCase();
+        if (nomeLC.includes('tracado') || nomeLC.includes('traçado') || nomeLC.includes('trac_')) {
+          tipo = nomeLC.includes('laudo') ? 'laudo_tracado' : 'tracado';
+        } else if (nomeLC.includes('laudo') && !nomeLC.includes('tracado')) {
+          tipo = 'laudo';
+        }
+
         examesMap.get(key)!.arquivos.push({
-          tipo: row.arquivo_tipo,
+          tipo,
           nome: row.arquivo_nome,
           download_url: row.download_url || '',
         });

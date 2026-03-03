@@ -449,10 +449,10 @@ export const GRUPO_CHANNELS: Record<string, string[]> = {
 // --- Normalizacao de Telefone ---
 
 /**
- * Normaliza numero de telefone brasileiro para envio via WhatsApp.
+ * Normaliza numero de telefone para envio via WhatsApp.
  * - Remove sufixos @s.whatsapp.net / @lid
- * - Adiciona DDI 55 se ausente
- * - Adiciona 9o digito para celulares (12 digitos → 13)
+ * - Numeros domesticos BR (10-11 digitos sem DDI): adiciona 55 + 9o digito se necessario
+ * - Numeros internacionais (12+ digitos, nao comecam com 55): preserva como esta
  * - Retorna null se invalido
  * Grupos (@g.us) passam sem alteracao.
  */
@@ -466,10 +466,15 @@ export function normalizePhone(phone: string | null | undefined): string | null 
     .replace(/\D/g, '');
 
   if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
-  if (!cleaned.startsWith('55')) cleaned = '55' + cleaned;
+
+  // Somente adicionar DDI 55 para numeros domesticos BR (10-11 digitos)
+  // Numeros com 12+ digitos que nao comecam com 55 sao internacionais
+  if (!cleaned.startsWith('55') && cleaned.length <= 11) {
+    cleaned = '55' + cleaned;
+  }
 
   // Celular BR sem 9o digito: 55 + DD(2) + 8 digitos = 12 → adicionar 9
-  if (cleaned.length === 12) {
+  if (cleaned.startsWith('55') && cleaned.length === 12) {
     const countryCode = cleaned.substring(0, 2);
     const ddd = cleaned.substring(2, 4);
     const number = cleaned.substring(4);
