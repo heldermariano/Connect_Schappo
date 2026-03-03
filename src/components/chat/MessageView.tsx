@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
@@ -458,40 +458,73 @@ export default function MessageView({
             Nenhuma mensagem
           </div>
         ) : (
-          mensagens.map((msg) => (
-            <div
-              key={msg.id}
-              ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
-              className={`flex items-start gap-1 ${selectMode ? 'cursor-pointer' : ''}`}
-              onClick={selectMode ? (e) => { e.stopPropagation(); handleToggleSelect(msg.id); } : undefined}
-            >
-              {selectMode && (
-                <div className="shrink-0 flex items-center pt-2 pl-1">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                    selectedMsgIds.has(msg.id)
-                      ? 'bg-schappo-600 border-schappo-600'
-                      : 'border-gray-300 dark:border-gray-600'
-                  }`}>
-                    {selectedMsgIds.has(msg.id) && (
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
+          mensagens.map((msg, idx) => {
+            // Separador de data: exibir quando a data muda entre mensagens
+            let dateSeparator: React.ReactNode = null;
+            const msgDate = msg.created_at ? new Date(msg.created_at) : null;
+            const prevMsg = idx > 0 ? mensagens[idx - 1] : null;
+            const prevDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
+
+            if (msgDate && (!prevDate || msgDate.toDateString() !== prevDate.toDateString())) {
+              const today = new Date();
+              const yesterday = new Date();
+              yesterday.setDate(yesterday.getDate() - 1);
+
+              let dateLabel: string;
+              if (msgDate.toDateString() === today.toDateString()) {
+                dateLabel = 'Hoje';
+              } else if (msgDate.toDateString() === yesterday.toDateString()) {
+                dateLabel = 'Ontem';
+              } else {
+                dateLabel = msgDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+              }
+
+              dateSeparator = (
+                <div key={`date-${msg.id}`} className="flex items-center justify-center my-3">
+                  <div className="px-3 py-1 bg-white dark:bg-gray-700 rounded-lg shadow-sm text-xs font-medium text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
+                    {dateLabel}
                   </div>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <MessageBubble
-                  mensagem={msg}
-                  showSender={isGroup}
-                  isAdmin={currentUserRole === 'admin'}
-                  onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
-                  onResend={doResend}
-                  onContextMenu={selectMode ? undefined : handleContextMenu}
-                />
-              </div>
-            </div>
-          ))
+              );
+            }
+
+            return (
+              <React.Fragment key={msg.id}>
+                {dateSeparator}
+                <div
+                  ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
+                  className={`flex items-start gap-1 ${selectMode ? 'cursor-pointer' : ''}`}
+                  onClick={selectMode ? (e) => { e.stopPropagation(); handleToggleSelect(msg.id); } : undefined}
+                >
+                  {selectMode && (
+                    <div className="shrink-0 flex items-center pt-2 pl-1">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                        selectedMsgIds.has(msg.id)
+                          ? 'bg-schappo-600 border-schappo-600'
+                          : 'border-gray-300 dark:border-gray-600'
+                      }`}>
+                        {selectedMsgIds.has(msg.id) && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <MessageBubble
+                      mensagem={msg}
+                      showSender={isGroup}
+                      isAdmin={currentUserRole === 'admin'}
+                      onDelete={onDeleteMensagem ? (msgId) => onDeleteMensagem(conversa.id, msgId) : undefined}
+                      onResend={doResend}
+                      onContextMenu={selectMode ? undefined : handleContextMenu}
+                    />
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })
         )}
 
         <div ref={bottomRef} />
