@@ -5,22 +5,20 @@ import { useAgenda } from '@/hooks/useAgenda';
 import { AgendamentoPaciente } from '@/lib/types';
 import CalendarioMedico from '@/components/agenda/CalendarioMedico';
 
-const MENSAGEM_PADRAO = `Clinica Schappo - Confirmacao de Agendamento
+const MENSAGEM_PADRAO = `Clínica Schappo - Confirmação de Agendamento
 
-Ola, {nome_paciente}!
-
-Gostavamos de confirmar seu agendamento:
+Gostaríamos de confirmar seu agendamento:
 - Data: {data}
-- Horario: {hora}
-- Medico(a): {nome_medico}
+- Médico(a): {nome_medico}
+- Horário: {hora}
 - Procedimento: {procedimento}
 
 Por favor, responda:
 1 - Confirmo meu agendamento
 2 - Preciso remarcar
 
-Em caso de duvidas, entre em contato.
-Clinica Schappo - (61) 3345-5701`;
+Em caso de dúvidas, entre em contato.
+Clínica Schappo - (61) 3345-5701`;
 
 function getAmanha(): string {
   const d = new Date();
@@ -283,13 +281,13 @@ export default function ConfirmacaoPage() {
   return (
     <div className="flex flex-col h-full bg-white text-gray-900">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-4 md:px-6 py-4 border-b border-gray-200">
         <h1 className="text-xl font-bold">Confirmacao de Agendamento</h1>
         <p className="text-sm text-gray-500 mt-1">Confirme agendamentos via WhatsApp</p>
       </div>
 
       {/* Filtros */}
-      <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap gap-4 items-end">
+      <div className="px-4 md:px-6 py-4 border-b border-gray-200 flex flex-wrap gap-4 items-end">
         {/* Seletor de medico com busca */}
         <div className="relative flex-1 min-w-[250px] max-w-[400px]">
           <label className="block text-xs text-gray-500 mb-1">Medico</label>
@@ -381,7 +379,7 @@ export default function ConfirmacaoPage() {
 
       {/* Resumo */}
       {agendamentos.length > 0 && (
-        <div className="px-6 py-3 border-b border-gray-200 flex flex-wrap gap-4 text-sm">
+        <div className="px-4 md:px-6 py-3 border-b border-gray-200 flex flex-wrap gap-4 text-sm">
           <span className="text-gray-500">{resumo.total} agendado(s)</span>
           <span className="text-green-600">{resumo.confirmados} confirmado(s)</span>
           <span className="text-yellow-600">{resumo.enviados} enviado(s)</span>
@@ -527,7 +525,7 @@ export default function ConfirmacaoPage() {
 
       {/* Barra inferior — botao de disparo */}
       {selecionados.size > 0 && (
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div className="px-4 md:px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
           <span className="text-sm text-gray-500">{selecionados.size} paciente(s) selecionado(s)</span>
           <button
             onClick={() => setShowModal(true)}
@@ -545,7 +543,7 @@ export default function ConfirmacaoPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-xl border border-gray-200 shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[80vh]">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="px-4 md:px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-bold">Enviar Confirmacao via WhatsApp</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-900">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -554,7 +552,7 @@ export default function ConfirmacaoPage() {
               </button>
             </div>
 
-            <div className="px-6 py-4 flex-1 overflow-y-auto">
+            <div className="px-4 md:px-6 py-4 flex-1 overflow-y-auto">
               <div className="mb-4">
                 <p className="text-sm text-gray-500 mb-2">
                   Sera enviada para <strong className="text-gray-900">{selecionados.size} paciente(s)</strong> pelo WhatsApp Recepcao.
@@ -653,7 +651,7 @@ export default function ConfirmacaoPage() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <div className="px-4 md:px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
               <button
                 onClick={() => setShowModal(false)}
                 className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900"

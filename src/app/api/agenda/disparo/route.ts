@@ -11,6 +11,28 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Novo endereco da clinica — enviar localizacao apos confirmacao
+const CLINICA_LOCATION = {
+  latitude: -15.826413,
+  longitude: -47.9305946,
+  name: 'Clínica Schappo',
+  address: 'SHLS 716 SUL BLOCO F SALA 208, CENTRO CLÍNICO OSWALDO CRUZ, ASA SUL',
+  observacao: 'Segue o novo endereço de atendimento:',
+};
+
+// Andrea Schappo: enviar localizacao apenas nas segundas-feiras
+// Todos os outros medicos: enviar localizacao sempre
+function shouldSendLocation(nomeMedico: string, dataAgenda: string): boolean {
+  const nomeUpper = nomeMedico.toUpperCase();
+  const isAndrea = nomeUpper.includes('ANDREA') && nomeUpper.includes('SCHAPPO');
+  if (isAndrea) {
+    // Segunda-feira = day 1 (getDay())
+    const date = new Date(dataAgenda + 'T12:00:00');
+    return date.getDay() === 1;
+  }
+  return true;
+}
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -210,6 +232,96 @@ export async function POST(request: NextRequest) {
         } catch (regErr) {
           console.error(`[disparo] Erro ao registrar no painel chave=${chave}:`, regErr);
           // Nao falhar o disparo se o registro no painel falhar
+        }
+
+        // Enviar localizacao do novo endereco apos confirmacao
+        // Andrea Schappo: apenas segundas-feiras | Outros: sempre
+        const nomeMedicoFull = (agenda.nom_medico as string) || (agenda.nom_guerra as string) || '';
+        if (shouldSendLocation(nomeMedicoFull, data)) {
+          try {
+            // Enviar observacao antes da localizacao
+            await sleep(1500);
+            await fetch(`${uazapiUrl}/send/text`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', token: uazapiToken },
+              body: JSON.stringify({ number: telefoneWhatsapp, text: CLINICA_LOCATION.observacao }),
+            });
+
+            await sleep(1500);
+            const locRes = await fetch(`${uazapiUrl}/send/location`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', token: uazapiToken },
+              body: JSON.stringify({
+                number: telefoneWhatsapp,
+                latitude: CLINICA_LOCATION.latitude,
+                longitude: CLINICA_LOCATION.longitude,
+                name: CLINICA_LOCATION.name,
+                address: CLINICA_LOCATION.address,
+              }),
+            });
+            if (locRes.ok) {
+              console.log(`[disparo] Localizacao enviada chave=${chave} to=${telefoneWhatsapp}`);
+
+              // Registrar localizacao no painel de conversas
+              try {
+                const locData = await locRes.json();
+                const locIds = extractUazapiMessageIds(locData);
+                const waChatId = telefoneWhatsapp + '@s.whatsapp.net';
+                const conversaLocRes = await pool.query(
+                  `SELECT atd.upsert_conversa($1, $2, $3, $4, $5, NULL, $6, NULL) AS id`,
+                  [waChatId, 'individual', 'recepcao', 'uazapi', pacienteNome, telefoneWhatsapp],
+                );
+                const conversaLocId = conversaLocRes.rows[0].id;
+                const locConteudo = `📍 ${CLINICA_LOCATION.name}\n${CLINICA_LOCATION.address}`;
+                const locMeta = JSON.stringify({
+                  latitude: CLINICA_LOCATION.latitude,
+                  longitude: CLINICA_LOCATION.longitude,
+                  name: CLINICA_LOCATION.name,
+                  address: CLINICA_LOCATION.address,
+                  source: 'confirmacao_agendamento_localizacao',
+                  message_id_full: locIds.fullId || locIds.shortId,
+                });
+                const locMsgRes = await pool.query(
+                  `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) AS id`,
+                  [conversaLocId, locIds.shortId, true, null, null, 'location', locConteudo, null, null, null, locMeta, null],
+                );
+                const locMsgId = locMsgRes.rows[0].id;
+                if (locMsgId && locMsgId > 0) {
+                  await pool.query(
+                    `UPDATE atd.conversas SET ultima_msg_from_me = TRUE WHERE id = $1`,
+                    [conversaLocId],
+                  );
+                  const [locMsgData, locConvData] = await Promise.all([
+                    pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [locMsgId]),
+                    pool.query(`SELECT * FROM atd.conversas WHERE id = $1`, [conversaLocId]),
+                  ]);
+                  if (locMsgData.rows[0]) {
+                    sseManager.broadcast({
+                      type: 'nova_mensagem',
+                      data: { conversa_id: conversaLocId, mensagem: locMsgData.rows[0] },
+                    });
+                  }
+                  if (locConvData.rows[0]) {
+                    sseManager.broadcast({
+                      type: 'conversa_atualizada',
+                      data: {
+                        conversa_id: conversaLocId,
+                        ultima_msg: locConteudo.substring(0, 200),
+                        nao_lida: locConvData.rows[0].nao_lida,
+                        ultima_msg_from_me: true,
+                      },
+                    });
+                  }
+                }
+              } catch (locRegErr) {
+                console.error(`[disparo] Erro ao registrar localizacao no painel chave=${chave}:`, locRegErr);
+              }
+            } else {
+              console.error(`[disparo] Falha ao enviar localizacao chave=${chave}:`, locRes.status);
+            }
+          } catch (locErr) {
+            console.error(`[disparo] Erro envio localizacao chave=${chave}:`, locErr);
+          }
         }
 
         detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'enviado' });

@@ -14,7 +14,7 @@ CREATE TABLE atd.template_confirmacao (
 -- Template padrao do sistema
 INSERT INTO atd.template_confirmacao (nome, conteudo, padrao) VALUES (
   'Padrao',
-  E'Clinica Schappo - Confirmacao de Agendamento\n\nOla, {nome_paciente}!\n\nGostavamos de confirmar seu agendamento:\n- Data: {data}\n- Horario: {hora}\n- Medico(a): {nome_medico}\n- Procedimento: {procedimento}\n\nPor favor, responda:\n1 - Confirmo meu agendamento\n2 - Preciso remarcar\n\nEm caso de duvidas, entre em contato.\nClinica Schappo - (61) 3345-5701',
+  E'Clínica Schappo - Confirmação de Agendamento\n\nGostaríamos de confirmar seu agendamento:\n- Data: {data}\n- Médico(a): {nome_medico}\n- Horário: {hora}\n- Procedimento: {procedimento}\n\nPor favor, responda:\n1 - Confirmo meu agendamento\n2 - Preciso remarcar\n\nEm caso de dúvidas, entre em contato.\nClínica Schappo - (61) 3345-5701',
   TRUE
 );
 
