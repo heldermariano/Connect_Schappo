@@ -5,9 +5,8 @@ import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
+import BottomNav from '@/components/layout/BottomNav';
 import PauseScreen from '@/components/layout/PauseScreen';
-// InactivityAlert DESATIVADO
-// import InactivityAlert from '@/components/layout/InactivityAlert';
 import { AppProvider, useAppContext } from '@/contexts/AppContext';
 import { useSSE } from '@/hooks/useSSE';
 import { requestNotificationPermission } from '@/lib/desktop-notification';
@@ -25,14 +24,13 @@ const ChatInternoPopup = dynamic(() => import('@/components/chat-interno/ChatInt
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
-  const { operatorStatus, setOperatorStatus, refreshUnreadCounts, chatInternoUnread, refreshChatInternoUnread } = useAppContext();
+  const { operatorStatus, setOperatorStatus, refreshUnreadCounts, chatInternoUnread, refreshChatInternoUnread, isMobile } = useAppContext();
   const [chatInternoOpen, setChatInternoOpen] = useState(false);
   const [softphoneOpen, setSoftphoneOpen] = useState(false);
   const chatInternoOpenRef = useRef(false);
   const [chatInternoSSE, setChatInternoSSE] = useState<ChatInternoSSEData | null>(null);
   const [chatInternoReacaoSSE, setChatInternoReacaoSSE] = useState<ChatInternoReacaoSSEData | null>(null);
   const [autoOpenChat, setAutoOpenChat] = useState<{ chat_id: number; sender_id: number; sender_name: string } | null>(null);
-  // InactivityAlert DESATIVADO
   const router = useRouter();
   const userId = session?.user?.id ? parseInt(session.user.id as string) : 0;
   const operatorStatusRef = useRef(operatorStatus);
@@ -46,9 +44,6 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     requestNotificationPermission();
   }, []);
-
-  // InactivityAlert DESATIVADO — bloqueava tela das secretarias mesmo apos responder
-  // const userRole = (session?.user as { role?: string })?.role || 'atendente';
 
   // SSE global para atualizar badges e toasts
   const handleGlobalSSE = useCallback(
@@ -148,73 +143,26 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     }
   }, [setOperatorStatus]);
 
-  // handleInactivityConfirm DESATIVADO junto com InactivityAlert
-
   return (
     <div className="flex h-screen">
-      {/* InactivityAlert DESATIVADO — bloqueava tela das secretarias */}
       {['pausa', 'almoco', 'cafe', 'lanche'].includes(operatorStatus) && (
         <PauseScreen status={operatorStatus as 'pausa' | 'almoco' | 'cafe' | 'lanche'} onResume={handleResume} />
       )}
       <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 ${isMobile ? 'pb-bottom-nav' : ''}`}>
         {children}
       </div>
 
-      {/* Coluna direita para softphone + chat interno */}
-      <div className="w-80 shrink-0 flex flex-col">
-        {/* Continuar barra laranja do header (sem border) */}
-        <div className="h-14 bg-schappo-500 shrink-0" />
-        {/* Area de conteudo abaixo do header */}
-        <div className="flex-1 relative bg-gray-50 dark:bg-black border-l border-gray-200 dark:border-gray-800 overflow-hidden">
-          {/* Softphone panel */}
-          <SoftphoneFloating operatorStatus={operatorStatus} open={softphoneOpen} onToggle={() => setSoftphoneOpen((p) => !p)} />
+      {/* TODO: Reativar softphone + chat interno quando estiverem estáveis */}
+      {/* Painel direito (softphone/chat) desabilitado temporariamente */}
 
-          {/* Botoes telefone + chat lado a lado no rodape */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 z-[9997]">
-            {/* Botao telefone */}
-            <button
-              data-softphone-toggle
-              onClick={() => { setSoftphoneOpen((p) => !p); setChatInternoOpen(false); }}
-              className={`w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 text-white ${
-                softphoneOpen ? 'bg-schappo-600' : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-              title="Telefone"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            </button>
-
-            {/* Botao chat interno */}
-            <button
-              onClick={() => { setChatInternoOpen((prev) => !prev); setSoftphoneOpen(false); }}
-              className="w-11 h-11 bg-schappo-500 hover:bg-schappo-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 active:scale-95 relative"
-              title="Chat Interno"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
-              </svg>
-              {chatInternoUnread > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold shadow-sm">
-                  {chatInternoUnread > 99 ? '99+' : chatInternoUnread}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* Popup do chat interno */}
-          {chatInternoOpen && (
-            <ChatInternoPopup
-              onClose={() => setChatInternoOpen(false)}
-              sseMessage={chatInternoSSE}
-              sseReacao={chatInternoReacaoSSE}
-              autoOpenChat={autoOpenChat}
-              onAutoOpenHandled={() => setAutoOpenChat(null)}
-            />
-          )}
-        </div>
-      </div>
+      {/* Mobile: BottomNav (sem softphone/chat por enquanto) */}
+      {isMobile && (
+        <BottomNav
+          onOpenSoftphone={() => {}}
+          onOpenChatInterno={() => {}}
+        />
+      )}
     </div>
   );
 }
