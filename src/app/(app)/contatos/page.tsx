@@ -35,12 +35,12 @@ export default function ContatosPage() {
     <div className="flex flex-col h-full bg-white dark:bg-black">
       {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Contatos
             {!loading && <span className="text-sm font-normal text-gray-400 dark:text-gray-500 ml-2">({total})</span>}
           </h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowImportModal(true)}
               className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-1.5"

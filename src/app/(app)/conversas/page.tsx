@@ -501,19 +501,23 @@ export default function ConversasPage() {
     return () => clearInterval(interval);
   }, [conversas]);
 
+  const { isMobile } = useAppContext();
+
   // Empty state quando nenhum canal selecionado
   if (!canal) {
     return (
       <>
         <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
         <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black">
-          <div className="text-center max-w-sm">
+          <div className="text-center max-w-sm px-4">
             <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Selecione um canal</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Passe o mouse sobre o icone de conversas na barra lateral para escolher um canal WhatsApp.
+              {isMobile
+                ? 'Toque em Conversas na barra inferior para escolher um canal WhatsApp.'
+                : 'Passe o mouse sobre o icone de conversas na barra lateral para escolher um canal WhatsApp.'}
             </p>
           </div>
         </div>
@@ -521,6 +525,99 @@ export default function ConversasPage() {
     );
   }
 
+  // Mobile: lista OU mensagens (tipo WhatsApp mobile)
+  if (isMobile) {
+    if (selectedConversa) {
+      return (
+        <>
+          {/* Modal listar grupos */}
+          {canal && (
+            <GrupoListModal
+              open={showGrupoList}
+              canal={canal}
+              onClose={() => setShowGrupoList(false)}
+              onSelectGrupo={(grupo) => {
+                setShowGrupoList(false);
+                setSelectedConversa(grupo);
+                if (grupo.nao_lida > 0) marcarComoLida(grupo.id);
+                if (filtro !== 'grupo') setFiltro('grupo');
+              }}
+            />
+          )}
+          <MessageView
+            conversa={selectedConversa}
+            mensagens={mensagens}
+            loading={loadingMsgs}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            onSend={handleSendMensagem}
+            onMarcarLida={marcarComoLida}
+            onAtribuir={handleAtribuir}
+            onDialNumber={(number: string) => {
+              const event = new CustomEvent('softphone-dial', { detail: { number } });
+              window.dispatchEvent(event);
+            }}
+            currentUserId={userId ?? undefined}
+            onFinalizar={handleFinalizar}
+            currentUserRole={userRole}
+            onDeleteConversa={handleDeleteConversa}
+            onDeleteMensagem={handleDeleteMensagem}
+            onEditMensagem={handleEditMensagem}
+            onBack={() => setSelectedConversa(null)}
+          />
+        </>
+      );
+    }
+
+    // Mobile: lista de conversas full-width
+    return (
+      <>
+        <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
+        <CallAlert chamadas={activeCalls} />
+        <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-black">
+          <CategoryFilter
+            selected={filtro}
+            onChange={setFiltro}
+            grupo={(session?.user as { grupo?: string })?.grupo || 'todos'}
+            canal={canal}
+            busca={buscaPainel}
+            onBuscaChange={setBuscaPainel}
+            onListarGrupos={() => setShowGrupoList(true)}
+            historico={showHistorico}
+            onToggleHistorico={() => setShowHistorico((prev) => !prev)}
+          />
+          <ConversaList
+            conversas={conversas}
+            activeId={null}
+            onSelect={handleSelectConversa}
+            loading={loading}
+            mencionadoEm={mencionadoEm}
+            flashingConversas={flashingConversas}
+            urgentConversas={urgentConversas}
+            onMarkUnread={handleMarkUnread}
+            onMarkResolved={handleMarkResolved}
+            onDelete={userRole === 'admin' ? handleDeleteConversa : undefined}
+            isAdmin={userRole === 'admin'}
+          />
+        </div>
+        {canal && (
+          <GrupoListModal
+            open={showGrupoList}
+            canal={canal}
+            onClose={() => setShowGrupoList(false)}
+            onSelectGrupo={(grupo) => {
+              setShowGrupoList(false);
+              setSelectedConversa(grupo);
+              if (grupo.nao_lida > 0) marcarComoLida(grupo.id);
+              if (filtro !== 'grupo') setFiltro('grupo');
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Desktop: layout lado-a-lado (sem mudanca)
   return (
     <>
       <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />

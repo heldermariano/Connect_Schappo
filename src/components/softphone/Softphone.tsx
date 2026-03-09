@@ -44,7 +44,7 @@ export default function Softphone({ phone, onClose }: SoftphoneProps) {
   }, [phone]);
 
   return (
-    <div className="w-80 bg-white dark:bg-black rounded-xl shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden max-h-[calc(100vh-120px)]">
+    <div className="w-full md:w-80 bg-white dark:bg-black md:rounded-xl md:shadow-2xl md:border md:border-gray-200 md:dark:border-gray-800 flex flex-col overflow-hidden max-h-full md:max-h-[calc(100vh-120px)]">
       {/* Header */}
       <div className="h-12 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-800 bg-gray-900 dark:bg-white shrink-0 rounded-t-xl">
         <div className="flex items-center gap-2">

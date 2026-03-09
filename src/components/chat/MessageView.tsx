@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Conversa, Mensagem } from '@/lib/types';
+import { useAppContext } from '@/contexts/AppContext';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import MessageContextMenu from './MessageContextMenu';
@@ -28,6 +29,7 @@ interface MessageViewProps {
   onDeleteConversa?: (conversaId: number) => void;
   onDeleteMensagem?: (conversaId: number, msgId: number) => void;
   onEditMensagem?: (conversaId: number, msgId: number, conteudo: string) => Promise<void>;
+  onBack?: () => void;
 }
 
 export default function MessageView({
@@ -46,6 +48,7 @@ export default function MessageView({
   onDeleteConversa,
   onDeleteMensagem,
   onEditMensagem,
+  onBack,
 }: MessageViewProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,6 +79,11 @@ export default function MessageView({
   const [syncedAvatar, setSyncedAvatar] = useState<string | null>(null);
   const [syncedMemberCount, setSyncedMemberCount] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
+
+  // Mobile
+  const { isMobile } = useAppContext();
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   // Limpar estados ao mudar de conversa
   useEffect(() => {
@@ -256,6 +264,18 @@ export default function MessageView({
     setReactionTarget(null);
   }, [reactionTarget, conversa]);
 
+  // Fechar menu "mais" ao clicar fora (mobile)
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [moreMenuOpen]);
+
   const handleSync = useCallback(async () => {
     if (!conversa || syncing) return;
     const identifier = conversa.telefone || conversa.wa_chatid;
@@ -320,7 +340,15 @@ export default function MessageView({
   return (
     <div className="flex-1 flex flex-col bg-gray-50 dark:bg-black relative">
       {/* Header da conversa */}
-      <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
+      <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0">
+        {/* Botao voltar (mobile) */}
+        {onBack && (
+          <button onClick={onBack} className="p-1 -ml-1 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        )}
         <Avatar nome={displayName} avatarUrl={displayAvatar} size="sm" isGroup={isGroup} />
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{displayName}</div>
@@ -330,74 +358,89 @@ export default function MessageView({
             {isGroup && syncedMemberCount && ` \u00B7 ${syncedMemberCount} membros`}
           </div>
         </div>
-        {/* Botao sync contato/grupo via UAZAPI */}
-        {conversa.provider === 'uazapi' && (
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="p-2 text-gray-400 hover:text-schappo-600 transition-colors disabled:opacity-50"
-            title="Atualizar dados do WhatsApp"
-          >
-            <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
+
+        {/* Desktop: acoes inline */}
+        {!isMobile && (
+          <>
+            {conversa.provider === 'uazapi' && (
+              <button onClick={handleSync} disabled={syncing} className="p-2 text-gray-400 hover:text-schappo-600 transition-colors disabled:opacity-50" title="Atualizar dados do WhatsApp">
+                <svg className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            )}
+            <button onClick={() => { setSearchOpen(!searchOpen); setSearchTerm(''); setSearchIndex(0); }} className={`p-2 transition-colors ${searchOpen ? 'text-schappo-600' : 'text-gray-400 hover:text-schappo-600'}`} title="Buscar mensagens">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+            <AtribuirDropdown conversaId={conversa.id} atendenteId={conversa.atendente_id} atendenteNome={(conversa as Conversa & { atendente_nome?: string }).atendente_nome} onAtribuir={onAtribuir} />
+            {currentUserId && conversa.atendente_id === currentUserId && onFinalizar && (
+              <button onClick={() => onFinalizar(conversa.id)} className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors" title="Finalizar atendimento e liberar conversa">
+                Finalizar
+              </button>
+            )}
+            {currentUserRole === 'admin' && onDeleteConversa && (
+              <button onClick={() => { if (window.confirm(`Excluir conversa "${displayName}" e todas as mensagens? Esta acao nao pode ser desfeita.`)) onDeleteConversa(conversa.id); }} className="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Excluir conversa">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+            {!isGroup && conversa.telefone && onDialNumber && (
+              <button onClick={() => onDialNumber(conversa.telefone!)} className="p-2 text-gray-400 hover:text-schappo-600 transition-colors" title="Discar no softphone">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </button>
+            )}
+            {!isGroup && conversa.telefone && !onDialNumber && (
+              <CallButton telefone={conversa.telefone} size="md" label="Ligar" />
+            )}
+          </>
         )}
-        {/* Botao busca */}
-        <button
-          onClick={() => { setSearchOpen(!searchOpen); setSearchTerm(''); setSearchIndex(0); }}
-          className={`p-2 transition-colors ${searchOpen ? 'text-schappo-600' : 'text-gray-400 hover:text-schappo-600'}`}
-          title="Buscar mensagens"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </button>
-        <AtribuirDropdown
-          conversaId={conversa.id}
-          atendenteId={conversa.atendente_id}
-          atendenteNome={(conversa as Conversa & { atendente_nome?: string }).atendente_nome}
-          onAtribuir={onAtribuir}
-        />
-        {currentUserId && conversa.atendente_id === currentUserId && onFinalizar && (
-          <button
-            onClick={() => onFinalizar(conversa.id)}
-            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-            title="Finalizar atendimento e liberar conversa"
-          >
-            Finalizar
-          </button>
-        )}
-        {/* Excluir conversa (admin only) */}
-        {currentUserRole === 'admin' && onDeleteConversa && (
-          <button
-            onClick={() => {
-              if (window.confirm(`Excluir conversa "${displayName}" e todas as mensagens? Esta acao nao pode ser desfeita.`)) {
-                onDeleteConversa(conversa.id);
-              }
-            }}
-            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-            title="Excluir conversa"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        )}
-        {/* Click-to-call: apenas para conversas individuais com telefone */}
-        {!isGroup && conversa.telefone && onDialNumber && (
-          <button
-            onClick={() => onDialNumber(conversa.telefone!)}
-            className="p-2 text-gray-400 hover:text-schappo-600 transition-colors"
-            title="Discar no softphone"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-            </svg>
-          </button>
-        )}
-        {!isGroup && conversa.telefone && !onDialNumber && (
-          <CallButton telefone={conversa.telefone} size="md" label="Ligar" />
+
+        {/* Mobile: busca + menu colapsado */}
+        {isMobile && (
+          <>
+            <button onClick={() => { setSearchOpen(!searchOpen); setSearchTerm(''); setSearchIndex(0); }} className={`p-2 transition-colors ${searchOpen ? 'text-schappo-600' : 'text-gray-400 hover:text-schappo-600'}`}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+            <div className="relative" ref={moreMenuRef}>
+              <button onClick={() => setMoreMenuOpen((p) => !p)} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+              {moreMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 py-1 min-w-[180px] z-50">
+                  <AtribuirDropdown conversaId={conversa.id} atendenteId={conversa.atendente_id} atendenteNome={(conversa as Conversa & { atendente_nome?: string }).atendente_nome} onAtribuir={(id, aid) => { onAtribuir(id, aid); setMoreMenuOpen(false); }} />
+                  {conversa.provider === 'uazapi' && (
+                    <button onClick={() => { handleSync(); setMoreMenuOpen(false); }} disabled={syncing} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                      Atualizar WhatsApp
+                    </button>
+                  )}
+                  {currentUserId && conversa.atendente_id === currentUserId && onFinalizar && (
+                    <button onClick={() => { onFinalizar(conversa.id); setMoreMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      Finalizar
+                    </button>
+                  )}
+                  {!isGroup && conversa.telefone && onDialNumber && (
+                    <button onClick={() => { onDialNumber(conversa.telefone!); setMoreMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                      Ligar
+                    </button>
+                  )}
+                  {currentUserRole === 'admin' && onDeleteConversa && (
+                    <button onClick={() => { if (window.confirm(`Excluir conversa "${displayName}"?`)) onDeleteConversa(conversa.id); setMoreMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      Excluir conversa
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 

@@ -175,7 +175,7 @@ export default function SupervisaoPage() {
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 bg-gray-50 dark:bg-gray-950 space-y-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6 bg-gray-50 dark:bg-gray-950 space-y-4 md:space-y-6">
         {loading ? (
           <div className="flex items-center justify-center h-40 text-gray-500">Carregando...</div>
         ) : (

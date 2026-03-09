@@ -132,7 +132,7 @@ export default function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-16 bg-schappo-black flex flex-col items-center py-4 gap-2 shrink-0">
+    <aside className="hidden md:flex w-16 bg-schappo-black flex-col items-center py-4 gap-2 shrink-0">
       <div className="mb-4">
         <SidebarLogo />
       </div>

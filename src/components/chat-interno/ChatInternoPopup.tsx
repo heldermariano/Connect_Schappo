@@ -35,9 +35,10 @@ interface ChatInternoPopupProps {
   sseReacao?: ChatInternoReacaoSSEData | null;
   autoOpenChat?: AutoOpenChat | null;
   onAutoOpenHandled?: () => void;
+  fullscreen?: boolean;
 }
 
-export default function ChatInternoPopup({ onClose, sseMessage, sseReacao, autoOpenChat, onAutoOpenHandled }: ChatInternoPopupProps) {
+export default function ChatInternoPopup({ onClose, sseMessage, sseReacao, autoOpenChat, onAutoOpenHandled, fullscreen }: ChatInternoPopupProps) {
   const { data: session } = useSession();
   const { refreshChatInternoUnread } = useAppContext();
   const [selectedChat, setSelectedChat] = useState<ChatInterno | null>(null);
@@ -145,36 +146,49 @@ export default function ChatInternoPopup({ onClose, sseMessage, sseReacao, autoO
   }, []);
 
   return (
-    <div className="absolute top-0 left-0 right-0 bottom-16 z-[9998] bg-white dark:bg-black shadow-2xl flex flex-col overflow-hidden min-h-0">
+    <div className={`${fullscreen ? 'w-full h-full' : 'absolute top-0 left-0 right-0 bottom-16 z-[9998] shadow-2xl'} bg-white dark:bg-black flex flex-col overflow-hidden min-h-0`}>
       {/* Header */}
-      <div className="h-12 bg-gray-900 dark:bg-white flex items-center justify-between px-4 shrink-0 z-10">
-        <div className="flex items-center gap-2">
-          {selectedChat && (
-            <button
-              onClick={handleBack}
-              className="text-white/80 dark:text-gray-400 hover:text-white dark:hover:text-gray-900 transition-colors mr-1"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
-          <svg className="w-5 h-5 text-white dark:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
-          </svg>
-          <span className="text-white dark:text-gray-900 font-semibold text-sm">
-            {selectedChat ? selectedChat.outro_nome : 'Chat Interno'}
-          </span>
+      {!fullscreen && (
+        <div className="h-12 bg-gray-900 dark:bg-white flex items-center justify-between px-4 shrink-0 z-10">
+          <div className="flex items-center gap-2">
+            {selectedChat && (
+              <button
+                onClick={handleBack}
+                className="text-white/80 dark:text-gray-400 hover:text-white dark:hover:text-gray-900 transition-colors mr-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            <svg className="w-5 h-5 text-white dark:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2v-1m0-3V6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2h-4l-4 4V10H7a2 2 0 01-2-2z" />
+            </svg>
+            <span className="text-white dark:text-gray-900 font-semibold text-sm">
+              {selectedChat ? selectedChat.outro_nome : 'Chat Interno'}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/80 dark:text-gray-400 hover:text-white dark:hover:text-gray-900 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="text-white/80 dark:text-gray-400 hover:text-white dark:hover:text-gray-900 transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      )}
+      {/* Fullscreen: header simplificado com botao voltar */}
+      {fullscreen && selectedChat && (
+        <div className="h-10 bg-gray-100 dark:bg-gray-900 flex items-center px-3 gap-2 shrink-0 border-b border-gray-200 dark:border-gray-800">
+          <button onClick={handleBack} className="text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{selectedChat.outro_nome}</span>
+        </div>
+      )}
 
       {/* Conteudo */}
       {selectedChat ? (

@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 type Theme = 'light' | 'dark';
 
@@ -15,6 +16,7 @@ interface AppContextValue {
   refreshUnreadCounts: () => void;
   chatInternoUnread: number;
   refreshChatInternoUnread: () => void;
+  isMobile: boolean;
 }
 
 const AppContext = createContext<AppContextValue>({
@@ -26,11 +28,13 @@ const AppContext = createContext<AppContextValue>({
   refreshUnreadCounts: () => {},
   chatInternoUnread: 0,
   refreshChatInternoUnread: () => {},
+  isMobile: false,
 });
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [operatorStatus, setOperatorStatus] = useState('disponivel');
   const [theme, setThemeState] = useState<Theme>('light');
+  const isMobile = useIsMobile();
   const [unreadCounts, setUnreadCounts] = useState<UnreadCounts>({});
   const [chatInternoUnread, setChatInternoUnread] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -114,7 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [fetchChatInternoUnread]);
 
   return (
-    <AppContext.Provider value={{ operatorStatus, setOperatorStatus, theme, setTheme, unreadCounts, refreshUnreadCounts, chatInternoUnread, refreshChatInternoUnread }}>
+    <AppContext.Provider value={{ operatorStatus, setOperatorStatus, theme, setTheme, unreadCounts, refreshUnreadCounts, chatInternoUnread, refreshChatInternoUnread, isMobile }}>
       {children}
     </AppContext.Provider>
   );
