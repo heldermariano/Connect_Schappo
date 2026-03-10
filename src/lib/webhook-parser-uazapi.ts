@@ -285,10 +285,7 @@ export function parseUAZAPIMessage(payload: WebhookPayloadUAZAPI): ParsedUAZAPIM
   const isEdit = !!(message.edited && typeof message.edited === 'string' && message.edited.length > 0);
 
   // Ignorar mensagens enviadas pela API (evitar loop) — mas permitir edicoes
-  if (message.wasSentByApi && !isEdit) {
-    console.log(`[webhook-parser] FILTERED wasSentByApi=true chatid=${chat.wa_chatid} owner=${owner} fromMe=${message.fromMe}`);
-    return null;
-  }
+  if (message.wasSentByApi && !isEdit) return null;
 
   const rawChatId = chat.wa_chatid;
   const isGroup = chat.wa_isGroup === true || rawChatId.includes('@g.us');
