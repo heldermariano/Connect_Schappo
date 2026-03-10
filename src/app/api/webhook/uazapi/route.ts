@@ -24,6 +24,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok' });
     }
 
+    // Debug: logar mensagens de midia de/para 92894339 para rastrear problema
+    const chatId = payload.chat?.wa_chatid || '';
+    if (chatId.includes('92894339') && payload.EventType === 'messages') {
+      const msgType = payload.message?.messageType || payload.message?.type || '?';
+      const fromMe = payload.message?.fromMe;
+      const wasSent = payload.message?.wasSentByApi;
+      console.log(`[webhook/uazapi] DEBUG 92894339: type=${msgType} fromMe=${fromMe} wasSentByApi=${wasSent} owner=${payload.owner} chatid=${chatId}`);
+    }
+
     // Processar em background (nao bloquear resposta)
     processUAZAPIWebhook(payload).catch((err) =>
       console.error('[webhook/uazapi] Erro ao processar:', err),
@@ -99,30 +108,9 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
     return;
   }
 
-  // Evento de chamada — registrar tentativa
+  // TODO: reativar registro de chamadas quando softphone/chamadas voltar
+  // Evento de chamada — ignorar por enquanto
   if (isCallEvent(payload)) {
-    const call = parseUAZAPICall(payload);
-    if (!call) return;
-
-    // Upsert conversa para ter referencia
-    const conversaResult = await pool.query(
-      `SELECT atd.upsert_conversa($1, $2, $3, $4, NULL, NULL, $5) AS id`,
-      [call.wa_chatid, 'individual', call.categoria, 'uazapi', call.caller_phone],
-    );
-    const conversaId = conversaResult.rows[0].id;
-
-    // Registrar chamada como tentativa
-    const chamadaResult = await pool.query(
-      `INSERT INTO atd.chamadas (conversa_id, wa_chatid, origem, direcao, caller_number, called_number, status)
-       VALUES ($1, $2, 'whatsapp-tentativa', 'recebida', $3, $4, 'missed')
-       RETURNING *`,
-      [conversaId, call.wa_chatid, call.caller_phone, call.owner],
-    );
-
-    sseManager.broadcast({
-      type: 'chamada_nova',
-      data: { chamada: chamadaResult.rows[0] },
-    });
     return;
   }
 
