@@ -94,8 +94,13 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             case 'reaction':
               conteudo = msg.reaction?.emoji || null;
               break;
+            case 'button':
+              // Resposta de botao de template Meta (confirmacao agendamento)
+              // msg.button.text = titulo do botao, msg.button.payload = payload
+              conteudo = msg.button?.text || msg.button?.payload || null;
+              break;
             case 'interactive':
-              // Resposta de botao interativo (confirmacao agendamento)
+              // Resposta de botao interativo (API interactive message)
               if (msg.interactive?.button_reply) {
                 conteudo = msg.interactive.button_reply.title;
               } else if (msg.interactive?.list_reply) {
@@ -118,6 +123,12 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             metadata.button_reply_id = buttonReplyId;
             metadata.button_reply_title = msg.interactive.button_reply.title;
           }
+          // Botao de template Meta: msg.button.text / msg.button.payload
+          if (msg.type === 'button' && msg.button) {
+            buttonReplyId = msg.button.payload || msg.button.text || '';
+            metadata.button_reply_id = buttonReplyId;
+            metadata.button_reply_title = msg.button.text;
+          }
           if (msg.context?.id) {
             contextMessageId = msg.context.id;
             metadata.context_message_id = contextMessageId;
@@ -134,7 +145,7 @@ export function parse360DialogPayload(payload: WebhookPayload360Dialog): {
             from_me: false,
             sender_phone: msg.from,
             sender_name: senderName,
-            tipo_mensagem: msg.type === 'interactive' ? 'text' : msg.type,
+            tipo_mensagem: (msg.type === 'interactive' || msg.type === 'button') ? 'text' : msg.type,
             conteudo,
             media_url: null, // Media precisa ser baixada via API separada
             media_mimetype,

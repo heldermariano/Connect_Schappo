@@ -317,6 +317,7 @@ export interface WebhookPayload360Dialog {
           sticker?: { id: string; mime_type: string };
           reaction?: { message_id: string; emoji: string };
           interactive?: { type: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string } };
+          button?: { text: string; payload?: string };
           context?: { from?: string; id?: string };
         }>;
         contacts?: Array<{
