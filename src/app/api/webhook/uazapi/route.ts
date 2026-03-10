@@ -24,6 +24,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok' });
     }
 
+    // Log de debug para rastrear todos os eventos recebidos
+    const chatId = payload.chat?.wa_chatid || '';
+    const evtType = payload.EventType || '?';
+    const owner = payload.owner || '?';
+    const fromMe = payload.message?.fromMe;
+    const wasSentByApi = payload.message?.wasSentByApi;
+    console.log(`[webhook/uazapi] RECV event=${evtType} owner=${owner} chatid=${chatId} fromMe=${fromMe} wasSentByApi=${wasSentByApi}`);
+
     // Processar em background (nao bloquear resposta)
     processUAZAPIWebhook(payload).catch((err) =>
       console.error('[webhook/uazapi] Erro ao processar:', err),
