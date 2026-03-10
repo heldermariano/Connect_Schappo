@@ -7,18 +7,15 @@ import CalendarioMedico from '@/components/agenda/CalendarioMedico';
 
 const MENSAGEM_PADRAO = `Clínica Schappo - Confirmação de Agendamento
 
-Gostaríamos de confirmar seu agendamento:
-- Data: {data}
-- Médico(a): {nome_medico}
-- Horário: {hora}
-- Procedimento: {procedimento}
+Ola, {nome_paciente}!
 
-Por favor, responda:
-1 - Confirmo meu agendamento
-2 - Preciso remarcar
+• Data: {data}
+• Horario: {hora}
+• Medico(a): {nome_medico}
+• Procedimento: {procedimento}
 
-Em caso de dúvidas, entre em contato.
-Clínica Schappo - (61) 3345-5701`;
+Por favor, selecione uma opcao abaixo:
+[Confirmar] [Desmarcar] [Reagendar]`;
 
 function getAmanha(): string {
   const d = new Date();
@@ -591,13 +588,18 @@ export default function ConfirmacaoPage() {
                 </div>
               </div>
 
-              <label className="block text-xs text-gray-500 mb-1">Mensagem</label>
+              <label className="block text-xs text-gray-500 mb-1">
+                Mensagem (Template Meta aprovado — canal Geral 556133455701)
+              </label>
               <textarea
                 value={mensagem}
-                onChange={(e) => { setMensagem(e.target.value); setTemplateSelecionado(null); }}
+                readOnly
                 rows={12}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:border-schappo-500 resize-none font-mono"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 resize-none font-mono cursor-default"
               />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Template aprovado pela Meta com botoes interativos. O paciente recebe botoes para Confirmar, Desmarcar ou Reagendar.
+              </p>
 
               {/* Salvar como template */}
               {!showSalvarTemplate ? (

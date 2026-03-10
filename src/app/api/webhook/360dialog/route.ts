@@ -113,31 +113,49 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
       }
     }
 
-    // Auto-atualizar confirmacao por texto (respostas "1", "2", "confirmo", etc.)
+    // Auto-atualizar confirmacao por texto (respostas "1...", "2...", "confirmo", etc.)
     if (!parsed.from_me && parsed.telefone && parsed.conteudo) {
       const textoResposta = parsed.conteudo.trim().toLowerCase();
-      if (textoResposta === '1' || textoResposta === '2' || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar') {
+      if (textoResposta.startsWith('1') || textoResposta.startsWith('2') || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar') {
         let novoStatus: string | null = null;
-        if (textoResposta === '1' || textoResposta === 'confirmo' || textoResposta === 'confirmar') novoStatus = 'confirmado';
-        else if (textoResposta === '2' || textoResposta === 'remarcar' || textoResposta === 'reagendar') novoStatus = 'reagendar';
+        if (textoResposta.startsWith('1') || textoResposta === 'confirmo' || textoResposta === 'confirmar') novoStatus = 'confirmado';
+        else if (textoResposta.startsWith('2') || textoResposta === 'remarcar' || textoResposta === 'reagendar') novoStatus = 'reagendar';
         else if (textoResposta === 'desmarcar' || textoResposta === 'cancelar') novoStatus = 'desmarcou';
 
         if (novoStatus) {
           try {
+            // Comparar com e sem 9o digito (normalize pode diferir entre providers)
+            let tel = parsed.telefone.replace(/\D/g, '');
+            let telAlt = tel;
+            if (tel.length === 13 && tel.startsWith('55')) {
+              telAlt = tel.substring(0, 4) + tel.substring(5);
+            } else if (tel.length === 12 && tel.startsWith('55')) {
+              telAlt = tel.substring(0, 4) + '9' + tel.substring(4);
+            }
             const txtResult = await pool.query(
               `UPDATE atd.confirmacao_agendamento
                SET status = $1, respondido_at = NOW()
-               WHERE telefone_envio = $2
+               WHERE (telefone_envio = $2 OR telefone_envio = $3)
                  AND status = 'enviado'
                  AND enviado_at > NOW() - INTERVAL '7 days'
                RETURNING id, chave_agenda`,
-              [novoStatus, parsed.telefone],
+              [novoStatus, tel, telAlt],
             );
-            // Atualizar Konsyst
-            for (const row of txtResult.rows) {
-              atualizarStatusKonsyst(row.chave_agenda, novoStatus as 'confirmado' | 'desmarcou' | 'reagendar').catch(err =>
-                console.error(`[webhook/360dialog] Erro Konsyst chave=${row.chave_agenda}:`, err),
-              );
+            if (txtResult.rowCount && txtResult.rowCount > 0) {
+              console.log(`[webhook/360dialog] Confirmacao auto-atualizada: telefone=${parsed.telefone} status=${novoStatus}`);
+              // Atualizar Konsyst
+              for (const row of txtResult.rows) {
+                atualizarStatusKonsyst(row.chave_agenda, novoStatus as 'confirmado' | 'desmarcou' | 'reagendar').catch(err =>
+                  console.error(`[webhook/360dialog] Erro Konsyst chave=${row.chave_agenda}:`, err),
+                );
+              }
+              // Broadcast SSE para atualizar pagina de confirmacao
+              sseManager.broadcast({
+                type: 'confirmacao_atualizada' as 'conversa_atualizada',
+                data: {
+                  confirmacoes: txtResult.rows.map(r => ({ id: r.id, chave_agenda: r.chave_agenda, status: novoStatus })),
+                } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+              });
             }
           } catch (err) {
             console.error('[webhook/360dialog] Erro ao atualizar confirmacao por texto:', err);
