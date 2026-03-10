@@ -9,6 +9,17 @@ export async function POST(request: NextRequest) {
   try {
     const payload: WebhookPayload360Dialog = await request.json();
 
+    // Debug: logar mensagens recebidas para rastrear tipos nao tratados
+    try {
+      for (const entry of payload.entry || []) {
+        for (const change of entry.changes || []) {
+          for (const msg of change.value?.messages || []) {
+            console.log(`[webhook/360dialog] RECV from=${msg.from} type=${msg.type} id=${msg.id} hasContext=${!!msg.context}`);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
     // Processar em background
     process360Webhook(payload).catch((err) =>
       console.error('[webhook/360dialog] Erro ao processar:', err),
