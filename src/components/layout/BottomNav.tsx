@@ -14,7 +14,8 @@ interface BottomNavProps {
 
 const PRIMARY_ITEMS = [
   { href: '/conversas', label: 'Conversas', icon: 'chat' },
-  { href: '/chamadas', label: 'Chamadas', icon: 'phone' },
+  // TODO: reativar quando softphone voltar
+  // { href: '/chamadas', label: 'Chamadas', icon: 'phone' },
   { href: '/contatos', label: 'Contatos', icon: 'contacts' },
   { href: '/confirmacao', label: 'Confirmar', icon: 'confirmacao' },
 ];

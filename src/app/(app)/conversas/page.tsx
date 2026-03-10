@@ -573,7 +573,7 @@ export default function ConversasPage() {
     return (
       <>
         <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
-        <CallAlert chamadas={activeCalls} />
+        {/* TODO: reativar CallAlert quando softphone voltar */}
         <div className="flex flex-col flex-1 min-h-0 bg-white dark:bg-black">
           <CategoryFilter
             selected={filtro}
@@ -621,7 +621,7 @@ export default function ConversasPage() {
   return (
     <>
       <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
-      <CallAlert chamadas={activeCalls} />
+      {/* TODO: reativar CallAlert quando softphone voltar */}
       <div className="flex flex-1 min-h-0">
         {/* Painel esquerdo: filtros + lista */}
         <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 bg-white dark:bg-black">
