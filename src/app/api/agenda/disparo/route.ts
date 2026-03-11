@@ -11,34 +11,11 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Novo endereco da clinica — enviar localizacao apos confirmacao
-const CLINICA_LOCATION = {
-  latitude: -15.826413,
-  longitude: -47.9305946,
-  name: 'Clínica Schappo',
-  address: 'SHLS 716 SUL BLOCO F SALA 208, CENTRO CLÍNICO OSWALDO CRUZ, ASA SUL',
-  observacao: 'Segue o novo endereço de atendimento:',
-};
-
-// Andrea Schappo: enviar localizacao apenas nas segundas-feiras
-// Todos os outros medicos: enviar localizacao sempre
-function shouldSendLocation(nomeMedico: string, dataAgenda: string): boolean {
-  const nomeUpper = nomeMedico.toUpperCase();
-  const isAndrea = nomeUpper.includes('ANDREA') && nomeUpper.includes('SCHAPPO');
-  if (isAndrea) {
-    const date = new Date(dataAgenda + 'T12:00:00');
-    return date.getDay() === 1;
-  }
-  return true;
-}
-
 // Template aprovado pela Meta (360Dialog)
 const TEMPLATE_NAME = 'confirmacao_agendamento';
 const TEMPLATE_LANG = 'pt_BR';
 
 // Envia template de confirmacao via 360Dialog
-// Template: Ola, {{1}}! • Data: {{2}} • Horario: {{3}} • Medico(a): {{4}} • Procedimento: {{5}}
-// Botoes: Confirmar | Desmarcar | Reagendar
 async function sendTemplate360(
   to: string,
   params: { nome_paciente: string; data: string; hora: string; nome_medico: string; procedimento: string },
@@ -89,69 +66,6 @@ async function sendTemplate360(
   }
 }
 
-// Envia texto via 360Dialog
-async function sendText360(to: string, text: string): Promise<{ success: boolean; messageId?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!url || !apiKey) return { success: false };
-
-  try {
-    const res = await fetch(`${url}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: text },
-      }),
-    });
-    if (!res.ok) return { success: false };
-    const data = await res.json();
-    return { success: true, messageId: data.messages?.[0]?.id };
-  } catch {
-    return { success: false };
-  }
-}
-
-// Envia localizacao via 360Dialog
-async function sendLocation360(
-  to: string,
-  lat: number,
-  lng: number,
-  name: string,
-  address: string,
-): Promise<{ success: boolean; messageId?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!url || !apiKey) return { success: false };
-
-  try {
-    const res = await fetch(`${url}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'location',
-        location: { latitude: lat, longitude: lng, name, address },
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[disparo/360dialog] Erro localizacao:', res.status, body);
-      return { success: false };
-    }
-    const data = await res.json();
-    return { success: true, messageId: data.messages?.[0]?.id };
-  } catch {
-    return { success: false };
-  }
-}
-
-// Owner do canal geral (360Dialog)
-const OWNER_GERAL = '556133455701';
-
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -160,6 +74,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { chaves, mensagem, medico_id, data } = await request.json();
+    // mensagem param kept for API compat but template is fixed
 
     if (!chaves || !Array.isArray(chaves) || chaves.length === 0) {
       return NextResponse.json({ error: 'chaves eh obrigatorio (array)' }, { status: 400 });
@@ -247,14 +162,13 @@ export async function POST(request: NextRequest) {
       const dataFormatada = new Date(data + 'T12:00:00').toLocaleDateString('pt-BR');
       const hora = (agenda.des_hora as string) || '';
       const procedimento = (agenda.des_procedimento as string) || '';
-
-      // Texto renderizado para exibicao local no painel (estrutura do template Meta aprovado)
       const primeiroNome = pacienteNome.split(' ')[0];
-      const textoLocal = `Clínica Schappo - Confirmação de Agendamento\n\nOla, ${primeiroNome}!\n\n• Data: ${dataFormatada}\n• Horario: ${hora}\n• Medico(a): ${nomeMedico}\n• Procedimento: ${procedimento}\n\nPor favor, selecione uma opcao abaixo:\n[Confirmar] [Desmarcar] [Reagendar]`;
+
+      // Texto local para exibicao no painel (espelho do template Meta)
+      const textoLocal = `Clínica Schappo - Confirmação de Agendamento\n\nOlá, ${primeiroNome}!\n\n• Data: ${dataFormatada}\n• Horário: ${hora}\n• Médico(a): ${nomeMedico}\n• Procedimento: ${procedimento}\n\nPor favor, selecione uma opção abaixo:\n[Confirmar] [Desmarcar] [Reagendar]`;
 
       // Enviar template via 360Dialog (numero geral: 556133455701)
       try {
-        const primeiroNome = pacienteNome.split(' ')[0];
         const sendResult = await sendTemplate360(telefoneWhatsapp, {
           nome_paciente: primeiroNome,
           data: dataFormatada,
@@ -341,91 +255,6 @@ export async function POST(request: NextRequest) {
           }
         } catch (regErr) {
           console.error(`[disparo] Erro ao registrar no painel chave=${chave}:`, regErr);
-        }
-
-        // Enviar localizacao do novo endereco apos confirmacao
-        const nomeMedicoFull = (agenda.nom_medico as string) || (agenda.nom_guerra as string) || '';
-        if (shouldSendLocation(nomeMedicoFull, data)) {
-          try {
-            // Enviar observacao antes da localizacao via 360Dialog
-            await sleep(1500);
-            const obsResult = await sendText360(telefoneWhatsapp, CLINICA_LOCATION.observacao);
-            if (obsResult.success) {
-              console.log(`[disparo] Observacao enviada chave=${chave}`);
-            } else {
-              console.warn(`[disparo] Observacao falhou chave=${chave} (sem sessao 360Dialog?)`);
-            }
-
-            await sleep(1500);
-            const locResult = await sendLocation360(
-              telefoneWhatsapp,
-              CLINICA_LOCATION.latitude,
-              CLINICA_LOCATION.longitude,
-              CLINICA_LOCATION.name,
-              CLINICA_LOCATION.address,
-            );
-            if (locResult.success) {
-              console.log(`[disparo] Localizacao enviada chave=${chave} to=${telefoneWhatsapp}`);
-
-              // Registrar localizacao no painel de conversas
-              try {
-                const waChatId = telefoneWhatsapp + '@s.whatsapp.net';
-                const conversaLocRes = await pool.query(
-                  `SELECT atd.upsert_conversa($1, $2, $3, $4, $5, NULL, $6, NULL) AS id`,
-                  [waChatId, 'individual', 'geral', '360dialog', pacienteNome, telefoneWhatsapp],
-                );
-                const conversaLocId = conversaLocRes.rows[0].id;
-                const locConteudo = `📍 ${CLINICA_LOCATION.name}\n${CLINICA_LOCATION.address}`;
-                const locMeta = JSON.stringify({
-                  latitude: CLINICA_LOCATION.latitude,
-                  longitude: CLINICA_LOCATION.longitude,
-                  name: CLINICA_LOCATION.name,
-                  address: CLINICA_LOCATION.address,
-                  source: 'confirmacao_agendamento_localizacao',
-                  provider: '360dialog',
-                });
-                const locMsgId = locResult.messageId || `loc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                const locMsgRes = await pool.query(
-                  `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) AS id`,
-                  [conversaLocId, locMsgId, true, null, null, 'location', locConteudo, null, null, null, locMeta, null],
-                );
-                const savedLocMsgId = locMsgRes.rows[0].id;
-                if (savedLocMsgId && savedLocMsgId > 0) {
-                  await pool.query(
-                    `UPDATE atd.conversas SET ultima_msg_from_me = TRUE WHERE id = $1`,
-                    [conversaLocId],
-                  );
-                  const [locMsgData, locConvData] = await Promise.all([
-                    pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [savedLocMsgId]),
-                    pool.query(`SELECT * FROM atd.conversas WHERE id = $1`, [conversaLocId]),
-                  ]);
-                  if (locMsgData.rows[0]) {
-                    sseManager.broadcast({
-                      type: 'nova_mensagem',
-                      data: { conversa_id: conversaLocId, mensagem: locMsgData.rows[0] },
-                    });
-                  }
-                  if (locConvData.rows[0]) {
-                    sseManager.broadcast({
-                      type: 'conversa_atualizada',
-                      data: {
-                        conversa_id: conversaLocId,
-                        ultima_msg: locConteudo.substring(0, 200),
-                        nao_lida: locConvData.rows[0].nao_lida,
-                        ultima_msg_from_me: true,
-                      },
-                    });
-                  }
-                }
-              } catch (locRegErr) {
-                console.error(`[disparo] Erro ao registrar localizacao no painel chave=${chave}:`, locRegErr);
-              }
-            } else {
-              console.warn(`[disparo] Localizacao falhou chave=${chave} (sem sessao 360Dialog?)`);
-            }
-          } catch (locErr) {
-            console.error(`[disparo] Erro envio localizacao chave=${chave}:`, locErr);
-          }
         }
 
         detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'enviado' });
