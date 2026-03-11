@@ -340,8 +340,11 @@ export interface WebhookPayload360Dialog {
 
 export const OWNER_CATEGORY_MAP: Record<string, string> = {
   '556192894339': 'eeg',
+  '5561992894339': 'eeg',     // variante com 9o digito
   '556183008973': 'recepcao',
+  '5561983008973': 'recepcao', // variante com 9o digito
   '556133455701': 'geral',
+  '5561933455701': 'geral',   // variante com 9o digito
 };
 
 // Mapeamento Categoria -> Owner (numero que envia)
@@ -354,8 +357,10 @@ export const CATEGORIA_OWNER: Record<string, string> = {
 // Mapeamento Owner -> Token UAZAPI (seleciona instancia correta)
 // UAZAPI_INSTANCE_TOKENS: token_eeg,token_recepcao (mesma ordem dos owners)
 const OWNER_TOKEN_MAP: Record<string, number> = {
-  '556192894339': 0, // eeg = primeiro token
-  '556183008973': 1, // recepcao = segundo token
+  '556192894339': 0,  // eeg = primeiro token
+  '5561992894339': 0, // eeg variante com 9o digito
+  '556183008973': 1,  // recepcao = segundo token
+  '5561983008973': 1, // recepcao variante com 9o digito
 };
 
 /**
