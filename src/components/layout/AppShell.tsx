@@ -144,12 +144,12 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   }, [setOperatorStatus]);
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen overflow-hidden">
       {['pausa', 'almoco', 'cafe', 'lanche'].includes(operatorStatus) && (
         <PauseScreen status={operatorStatus as 'pausa' | 'almoco' | 'cafe' | 'lanche'} onResume={handleResume} />
       )}
       <Sidebar />
-      <div className={`flex-1 flex flex-col min-w-0 ${isMobile ? 'pb-bottom-nav' : ''}`}>
+      <div className={`flex-1 w-0 flex flex-col min-h-0 overflow-hidden ${isMobile ? 'pb-bottom-nav' : ''}`}>
         {children}
       </div>
 

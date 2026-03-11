@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Schappo — Logo Final (Proposta 2)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Sora', sans-serif;
+    background: #F5F5F5;
+    color: #1A1A1A;
+    padding: 40px;
+  }
+
+  h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .sub { color: #999; font-size: 13px; margin-bottom: 48px; }
+
+  .section {
+    font-size: 13px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 56px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #E0E0E0;
+  }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1100px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; max-width: 1100px; }
+  .full { grid-column: 1 / -1; }
+
+  .card {
+    border-radius: 16px;
+    padding: 48px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    position: relative;
+  }
+
+  .tag {
+    position: absolute;
+    top: 14px;
+    left: 18px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    opacity: 0.4;
+  }
+
+  .use-tag {
+    position: absolute;
+    bottom: 14px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    opacity: 0.35;
+  }
+
+  .bg-white { background: #fff; border: 1px solid #E5E5E5; }
+  .bg-dark { background: #111827; }
+  .bg-orange { background: #F58220; }
+  .bg-gradient { background: linear-gradient(135deg, #F58220 0%, #E06D0A 100%); }
+  .bg-light-orange { background: #FFF7ED; border: 1px solid #FED7AA; }
+
+  /* ====== LOGO PRINCIPAL ====== */
+  .logo-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-main .text {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1;
+  }
+
+  .logo-main .connect {
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-main .schappo {
+    font-weight: 300;
+    font-size: 26px;
+    letter-spacing: -0.5px;
+  }
+
+  /* ====== LOGO STACKED ====== */
+  .logo-stacked {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-stacked .text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    gap: 3px;
+  }
+
+  .logo-stacked .connect {
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-stacked .schappo {
+    font-weight: 300;
+    font-size: 13px;
+    letter-spacing: 3.5px;
+    text-transform: uppercase;
+  }
+
+  /* ====== LOGO COMPACT ====== */
+  .logo-compact {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-compact .text {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .logo-compact .connect {
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-compact .schappo {
+    font-weight: 300;
+    font-size: 18px;
+    letter-spacing: -0.3px;
+  }
+
+  /* ====== SIMULAÇÕES ====== */
+  .sim-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #F58220;
+    border-radius: 12px;
+    padding: 14px 24px;
+    width: 100%;
+  }
+
+  .sim-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .sim-header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .sim-search {
+    background: rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+  }
+
+  .sim-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .sim-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ADE80;
+    border: 2px solid #F58220;
+    margin-left: -12px;
+    margin-bottom: -16px;
+    z-index: 1;
+  }
+
+  .sim-sidebar {
+    background: #111827;
+    border-radius: 12px;
+    padding: 20px 16px;
+    width: 240px;
+  }
+
+  .sim-sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .sim-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+    font-size: 14px;
+  }
+
+  .sim-nav-active {
+    background: rgba(245,130,32,0.12);
+    color: #F58220;
+    font-weight: 600;
+  }
+
+  .sim-nav-inactive {
+    color: #6B7280;
+    font-weight: 500;
+  }
+
+  .sim-badge {
+    margin-left: auto;
+    background: #F58220;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+
+  .sim-login {
+    background: linear-gradient(135deg, #F58220 0%, #E06D0A 100%);
+    border-radius: 16px;
+    padding: 60px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    width: 100%;
+  }
+
+  .sim-login-card {
+    background: white;
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  }
+
+  .sim-input {
+    background: #F3F4F6;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: #9CA3AF;
+    font-family: 'Sora';
+  }
+
+  .sim-btn {
+    background: #F58220;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'Sora';
+    cursor: pointer;
+    margin-top: 4px;
+  }
+
+  .sim-login-footer {
+    color: rgba(255,255,255,0.5);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Connect Schappo — Logo Final</h1>
+<p class="sub">Proposta 2 · Todas as variações e aplicações</p>
+
+<!-- ============================== -->
+<!-- VARIAÇÃO HORIZONTAL (INLINE)   -->
+<!-- ============================== -->
+<p class="section">Variação 1 — Horizontal (Inline)</p>
+<div class="grid">
+
+  <div class="card bg-white">
+    <span class="tag" style="color:#999;">Fundo claro</span>
+    <div class="logo-main">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#1A1A1A;">Connect</span>
+        <span class="schappo" style="color:#6B6B6B;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-dark">
+    <span class="tag" style="color:#666;">Fundo escuro</span>
+    <div class="logo-main">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#FFFFFF;">Connect</span>
+        <span class="schappo" style="color:#9CA3AF;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-orange">
+    <span class="tag" style="color:rgba(255,255,255,0.5);">Fundo laranja</span>
+    <div class="logo-main">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="white"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="#F58220" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="#F58220" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#FFFFFF;">Connect</span>
+        <span class="schappo" style="color:rgba(255,255,255,0.7);">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-light-orange">
+    <span class="tag" style="color:#C2610A;">Fundo bege</span>
+    <div class="logo-main">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#C2610A;">Connect</span>
+        <span class="schappo" style="color:#9A3412;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================== -->
+<!-- VARIAÇÃO STACKED               -->
+<!-- ============================== -->
+<p class="section">Variação 2 — Stacked (ícone + texto empilhado)</p>
+<div class="grid">
+
+  <div class="card bg-white">
+    <span class="tag" style="color:#999;">Fundo claro</span>
+    <div class="logo-stacked">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#F58220;">Connect</span>
+        <span class="schappo" style="color:#6B6B6B;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-dark">
+    <span class="tag" style="color:#666;">Fundo escuro</span>
+    <div class="logo-stacked">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#F58220;">Connect</span>
+        <span class="schappo" style="color:#6B7280;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================== -->
+<!-- VARIAÇÃO COMPACTA / SIDEBAR    -->
+<!-- ============================== -->
+<p class="section">Variação 3 — Compacta (sidebar / mobile)</p>
+<div class="grid">
+
+  <div class="card bg-white">
+    <span class="tag" style="color:#999;">Sidebar claro</span>
+    <div class="logo-compact">
+      <svg width="32" height="32" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#1A1A1A;">Connect</span>
+        <span class="schappo" style="color:#9CA3AF;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-dark">
+    <span class="tag" style="color:#666;">Sidebar escuro</span>
+    <div class="logo-compact">
+      <svg width="32" height="32" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+        <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="text">
+        <span class="connect" style="color:#FFFFFF;">Connect</span>
+        <span class="schappo" style="color:#6B7280;">Schappo</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================== -->
+<!-- ÍCONE SOZINHO / FAVICON        -->
+<!-- ============================== -->
+<p class="section">Ícone / Favicon</p>
+<div class="grid">
+  <div class="card bg-white full" style="min-height: 120px;">
+    <div style="display: flex; gap: 32px; align-items: center;">
+      <!-- 56px -->
+      <div style="text-align: center;">
+        <svg width="56" height="56" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="font-size: 10px; color: #999; margin-top: 6px;">56px</div>
+      </div>
+      <!-- 44px -->
+      <div style="text-align: center;">
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="font-size: 10px; color: #999; margin-top: 6px;">44px</div>
+      </div>
+      <!-- 32px -->
+      <div style="text-align: center;">
+        <svg width="32" height="32" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="4" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="font-size: 10px; color: #999; margin-top: 6px;">32px</div>
+      </div>
+      <!-- 16px -->
+      <div style="text-align: center;">
+        <svg width="16" height="16" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="44" height="44" rx="10" fill="#F58220"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L27 26 L32 36 L37 24" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="font-size: 10px; color: #999; margin-top: 6px;">16px (tab)</div>
+      </div>
+      <!-- Circular -->
+      <div style="text-align: center; margin-left: 16px; padding-left: 16px; border-left: 1px solid #E5E5E5;">
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="22" cy="22" r="21" fill="#F58220"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="font-size: 10px; color: #999; margin-top: 6px;">Alternativa circular</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- SIMULAÇÃO: HEADER              -->
+<!-- ============================== -->
+<p class="section">Simulação — Header do Painel</p>
+<div class="grid">
+  <div class="card full" style="padding: 0; min-height: auto; background: transparent;">
+    <div class="sim-header">
+      <div class="sim-header-left">
+        <svg width="36" height="36" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="42" height="42" rx="10" fill="white"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="#F58220" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="#F58220" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="line-height: 1;">
+          <span style="font-weight: 700; font-size: 17px; color: white;">Connect</span>
+          <span style="font-weight: 300; font-size: 17px; color: rgba(255,255,255,0.7);">Schappo</span>
+        </div>
+      </div>
+      <div class="sim-header-right">
+        <div class="sim-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Buscar contato...
+        </div>
+        <div style="display:flex; align-items:center;">
+          <div class="sim-avatar">H</div>
+          <div class="sim-status"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- SIMULAÇÃO: SIDEBAR             -->
+<!-- ============================== -->
+<p class="section">Simulação — Sidebar</p>
+<div class="grid">
+  <div class="card" style="padding: 0; min-height: auto; background: transparent; justify-content: flex-start;">
+    <div class="sim-sidebar">
+      <div class="sim-sidebar-logo">
+        <svg width="30" height="30" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="42" height="42" rx="10" fill="#F58220"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="white" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="line-height: 1;">
+          <span style="font-weight: 700; font-size: 15px; color: white;">Connect</span>
+          <span style="font-weight: 300; font-size: 15px; color: #6B7280;">Schappo</span>
+        </div>
+      </div>
+      <div class="sim-nav-item sim-nav-active">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F58220" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Conversas
+        <span class="sim-badge">12</span>
+      </div>
+      <div class="sim-nav-item sim-nav-inactive">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Chamadas
+      </div>
+      <div class="sim-nav-item sim-nav-inactive">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Contatos
+      </div>
+    </div>
+  </div>
+
+  <!-- Simulação: Login -->
+  <div class="card" style="padding: 0; min-height: auto; background: transparent;">
+    <div class="sim-login" style="border-radius: 12px; padding: 40px 24px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <svg width="48" height="48" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="42" height="42" rx="10" fill="white"/>
+          <path d="M22 10 C14 10 9 16 9 22 C9 28 14 34 22 34" stroke="#F58220" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+          <path d="M22 34 L26 28 L29 36 L32 22 L35 30 L37 26" stroke="#F58220" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <div style="line-height: 1;">
+          <span style="font-weight: 700; font-size: 24px; color: white;">Connect</span>
+          <span style="font-weight: 300; font-size: 24px; color: rgba(255,255,255,0.7);">Schappo</span>
+        </div>
+      </div>
+      <div class="sim-login-card">
+        <div style="text-align: center; margin-bottom: 8px;">
+          <div style="font-weight: 700; font-size: 18px; color: #1A1A1A;">Entrar</div>
+          <div style="font-size: 13px; color: #9CA3AF; margin-top: 4px;">Acesse o painel de atendimento</div>
+        </div>
+        <div class="sim-input">renata</div>
+        <div class="sim-input">••••••••</div>
+        <div class="sim-btn" style="text-align: center;">Entrar</div>
+      </div>
+      <div class="sim-login-footer">Clínica Schappo · Brasília</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- GUIA DE USO                    -->
+<!-- ============================== -->
+<div style="margin-top: 56px; padding: 28px; background: white; border-radius: 16px; border: 1px solid #E5E5E5; max-width: 700px;">
+  <p style="font-weight: 700; font-size: 16px; margin-bottom: 16px; color: #F58220;">📐 Guia de Uso</p>
+  <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+    <tr style="border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 10px 0; font-weight: 600;">Tela de login</td>
+      <td style="padding: 10px 0; color: #6B6B6B;">Variação 1 (inline) sobre fundo gradiente laranja, ícone branco</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 10px 0; font-weight: 600;">Header do painel</td>
+      <td style="padding: 10px 0; color: #6B6B6B;">Variação 3 (compacta) sobre fundo laranja, ícone branco</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 10px 0; font-weight: 600;">Sidebar</td>
+      <td style="padding: 10px 0; color: #6B6B6B;">Variação 3 (compacta) sobre fundo escuro #111827</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 10px 0; font-weight: 600;">Favicon (aba)</td>
+      <td style="padding: 10px 0; color: #6B6B6B;">Ícone quadrado arredondado, C + onda</td>
+    </tr>
+    <tr style="border-bottom: 1px solid #F3F4F6;">
+      <td style="padding: 10px 0; font-weight: 600;">Fonte</td>
+      <td style="padding: 10px 0; color: #6B6B6B;">Sora — "Connect" bold 700, "Schappo" light 300</td>
+    </tr>
+    <tr>
+      <td style="padding: 10px 0; font-weight: 600;">Cores</td>
+      <td style="padding: 10px 0; color: #6B6B6B;">
+        <span style="display:inline-block;width:14px;height:14px;background:#F58220;border-radius:3px;vertical-align:middle;"></span> #F58220 · 
+        <span style="display:inline-block;width:14px;height:14px;background:#1A1A1A;border-radius:3px;vertical-align:middle;"></span> #1A1A1A · 
+        <span style="display:inline-block;width:14px;height:14px;background:#6B6B6B;border-radius:3px;vertical-align:middle;"></span> #6B6B6B · 
+        <span style="display:inline-block;width:14px;height:14px;background:#111827;border-radius:3px;vertical-align:middle;"></span> #111827
+      </td>
+    </tr>
+  </table>
+</div>
+
+</body>
+</html>

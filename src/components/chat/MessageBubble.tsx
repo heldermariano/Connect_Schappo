@@ -163,6 +163,15 @@ function cleanContent(conteudo: string | null, tipo: string): string | null {
   } catch {
     // Nao eh JSON valido, retornar como esta
   }
+  // JSON valido sem campos conhecidos — omitir para evitar JSON bruto quebrando layout
+  if (conteudo.startsWith('{') && conteudo.endsWith('}')) {
+    try {
+      JSON.parse(conteudo);
+      return null;
+    } catch {
+      // nao eh JSON, retornar normalmente
+    }
+  }
   return conteudo;
 }
 
@@ -273,7 +282,7 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
 
   return (
     <div
-      className={`group flex ${isMe ? 'justify-end' : 'justify-start'} mb-1`}
+      className={`group flex ${isMe ? 'justify-end' : 'justify-start'} mb-1 min-w-0 overflow-hidden`}
       onContextMenu={handleContextMenu}
     >
       {/* Mini-avatar para mensagens recebidas em grupos */}
@@ -286,7 +295,7 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
           />
         </div>
       )}
-      <div className={`relative max-w-[70%] min-w-[80px] ${hasReactions ? 'mb-3' : ''}`}>
+      <div className={`relative max-w-[70%] min-w-[80px] overflow-hidden ${hasReactions ? 'mb-3' : ''}`}>
       <div
         className={`rounded-lg px-3 py-2 ${
           isMe && mensagem.status === 'failed'
@@ -325,7 +334,7 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
 
         {/* Conteudo de texto com mencoes destacadas */}
         {textoLimpo && (
-          <p className="text-sm whitespace-pre-wrap break-words">
+          <p className="text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {textoLimpo.includes('@')
               ? renderTextWithMentions(textoLimpo, mencoesResolvidas)
               : textoLimpo}

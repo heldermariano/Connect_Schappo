@@ -1,0 +1,862 @@
+{
+  "name": "Whatsapp - 03 (Saida)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-outgoing",
+        "options": {}
+      },
+      "id": "060cc07b-d0c5-4200-a1f3-6e6b9d208596",
+      "name": "Webhook - Chatwoot Outgoing",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2016,
+        192
+      ],
+      "webhookId": "chatwoot-outgoing"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-OUTBOUND: PARSE & VALIDATE - V3\n// Corrigido para detectar mimeType incompleto\n// ============================================\n\nconst webhookData = $input.first().json;\nconst webhook = webhookData.body || webhookData;\n\nif (webhook.event && webhook.event !== 'message_created') {\n  return [{ json: { skip: true, reason: `Evento ignorado: ${webhook.event}` } }];\n}\n\n// ============================================\n// FILTROS\n// ============================================\n\nif (webhook.private === true) {\n  return [{ json: { skip: true, reason: 'Nota privada' } }];\n}\n\nif (webhook.message_type !== 'outgoing') {\n  return [{ json: { skip: true, reason: `Tipo ignorado: ${webhook.message_type}` } }];\n}\n\nif (webhook.sender?.type === 'agent_bot') {\n  return [{ json: { skip: true, reason: 'Bot' } }];\n}\n\nif (!webhook.conversation) {\n  return [{ json: { skip: true, reason: 'Sem conversation' } }];\n}\n\n// ============================================\n// EXTRAIR DADOS\n// ============================================\n\nconst conversation = webhook.conversation || {};\nconst contact = conversation.meta?.sender || {};\nconst contactInbox = conversation.contact_inbox || {};\nconst inbox = webhook.inbox || {};\n\n// ============================================\n// FUNÇÕES AUXILIARES\n// ============================================\n\nfunction isValidPhone(phone) {\n  if (!phone) return false;\n  const cleaned = phone.replace(/\\D/g, '');\n  return cleaned.length >= 10 && cleaned.length <= 15;\n}\n\nfunction isUUID(str) {\n  if (!str) return false;\n  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n  return uuidRegex.test(str);\n}\n\nfunction cleanPhone(phone) {\n  if (!phone) return '';\n  let cleaned = phone.replace(/\\D/g, '');\n  cleaned = cleaned.replace(/^\\+/, '');\n  return cleaned;\n}\n\n// ============================================\n// FUNÇÃO PARA DETECTAR TIPO DE MÍDIA\n// ============================================\n\nfunction detectMediaType(mimeType, fileName) {\n  if (!mimeType) return 'document';\n  \n  const mime = mimeType.toLowerCase();\n  \n  // Verificar se começa com tipo (com ou sem barra)\n  // Exemplos: \"audio/mpeg\", \"audio\", \"image/jpeg\", \"image\"\n  \n  if (mime.startsWith('image/') || mime === 'image') {\n    return 'image';\n  }\n  \n  if (mime.startsWith('audio/') || mime === 'audio') {\n    return 'audio';\n  }\n  \n  if (mime.startsWith('video/') || mime === 'video') {\n    return 'video';\n  }\n  \n  // Verificar por extensão do arquivo se mimeType não ajudar\n  if (fileName) {\n    const ext = fileName.split('.').pop()?.toLowerCase();\n    \n    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];\n    const audioExts = ['mp3', 'ogg', 'wav', 'aac', 'opus', 'm4a'];\n    const videoExts = ['mp4', 'avi', 'mov', 'mkv', 'webm', '3gp'];\n    \n    if (imageExts.includes(ext)) return 'image';\n    if (audioExts.includes(ext)) return 'audio';\n    if (videoExts.includes(ext)) return 'video';\n  }\n  \n  // Fallback para document\n  return 'document';\n}\n\n// ============================================\n// EXTRAIR TELEFONE DO DESTINATÁRIO\n// ============================================\n\nlet sourceId = contactInbox.source_id || '';\nlet recipientPhone = '';\nlet isGroup = false;\n\nif (sourceId.includes('@g.us')) {\n  isGroup = true;\n  recipientPhone = sourceId;\n} else {\n  if (!isUUID(sourceId) && isValidPhone(sourceId)) {\n    recipientPhone = cleanPhone(sourceId);\n  }\n  \n  if (!recipientPhone) {\n    const phoneNumber = contact.phone_number || '';\n    if (isValidPhone(phoneNumber)) {\n      recipientPhone = cleanPhone(phoneNumber);\n    }\n  }\n\n  if (!recipientPhone) {\n    const identifier = contact.identifier || '';\n    if (!isUUID(identifier) && isValidPhone(identifier)) {\n      recipientPhone = cleanPhone(identifier);\n    }\n  }\n  \n  if (!recipientPhone && contact.custom_attributes?.phone) {\n    const customPhone = contact.custom_attributes.phone;\n    if (isValidPhone(customPhone)) {\n      recipientPhone = cleanPhone(customPhone);\n    }\n  }\n}\n\nif (!recipientPhone) {\n  return [{\n    json: {\n      skip: true,\n      reason: 'Não foi possível extrair telefone do destinatário',\n      debug: {\n        sourceId: sourceId,\n        contactIdentifier: contact.identifier,\n        contactPhone: contact.phone_number,\n        isUUID: isUUID(sourceId)\n      }\n    }\n  }];\n}\n\n// ============================================\n// EXTRAIR ANEXOS/MÍDIA\n// ============================================\n\nconst attachments = webhook.attachments || [];\nconst hasMedia = attachments.length > 0;\n\nlet messageType = 'text';\nlet mediaUrl = null;\nlet fileName = null;\nlet mimeType = null;\nlet caption = '';\n\nif (hasMedia) {\n  const att = attachments[0];\n  mediaUrl = att.data_url;\n  fileName = att.file_name || 'arquivo';\n  mimeType = att.file_type || 'application/octet-stream';\n  \n  // Usar função melhorada de detecção\n  messageType = detectMediaType(mimeType, fileName);\n  \n  caption = webhook.content || '';\n}\n\n// ============================================\n// RETORNAR DADOS NORMALIZADOS\n// ============================================\n\nreturn [{\n  json: {\n    skip: false,\n    \n    // IDs Chatwoot\n    chatwootMessageId: webhook.id,\n    chatwootConversationId: conversation.id,\n    chatwootInboxId: inbox.id,\n    chatwootContactId: contact.id,\n    \n    // Remetente (agente)\n    senderName: webhook.sender?.available_name || webhook.sender?.name || 'Atendente',\n    senderId: webhook.sender?.id,\n    \n    // Destinatário\n    recipientPhone: recipientPhone,\n    sourceId: sourceId,\n    isGroup: isGroup,\n    contactName: contact.name || recipientPhone,\n    \n    // Mensagem\n    messageContent: webhook.content || '',\n    messageType: messageType,\n    \n    // Mídia\n    hasMedia: hasMedia,\n    mediaUrl: mediaUrl,\n    fileName: fileName,\n    mimeType: mimeType,\n    caption: caption,\n    \n    // Metadata\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "ab9ec734-b2a5-436a-9eaf-d85b00ec9f12",
+      "name": "Code - Parse & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1792,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "17d360a8-4c2c-41fa-95b3-92cf53f7ca46",
+      "name": "IF - Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1568,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-OUTBOUND: MAP INBOX TO PLATFORM - V2\n// Incluindo inboxes de GRUPOS\n// ============================================\n\nconst data = $input.first().json;\n\nconst INBOX_CONFIG = {\n  // ============================================\n  // RECEPÇÃO - Individual e Grupos\n  // ============================================\n  4: {\n    platform: 'uazapi',\n    inboxName: 'Recepção',\n    whatsappNumber: '556183008973',\n    baseUrl: 'https://schappo.uazapi.com',\n    token: '88950a6f-0824-4c1d-a4b6-023f4c66cb28'\n  },\n  10: {\n    platform: 'uazapi',\n    inboxName: 'Recepção Grupos',\n    whatsappNumber: '556183008973',  // Mesma instância da Recepção\n    baseUrl: 'https://schappo.uazapi.com',\n    token: '88950a6f-0824-4c1d-a4b6-023f4c66cb28'\n  },\n  \n  // ============================================\n  // EEG - Individual e Grupos\n  // ============================================\n  5: {\n    platform: 'uazapi',\n    inboxName: 'EEG',\n    whatsappNumber: '556192894339',\n    baseUrl: 'https://schappo.uazapi.com',\n    token: '6220a163-28da-40dc-ae09-cc2bdbe695f6'\n  },\n  11: {\n    platform: 'uazapi',\n    inboxName: 'EEG Grupos',\n    whatsappNumber: '556192894339',  // Mesma instância do EEG\n    baseUrl: 'https://schappo.uazapi.com',\n    token: '6220a163-28da-40dc-ae09-cc2bdbe695f6'\n  },\n  \n  // ============================================\n  // GERAL - 360Dialog\n  // ============================================\n  8: {\n    platform: '360dialog',\n    inboxName: 'Geral',\n    whatsappNumber: '556133455701',\n    baseUrl: 'https://waba-v2.360dialog.io',\n    token: 'U7BrceqxGJ4IQpsMRcOwJZbDAK'\n  }\n};\n\n// ============================================\n// BUSCAR CONFIGURAÇÃO DO INBOX\n// ============================================\n\nconst config = INBOX_CONFIG[data.chatwootInboxId];\n\nif (!config) {\n  return [{ \n    json: { \n      ...data, \n      skip: true, \n      reason: `Inbox ${data.chatwootInboxId} não configurado` \n    } \n  }];\n}\n\n// ============================================\n// PREPARAR TELEFONE PARA ENVIO\n// ============================================\n\nlet phoneForSend = data.recipientPhone.replace(/^\\+/, '');\n\n// Se for grupo e não tiver @g.us, adicionar\nif (data.isGroup && !phoneForSend.includes('@g.us')) {\n  phoneForSend = phoneForSend + '@g.us';\n}\n\n// ============================================\n// RETORNAR DADOS COM CONFIGURAÇÃO\n// ============================================\n\nreturn [{\n  json: {\n    ...data,\n    phoneForSend,\n    platform: config.platform,\n    inboxName: config.inboxName,\n    whatsappNumber: config.whatsappNumber,\n    baseUrl: config.baseUrl,\n    token: config.token\n  }\n}];"
+      },
+      "id": "65432495-24c0-4183-a538-46938df24c68",
+      "name": "Code - Map Inbox to Platform",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-media",
+              "leftValue": "={{ $json.hasMedia }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6a5c5266-e277-4881-a5f9-0fdac9befb8f",
+      "name": "IF - Tem Mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1104,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.mediaUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "0961dc01-d76e-4c06-b4ad-8e68a68b934b",
+      "name": "HTTP - Download Attachment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        112
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('Code - Map Inbox to Platform').first().json;\nconst binary = $input.first().binary;\nreturn [{ json: prevData, binary: binary }];"
+      },
+      "id": "a51ffe4e-6c59-44a8-ac7d-f16d40e0a2fc",
+      "name": "Code - Merge Mídia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "platform",
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "uazapi",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0c7d0c69-79aa-42c2-8f0e-04425e6352d1",
+      "name": "IF - Qual Plataforma?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -432,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "uaz-media",
+              "leftValue": "={{ $json.hasMedia }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "65163f86-0000-433a-93b0-9ebc7ad58429",
+      "name": "IF - UAZ Mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.baseUrl }}/send/text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.recipientPhone }}"
+            },
+            {
+              "name": "text",
+              "value": "=*{{ $json.senderName }}*: \n{{ $json.messageContent }}"
+            },
+            {
+              "name": "track_source",
+              "value": "chatwoot"
+            },
+            {
+              "name": "track_id",
+              "value": "={{ String($json.chatwootMessageId) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db358f58-622a-447b-8ba8-7918bbf67d04",
+      "name": "HTTP - UAZAPI Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        176
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.baseUrl }}/send/media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $json.uazapiPayload.number }}"
+            },
+            {
+              "name": "type",
+              "value": "={{ $json.uazapiPayload.type }}"
+            },
+            {
+              "name": "file",
+              "value": "={{ $json.uazapiPayload.file }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.uazapiPayload.text }}"
+            },
+            {
+              "name": "filename",
+              "value": "={{ $json.uazapiPayload.filename }}"
+            },
+            {
+              "name": "track_source",
+              "value": "chatwoot"
+            },
+            {
+              "name": "track_id",
+              "value": "={{ String($json.chatwootMessageId) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90be5142-117b-4605-90ca-9a340a65b0fc",
+      "name": "HTTP - UAZAPI Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        -32
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "360-media",
+              "leftValue": "={{ $json.hasMedia }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "39118987-356c-4f04-bff6-1df261b16edd",
+      "name": "IF - 360 Mídia?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -208,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://waba-v2.360dialog.io/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "D360-API-KEY",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload360) }}",
+        "options": {}
+      },
+      "id": "c540e9be-5235-43a8-9f3e-4df095b5fc75",
+      "name": "HTTP - 360Dialog Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        560
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-OUTBOUND: PREPARAR 360 MEDIA - V3\n// Com nome do remetente no caption\n// ============================================\n\nconst data = $input.first().json;\n\n// Função para detectar tipo de mídia\nfunction detectMediaType(mimeType, fileName) {\n  if (!mimeType) return 'document';\n  \n  const mime = mimeType.toLowerCase();\n  \n  // Verificar se começa com tipo (com ou sem barra)\n  if (mime.startsWith('image/') || mime === 'image') {\n    return 'image';\n  }\n  \n  if (mime.startsWith('audio/') || mime === 'audio') {\n    return 'audio';\n  }\n  \n  if (mime.startsWith('video/') || mime === 'video') {\n    return 'video';\n  }\n  \n  // Verificar por extensão do arquivo\n  if (fileName) {\n    const ext = fileName.split('.').pop()?.toLowerCase();\n    \n    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];\n    const audioExts = ['mp3', 'ogg', 'wav', 'aac', 'opus', 'm4a'];\n    const videoExts = ['mp4', 'avi', 'mov', 'mkv', 'webm', '3gp'];\n    \n    if (imageExts.includes(ext)) return 'image';\n    if (audioExts.includes(ext)) return 'audio';\n    if (videoExts.includes(ext)) return 'video';\n  }\n  \n  return 'document';\n}\n\n// Detectar tipo de mídia corretamente\nconst mediaType = detectMediaType(data.mimeType, data.fileName);\n\n// Construir payload conforme documentação 360Dialog\nconst payload = {\n  messaging_product: 'whatsapp',\n  recipient_type: 'individual',\n  to: data.phoneForSend,\n  type: mediaType\n};\n\n// Adicionar objeto de mídia com base no tipo\npayload[mediaType] = {\n  link: data.mediaUrl\n};\n\n// Adicionar caption se não for áudio\n// Áudio não suporta caption no WhatsApp API\nif (mediaType !== 'audio') {\n  const captionText = data.caption || data.messageContent || '';\n  \n  // Montar caption com nome do remetente\n  let finalCaption = '';\n  \n  if (data.senderName) {\n    if (captionText) {\n      finalCaption = '*' + data.senderName + '*:\\n' + captionText;\n    } else {\n      finalCaption = '*' + data.senderName + '*';\n    }\n  } else {\n    finalCaption = captionText;\n  }\n  \n  // Só adicionar caption se tiver conteúdo\n  if (finalCaption) {\n    payload[mediaType].caption = finalCaption;\n  }\n}\n\n// Adicionar filename se for documento\nif (mediaType === 'document' && data.fileName) {\n  payload[mediaType].filename = data.fileName;\n}\n\nreturn [{\n  json: {\n    ...data,\n    mediaType: mediaType,\n    payload360: payload\n  }\n}];"
+      },
+      "id": "b6651092-e0d5-44ce-b2ca-8f95d937e204",
+      "name": "Code - Preparar 360 Media",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://waba-v2.360dialog.io/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "D360-API-KEY",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload360) }}",
+        "options": {}
+      },
+      "id": "b737916f-3a7c-4425-b5ab-778b0d8d5c62",
+      "name": "HTTP - 360Dialog Media",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        352
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// PREPARAR PAYLOAD 360DIALOG TEXT\n// ============================================\n\nconst input = $input.first().json;\n\n// Montar corpo da mensagem com nome do agente\nlet bodyText = input.messageContent || '';\n\n// Adicionar nome do remetente se existir\nif (input.senderName) {\n  bodyText = '*' + input.senderName + '*:\\n' + bodyText;\n}\n\n// Montar payload conforme documentação oficial\nconst payload = {\n  messaging_product: \"whatsapp\",\n  recipient_type: \"individual\",\n  to: input.phoneForSend,\n  type: \"text\",\n  text: {\n    body: bodyText\n  }\n};\n\nreturn [{\n  json: {\n    ...input,\n    payload360: payload\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        560
+      ],
+      "id": "72a8abec-2d3d-4aa8-a211-0045e8aa5d57",
+      "name": "Code - Preparar 360Dialog"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-OUTBOUND: PREPARAR UAZAPI MEDIA\n// Prepara payload para envio de mídia via UAZAPI\n// ============================================\n\nconst data = $input.first().json;\n\n// ============================================\n// FUNÇÃO: Detectar tipo de mídia\n// ============================================\nfunction detectMediaType(mimeType, fileName) {\n  // Se mimeType existir, verificar\n  if (mimeType) {\n    const mime = mimeType.toLowerCase();\n    \n    if (mime.startsWith('image/') || mime === 'image') return 'image';\n    if (mime.startsWith('video/') || mime === 'video') return 'video';\n    if (mime.startsWith('audio/') || mime === 'audio') return 'audio';\n  }\n  \n  // Verificar por extensão do arquivo\n  if (fileName) {\n    const ext = fileName.split('.').pop()?.toLowerCase();\n    \n    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];\n    const audioExts = ['mp3', 'ogg', 'wav', 'aac', 'opus', 'm4a'];\n    const videoExts = ['mp4', 'avi', 'mov', 'mkv', 'webm', '3gp'];\n    \n    if (imageExts.includes(ext)) return 'image';\n    if (audioExts.includes(ext)) return 'audio';\n    if (videoExts.includes(ext)) return 'video';\n  }\n  \n  // Fallback\n  return 'document';\n}\n\n// ============================================\n// PREPARAR DADOS\n// ============================================\n\nconst mediaType = detectMediaType(data.mimeType, data.fileName);\n\n// Montar texto com nome do remetente\nlet messageText = '';\nconst caption = data.caption || data.messageContent || '';\n\nif (data.senderName) {\n  if (caption) {\n    messageText = '*' + data.senderName + '*:\\n' + caption;\n  } else {\n    messageText = '*' + data.senderName + '*';\n  }\n} else {\n  messageText = caption;\n}\n\n// Montar payload para UAZAPI\nconst uazapiPayload = {\n  number: data.phoneForSend || data.recipientPhone,\n  type: mediaType,\n  file: data.mediaUrl,\n  text: messageText,\n  filename: data.fileName || 'arquivo'\n};\n\n// ============================================\n// RETORNAR DADOS\n// ============================================\n\nreturn [{\n  json: {\n    ...data,\n    mediaType: mediaType,\n    uazapiPayload: uazapiPayload\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -32
+      ],
+      "id": "2d8fa442-e7b1-4ff3-94d3-f4fb4751ffb3",
+      "name": "Code - Preparar UAZAPI Media"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-OUTBOUND: PROCESSAR RESPOSTA DE ENVIO\n// Extrair messageId do WhatsApp e preparar\n// atualização do Chatwoot\n// ============================================\n\nconst response = $input.first().json;\n\n// Buscar dados originais que foram perdidos na resposta HTTP\nconst originalData = $('Code - Map Inbox to Platform').first().json;\n\nconst chatwootMessageId = originalData.chatwootMessageId || null;\nconst chatwootConversationId = originalData.chatwootConversationId || null;\n\n// Se não tem IDs do Chatwoot, não tem o que atualizar\nif (!chatwootMessageId || !chatwootConversationId) {\n  return [{ json: { skip: true, reason: 'Sem IDs do Chatwoot' } }];\n}\n\n// ============================================\n// EXTRAIR MESSAGE ID DA RESPOSTA\n// ============================================\nlet whatsappMessageId = null;\n\n// 360Dialog retorna: { messages: [{ id: \"wamid.xxx\" }] }\nif (response.messages && Array.isArray(response.messages) && response.messages[0]?.id) {\n  whatsappMessageId = input.messages[0].id;\n}\n\n// UAZAPI retorna: { messageid: \"3EB0xxx\", id: \"owner:3EB0xxx\" }\nif (!whatsappMessageId && response.messageid) {\n  whatsappMessageId = response.messageid;\n}\nif (!whatsappMessageId && response.id) {\n  whatsappMessageId = response.id;\n}\n\n// Fallback: procurar em qualquer campo que pareça um ID\nif (!whatsappMessageId) {\n  const str = JSON.stringify(response);\n  const wamidMatch = str.match(/wamid\\.[A-Za-z0-9+/=]+/);\n  if (wamidMatch) {\n    whatsappMessageId = wamidMatch[0];\n  }\n}\n\nif (!whatsappMessageId) {\n  console.log('⚠️ Não foi possível extrair messageId do WhatsApp');\n  return [{ json: { skip: true, reason: 'Sem messageId do WhatsApp', responseData: response } }];\n}\n\nconsole.log('✅ WhatsApp messageId:', whatsappMessageId);\nconsole.log('✅ Chatwoot message:', chatwootConversationId, '/', chatwootMessageId);\n\nreturn [{\n  json: {\n    skip: false,\n    chatwootMessageId: chatwootMessageId,\n    chatwootConversationId: chatwootConversationId,\n    whatsappMessageId: whatsappMessageId\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        320
+      ],
+      "id": "d436884b-676b-4eb9-8f28-fc829e0189f7",
+      "name": "Code - Processar Resposta Envio",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE messages \nSET source_id = '{{ $json.whatsappMessageId }}', \n    status = 1\nWHERE id = {{ $json.chatwootMessageId }}\n  AND conversation_id = {{ $json.chatwootConversationId }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        944,
+        320
+      ],
+      "id": "011c9384-cfe4-4661-a6e0-1fc530a5d28d",
+      "name": "SQL - Atualizar Source ID",
+      "credentials": {
+        "postgres": {
+          "id": "q6OMdpUe6jcWcDRZ",
+          "name": "PostgreSQL Chatwoot"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "pinData": {
+    "Webhook - Chatwoot Outgoing": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.clinicaschappo.com",
+            "user-agent": "rest-client/2.1.0 (linux-musl x86_64) ruby/3.4.4p34",
+            "content-length": "2225",
+            "accept": "application/json",
+            "accept-encoding": "gzip;q=1.0,deflate;q=0.6,identity;q=0.3",
+            "content-type": "application/json",
+            "x-forwarded-for": "10.150.77.254",
+            "x-forwarded-host": "n8n.clinicaschappo.com",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "da23f4d44c5b",
+            "x-real-ip": "10.150.77.254"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "account": {
+              "id": 1,
+              "name": "Clinica Schappo"
+            },
+            "additional_attributes": {},
+            "content_attributes": {},
+            "content_type": "text",
+            "content": "Consulta agendada. \nDesejamos um ótimo dia!",
+            "conversation": {
+              "additional_attributes": {},
+              "can_reply": true,
+              "channel": "Channel::Api",
+              "contact_inbox": {
+                "id": 3537,
+                "contact_id": 81846,
+                "inbox_id": 8,
+                "source_id": "88516d2f-6d42-4878-976c-be64247e6b7f",
+                "created_at": "2026-02-19T12:41:02.145Z",
+                "updated_at": "2026-02-19T12:41:02.145Z",
+                "hmac_verified": false,
+                "pubsub_token": "Y1AYvgTh31PeiwJzbHGF7uY7"
+              },
+              "id": 5249,
+              "inbox_id": 8,
+              "messages": [
+                {
+                  "id": 85321,
+                  "content": "Consulta agendada. \nDesejamos um ótimo dia!",
+                  "account_id": 1,
+                  "inbox_id": 8,
+                  "conversation_id": 5249,
+                  "message_type": 1,
+                  "created_at": 1771513626,
+                  "updated_at": "2026-02-19T15:07:06.028Z",
+                  "private": false,
+                  "status": "sent",
+                  "source_id": null,
+                  "content_type": "text",
+                  "content_attributes": {},
+                  "sender_type": "User",
+                  "sender_id": 10,
+                  "external_source_ids": {},
+                  "additional_attributes": {},
+                  "processed_message_content": "Consulta agendada. \nDesejamos um ótimo dia!",
+                  "sentiment": {},
+                  "conversation": {
+                    "assignee_id": null,
+                    "unread_count": 0,
+                    "last_activity_at": 1771513626,
+                    "contact_inbox": {
+                      "source_id": "88516d2f-6d42-4878-976c-be64247e6b7f"
+                    }
+                  },
+                  "sender": {
+                    "id": 10,
+                    "name": "Luana Costa",
+                    "available_name": "Luana Costa ",
+                    "avatar_url": "",
+                    "type": "user",
+                    "availability_status": null,
+                    "thumbnail": ""
+                  }
+                }
+              ],
+              "labels": [],
+              "meta": {
+                "sender": {
+                  "additional_attributes": {},
+                  "custom_attributes": {},
+                  "email": null,
+                  "id": 81846,
+                  "identifier": "5562985632170",
+                  "name": "Juliana Oliveira",
+                  "phone_number": "+5562985632170",
+                  "thumbnail": "",
+                  "blocked": false,
+                  "type": "contact"
+                },
+                "assignee": null,
+                "assignee_type": null,
+                "team": null,
+                "hmac_verified": false
+              },
+              "status": "open",
+              "custom_attributes": {},
+              "snoozed_until": null,
+              "unread_count": 0,
+              "first_reply_created_at": "2026-02-19T13:25:44.433Z",
+              "priority": null,
+              "waiting_since": 0,
+              "agent_last_seen_at": 1771513626,
+              "contact_last_seen_at": 0,
+              "last_activity_at": 1771513626,
+              "timestamp": 1771513626,
+              "created_at": 1771504862,
+              "updated_at": 1771513626.064103
+            },
+            "created_at": "2026-02-19T15:07:06.028Z",
+            "id": 85321,
+            "inbox": {
+              "id": 8,
+              "name": "Geral"
+            },
+            "message_type": "outgoing",
+            "private": false,
+            "sender": {
+              "id": 10,
+              "name": "Luana Costa",
+              "email": "luanacristina22k@gmail.com",
+              "type": "user"
+            },
+            "source_id": null,
+            "event": "message_created"
+          },
+          "webhookUrl": "https://n8n.clinicaschappo.com/webhook/chatwoot-outgoing",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook - Chatwoot Outgoing": {
+      "main": [
+        [
+          {
+            "node": "Code - Parse & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Parse & Validate": {
+      "main": [
+        [
+          {
+            "node": "IF - Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Skip?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Code - Map Inbox to Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Map Inbox to Platform": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Mídia?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Mídia?": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Download Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Qual Plataforma?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Download Attachment": {
+      "main": [
+        [
+          {
+            "node": "Code - Merge Mídia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Merge Mídia": {
+      "main": [
+        [
+          {
+            "node": "IF - Qual Plataforma?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Qual Plataforma?": {
+      "main": [
+        [
+          {
+            "node": "IF - UAZ Mídia?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - 360 Mídia?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - UAZ Mídia?": {
+      "main": [
+        [
+          {
+            "node": "Code - Preparar UAZAPI Media",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - UAZAPI Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - 360 Mídia?": {
+      "main": [
+        [
+          {
+            "node": "Code - Preparar 360 Media",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Preparar 360Dialog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Preparar 360 Media": {
+      "main": [
+        [
+          {
+            "node": "HTTP - 360Dialog Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Preparar 360Dialog": {
+      "main": [
+        [
+          {
+            "node": "HTTP - 360Dialog Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Preparar UAZAPI Media": {
+      "main": [
+        [
+          {
+            "node": "HTTP - UAZAPI Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - UAZAPI Media": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Resposta Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - UAZAPI Text": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Resposta Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - 360Dialog Media": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Resposta Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - 360Dialog Text": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Resposta Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Processar Resposta Envio": {
+      "main": [
+        [
+          {
+            "node": "SQL - Atualizar Source ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "969940a3-18af-4ead-9028-2237c316528a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "39839379510888463293d9b5cf3539711545af307873221a51a56fa50d8d12c1"
+  },
+  "id": "ZTSmo6amtwUfVN1O",
+  "tags": []
+}

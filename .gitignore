@@ -46,3 +46,9 @@ next-env.d.ts
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Capacitor
+android/app/build/
+android/.gradle/
+ios/App/Pods/
+ios/DerivedData/

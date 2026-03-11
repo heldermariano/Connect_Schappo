@@ -12,6 +12,7 @@ import AtribuirDropdown from './AtribuirDropdown';
 import Avatar from '@/components/ui/Avatar';
 import CallButton from '@/components/calls/CallButton';
 import PacienteBanner from './PacienteBanner';
+import TemplateSendModal from './TemplateSendModal';
 
 interface MessageViewProps {
   conversa: Conversa | null;
@@ -79,6 +80,9 @@ export default function MessageView({
   const [syncedAvatar, setSyncedAvatar] = useState<string | null>(null);
   const [syncedMemberCount, setSyncedMemberCount] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
+
+  // Template modal (360Dialog 24h window)
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   // Mobile
   const { isMobile } = useAppContext();
@@ -297,6 +301,17 @@ export default function MessageView({
     }
   }, [conversa, syncing]);
 
+  // Detectar janela de 24h expirada (360Dialog)
+  const is360WindowExpired = useMemo(() => {
+    if (!conversa || conversa.provider !== '360dialog' || conversa.tipo !== 'individual') return false;
+    // Procurar ultima mensagem recebida (from_me = false)
+    const lastReceived = [...mensagens].reverse().find((m) => !m.from_me);
+    if (!lastReceived) return true; // Nenhuma mensagem recebida = janela fechada
+    const receivedAt = new Date(lastReceived.created_at).getTime();
+    const now = Date.now();
+    return (now - receivedAt) > 24 * 60 * 60 * 1000;
+  }, [conversa, mensagens]);
+
   // Search matches
   const searchMatches = useMemo(() => {
     if (!searchTerm || searchTerm.length < 2) return [];
@@ -319,7 +334,7 @@ export default function MessageView({
 
   if (!conversa) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black text-gray-400 dark:text-gray-500">
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black text-gray-400 dark:text-gray-500 overflow-hidden">
         <div className="text-center">
           <svg className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -338,9 +353,9 @@ export default function MessageView({
   const displayAvatar = syncedAvatar || conversa.avatar_url;
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-black relative">
+    <div className="flex-1 flex flex-col w-full min-w-0 min-h-0 overflow-hidden bg-gray-50 dark:bg-black relative">
       {/* Header da conversa */}
-      <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0">
+      <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0 min-w-0 overflow-hidden">
         {/* Botao voltar (mobile) */}
         {onBack && (
           <button onClick={onBack} className="p-1 -ml-1 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">
@@ -479,8 +494,26 @@ export default function MessageView({
       {/* Banner do paciente (ERP lookup) */}
       <PacienteBanner telefone={conversa.telefone} tipo={conversa.tipo} />
 
+      {/* Aviso janela 24h expirada (360Dialog) */}
+      {is360WindowExpired && (
+        <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 flex items-center gap-2 shrink-0">
+          <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <span className="text-xs text-amber-800 dark:text-amber-300 flex-1 min-w-0">
+            Janela de 24h expirada — mensagens de texto livre nao serao entregues. Use um template aprovado.
+          </span>
+          <button
+            onClick={() => setShowTemplateModal(true)}
+            className="shrink-0 px-3 py-1 text-xs font-medium text-white bg-schappo-600 hover:bg-schappo-700 rounded-lg transition-colors"
+          >
+            Enviar template
+          </button>
+        </div>
+      )}
+
       {/* Area de mensagens */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-4 py-3">
+      <div ref={containerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0 px-4 py-3">
         {hasMore && (
           <div className="text-center mb-3">
             <button
@@ -536,7 +569,7 @@ export default function MessageView({
                 {dateSeparator}
                 <div
                   ref={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
-                  className={`flex items-start gap-1 ${selectMode ? 'cursor-pointer' : ''}`}
+                  className={`flex items-start gap-1 min-w-0 ${selectMode ? 'cursor-pointer' : ''}`}
                   onClick={selectMode ? (e) => { e.stopPropagation(); handleToggleSelect(msg.id); } : undefined}
                 >
                   {selectMode && (
@@ -554,7 +587,7 @@ export default function MessageView({
                       </div>
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <MessageBubble
                       mensagem={msg}
                       showSender={isGroup}
@@ -660,6 +693,19 @@ export default function MessageView({
           editingMsg={editingMsg}
           onCancelEdit={() => setEditingMsg(null)}
           onEdit={handleEditSend}
+        />
+      )}
+
+      {/* Template Send Modal (360Dialog) */}
+      {showTemplateModal && conversa && (
+        <TemplateSendModal
+          conversaId={conversa.id}
+          nomeContato={conversa.nome_contato}
+          onClose={() => setShowTemplateModal(false)}
+          onSent={() => {
+            // Scroll para o final apos enviar template
+            setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 300);
+          }}
         />
       )}
     </div>

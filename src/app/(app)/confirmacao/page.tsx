@@ -7,14 +7,14 @@ import CalendarioMedico from '@/components/agenda/CalendarioMedico';
 
 const MENSAGEM_PADRAO = `Clínica Schappo - Confirmação de Agendamento
 
-Ola, {nome_paciente}!
+Olá, {nome_paciente}!
 
 • Data: {data}
-• Horario: {hora}
-• Medico(a): {nome_medico}
+• Horário: {hora}
+• Médico(a): {nome_medico}
 • Procedimento: {procedimento}
 
-Por favor, selecione uma opcao abaixo:
+Por favor, selecione uma opção abaixo:
 [Confirmar] [Desmarcar] [Reagendar]`;
 
 function getAmanha(): string {
@@ -86,6 +86,7 @@ export default function ConfirmacaoPage() {
     fetchAgendamentos,
     enviarConfirmacao,
     atualizarStatus,
+    reenviarConfirmacao,
   } = useAgenda();
 
   const [medicoId, setMedicoId] = useState<number | null>(null);
@@ -98,6 +99,7 @@ export default function ConfirmacaoPage() {
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<{ enviados: number; falhas: number; sem_telefone: number } | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<number | null>(null);
+  const [reenviando, setReenviando] = useState<number | null>(null);
 
   // Templates
   interface TemplateConfirmacao { id: number; nome: string; conteudo: string; padrao: boolean; atendente_id: number | null }
@@ -180,6 +182,15 @@ export default function ConfirmacaoPage() {
     setSelecionados(new Set(pendentes.map(a => a.chave)));
   };
 
+  // Selecionar todos com status 'enviado' (para reenvio em lote)
+  const selecionarEnviados = () => {
+    const enviados = agendamentos.filter(a =>
+      a.telefone_whatsapp &&
+      a.confirmacao?.status === 'enviado'
+    );
+    setSelecionados(new Set(enviados.map(a => a.chave)));
+  };
+
   // Enviar confirmacao
   const handleEnviar = async () => {
     if (!medicoId || !data || selecionados.size === 0) return;
@@ -211,6 +222,24 @@ export default function ConfirmacaoPage() {
       alert(err instanceof Error ? err.message : 'Erro ao atualizar');
     } finally {
       setStatusUpdating(null);
+    }
+  };
+
+  // Reenviar confirmacao individual
+  const handleReenviar = async (chave: number) => {
+    if (!medicoId || !data) return;
+    setReenviando(chave);
+    try {
+      const result = await reenviarConfirmacao(chave, medicoId, data);
+      if (result.falhas > 0) {
+        const detalhe = result.detalhes?.find(d => d.chave === chave);
+        alert(`Falha ao reenviar: ${detalhe?.erro || 'Erro desconhecido'}`);
+      }
+      fetchAgendamentos(medicoId, data);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao reenviar');
+    } finally {
+      setReenviando(null);
     }
   };
 
@@ -376,7 +405,7 @@ export default function ConfirmacaoPage() {
 
       {/* Resumo */}
       {agendamentos.length > 0 && (
-        <div className="px-4 md:px-6 py-3 border-b border-gray-200 flex flex-wrap gap-4 text-sm">
+        <div className="px-4 md:px-6 py-3 border-b border-gray-200 flex flex-wrap gap-4 items-center text-sm">
           <span className="text-gray-500">{resumo.total} agendado(s)</span>
           <span className="text-green-600">{resumo.confirmados} confirmado(s)</span>
           <span className="text-yellow-600">{resumo.enviados} enviado(s)</span>
@@ -384,6 +413,21 @@ export default function ConfirmacaoPage() {
           {resumo.desmarcou > 0 && <span className="text-red-600">{resumo.desmarcou} desmarcou</span>}
           {resumo.reagendar > 0 && <span className="text-purple-600">{resumo.reagendar} reagendar</span>}
           {resumo.semTel > 0 && <span className="text-orange-600">{resumo.semTel} sem telefone</span>}
+          <span className="text-gray-300">|</span>
+          <button
+            onClick={selecionarPendentes}
+            className="text-xs text-schappo-500 hover:text-schappo-600 underline"
+          >
+            Selecionar pendentes
+          </button>
+          {resumo.enviados > 0 && (
+            <button
+              onClick={selecionarEnviados}
+              className="text-xs text-blue-500 hover:text-blue-600 underline"
+            >
+              Selecionar enviados (reenviar)
+            </button>
+          )}
         </div>
       )}
 
@@ -429,7 +473,10 @@ export default function ConfirmacaoPage() {
               {agendamentos.map((ag: AgendamentoPaciente) => {
                 const isConfirmadoERP = ag.ind_status === 'C';
                 const hasConfirmacao = !!ag.confirmacao;
-                const canSelect = !!ag.telefone_whatsapp && !hasConfirmacao && !isConfirmadoERP;
+                // Pode selecionar: pendentes sem confirmacao OU enviados aguardando resposta
+                const canSelect = !!ag.telefone_whatsapp && !isConfirmadoERP && (
+                  !hasConfirmacao || ag.confirmacao?.status === 'enviado'
+                );
                 const isSelected = selecionados.has(ag.chave);
                 const isUpdating = statusUpdating === ag.chave;
 
@@ -495,16 +542,34 @@ export default function ConfirmacaoPage() {
                             >
                               S/R
                             </button>
+                            <button
+                              onClick={() => handleReenviar(ag.chave)}
+                              disabled={reenviando === ag.chave}
+                              className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50"
+                              title="Reenviar template de confirmacao"
+                            >
+                              {reenviando === ag.chave ? '...' : 'Reenviar'}
+                            </button>
                           </>
                         )}
                         {hasConfirmacao && (ag.confirmacao?.status === 'desmarcou' || ag.confirmacao?.status === 'sem_resposta' || ag.confirmacao?.status === 'reagendar') && (
-                          <button
-                            onClick={() => handleStatus(ag.chave, 'confirmado')}
-                            disabled={isUpdating}
-                            className="px-2 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
-                          >
-                            {isUpdating ? '...' : 'Confirmar'}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleStatus(ag.chave, 'confirmado')}
+                              disabled={isUpdating}
+                              className="px-2 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                            >
+                              {isUpdating ? '...' : 'Confirmar'}
+                            </button>
+                            <button
+                              onClick={() => handleReenviar(ag.chave)}
+                              disabled={reenviando === ag.chave}
+                              className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50"
+                              title="Reenviar template de confirmacao"
+                            >
+                              {reenviando === ag.chave ? '...' : 'Reenviar'}
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -552,7 +617,7 @@ export default function ConfirmacaoPage() {
             <div className="px-4 md:px-6 py-4 flex-1 overflow-y-auto">
               <div className="mb-4">
                 <p className="text-sm text-gray-500 mb-2">
-                  Sera enviada para <strong className="text-gray-900">{selecionados.size} paciente(s)</strong> pelo WhatsApp Recepcao.
+                  Sera enviada para <strong className="text-gray-900">{selecionados.size} paciente(s)</strong> pelo WhatsApp Geral (556133455701) via 360Dialog.
                 </p>
                 <p className="text-xs text-gray-500 mb-3">
                   Variaveis disponiveis: {'{nome_paciente}'}, {'{nome_paciente_completo}'}, {'{data}'}, {'{hora}'}, {'{nome_medico}'}, {'{procedimento}'}

@@ -175,7 +175,7 @@ export default function Header({ busca, onBuscaChange, presenca: presencaProp, o
   const user = session?.user;
 
   return (
-    <header className="h-14 bg-schappo-500 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0 shadow-sm">
+    <header className="h-14 bg-schappo-500 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0 shadow-sm min-w-0">
       <div className="hidden md:block">
         <Logo variant="orange" size="md" />
       </div>

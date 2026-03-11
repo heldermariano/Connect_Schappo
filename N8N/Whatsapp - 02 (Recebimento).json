@@ -1,0 +1,1280 @@
+{
+  "name": "Whatsapp - 02 (Recebimento)",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "pop",
+        "list": "queue:chatwoot",
+        "tail": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        0
+      ],
+      "id": "0b25a4a5-edaa-4c16-aae3-e05637f372b4",
+      "name": "Redis - Buscar Mensagem",
+      "credentials": {
+        "redis": {
+          "id": "Lfx8om9rqorcf6Cl",
+          "name": "Redis Schappo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce4c8283-0835-4482-93b0-1a321b06c809",
+              "leftValue": "={{ $json.propertyName }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        32,
+        0
+      ],
+      "id": "15de0a61-5560-4eae-84e1-a99ebf7c6395",
+      "name": "IF - Tem Mensagem?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PARSE MESSAGE FROM REDIS - V2\n// Converte a string JSON do Redis para objeto\n// Lida com diferentes formatos de retorno\n// ============================================\n\nconst redisData = $input.first().json;\n\n// O Redis pode retornar em diferentes campos dependendo da configuração\n// Verificar todas as possibilidades\nconst payload = redisData.propertyName || redisData.payload || redisData.message || redisData.data || redisData;\n\n// Se veio como string, fazer parse\nlet message = payload;\nif (typeof payload === 'string') {\n  try {\n    message = JSON.parse(payload);\n  } catch (e) {\n    return [{\n      json: {\n        hasMessage: false,\n        error: 'Erro ao fazer parse do JSON',\n        raw: payload\n      }\n    }];\n  }\n}\n\n// Se ainda for null ou undefined\nif (!message) {\n  return [{\n    json: {\n      hasMessage: false,\n      error: 'Payload vazio',\n      raw: redisData\n    }\n  }];\n}\n\n// Verificar se tem os campos essenciais\nif (!message.contactPhone) {\n  return [{\n    json: {\n      hasMessage: false,\n      error: 'Payload sem contactPhone',\n      raw: message\n    }\n  }];\n}\n\n// Retornar mensagem parseada\nreturn [{\n  json: {\n    hasMessage: true,\n    message: message\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        -128
+      ],
+      "id": "e733392e-7f1e-4327-8264-283fa0d64447",
+      "name": "Code - Parse Message"
+    },
+    {
+      "parameters": {
+        "url": "=https://chatwoot.clinicaschappo.com/api/v1/accounts/1/contacts/search?q={{ $json.identifier }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1664,
+        -112
+      ],
+      "id": "fe122c8d-6117-4852-9330-09bfecc2fe5a",
+      "name": "HTTP - Buscar Contato",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7a7ba64e-f928-4960-86d5-2712f86632dd",
+              "leftValue": "={{ $json.payload.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1888,
+        -32
+      ],
+      "id": "f7189524-8f88-4b66-893b-a14ae07448ba",
+      "name": "IF - Contato Encontrado?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PROCESSAR CONTATO - V5\n// LÓGICA DE SOURCE_ID:\n// 1. Contato existente → usar sourceId do Chatwoot\n// 2. Novo contato grupo → usar groupId\n// 3. Novo contato individual → usar telefone\n// ============================================\n\n// Dados do nó de preparação\nconst prepData = $('Code - Preparar Contato').first().json;\n\n// A estrutura pode variar\nconst message = prepData.message || prepData.originalMessage || prepData;\n\n// Resposta do HTTP (pode ser de Buscar ou Criar Contato)\nconst httpResponse = $input.first().json;\n\n// ============================================\n// EXTRAIR INBOX ID DE FORMA SEGURA\n// ============================================\nconst inboxId = message.inboxId \n             || prepData.inboxId \n             || prepData.originalMessage?.inboxId \n             || 5;\n\n// ============================================\n// EXTRAIR DADOS DO GRUPO\n// ============================================\nconst isGroup = message.isGroup || prepData.isGroup || false;\nconst groupId = message.groupId || prepData.groupId || null;\n\n// ============================================\n// EXTRAIR CONTACT_ID E SOURCE_ID DA RESPOSTA\n// ============================================\nlet contactId = null;\nlet sourceIdFromChatwoot = null;\nlet contactInboxes = [];\nlet isNewContact = false;\n\n// Verificar formato da resposta\nif (httpResponse.payload && Array.isArray(httpResponse.payload)) {\n  // CASO 1: Resposta de busca (GET /search) - payload é array\n  if (httpResponse.payload.length > 0) {\n    const contact = httpResponse.payload[0];\n    contactId = contact.id;\n    contactInboxes = contact.contact_inboxes || [];\n    isNewContact = false;\n  } else {\n    // Busca não encontrou nada\n    isNewContact = true;\n  }\n} else if (httpResponse.payload?.contact) {\n  // CASO 2: Resposta de criação (POST /contacts) - payload.contact\n  const contact = httpResponse.payload.contact;\n  contactId = contact.id;\n  contactInboxes = contact.contact_inboxes || [];\n  isNewContact = true;\n  \n  // Na criação, também pode vir contact_inbox separado\n  if (httpResponse.payload.contact_inbox) {\n    sourceIdFromChatwoot = httpResponse.payload.contact_inbox.source_id;\n  }\n} else if (httpResponse.id) {\n  // CASO 3: Resposta direta (id no nível raiz)\n  contactId = httpResponse.id;\n  contactInboxes = httpResponse.contact_inboxes || [];\n  isNewContact = !contactInboxes.length;\n}\n\n// ============================================\n// BUSCAR SOURCE_ID DO CHATWOOT (se existir)\n// ============================================\nif (!sourceIdFromChatwoot && contactInboxes.length > 0) {\n  // Buscar source_id para o inbox correto\n  const inboxMatch = contactInboxes.find(ci => {\n    const ciInboxId = ci.inbox?.id || ci.inbox_id;\n    return ciInboxId === inboxId;\n  });\n  \n  if (inboxMatch) {\n    sourceIdFromChatwoot = inboxMatch.source_id;\n  } else {\n    // Se não encontrou para o inbox específico, pegar o primeiro\n    sourceIdFromChatwoot = contactInboxes[0]?.source_id || null;\n  }\n}\n\n// ============================================\n// DETERMINAR SOURCE_ID FINAL\n// ============================================\nlet finalSourceId;\n\nif (sourceIdFromChatwoot) {\n  // CONTATO EXISTENTE: usar sourceId que já está no Chatwoot\n  finalSourceId = sourceIdFromChatwoot;\n  console.log('✅ Contato existente - usando sourceId do Chatwoot:', finalSourceId);\n} else if (isGroup && groupId) {\n  // NOVO CONTATO DE GRUPO: usar groupId\n  finalSourceId = groupId.replace('@g.us', '');\n  console.log('✅ Novo grupo - usando groupId como sourceId:', finalSourceId);\n} else {\n  // NOVO CONTATO INDIVIDUAL: usar telefone\n  finalSourceId = message.contactPhone || prepData.contactPhone || prepData.identifier;\n  console.log('✅ Novo individual - usando telefone como sourceId:', finalSourceId);\n}\n\n// ============================================\n// LOG PARA DEBUG\n// ============================================\nconsole.log('=== PROCESSAR CONTATO V5 ===');\nconsole.log('Contact ID:', contactId);\nconsole.log('Source ID (Chatwoot):', sourceIdFromChatwoot);\nconsole.log('Source ID (Final):', finalSourceId);\nconsole.log('Is New Contact:', isNewContact);\nconsole.log('Is Group:', isGroup);\nconsole.log('Inbox ID:', inboxId);\n\n// ============================================\n// VALIDAR CONTACT_ID\n// ============================================\nif (!contactId) {\n  return [{\n    json: {\n      error: 'Não foi possível extrair contactId',\n      httpResponse: httpResponse,\n      hasContact: false\n    }\n  }];\n}\n\n// ============================================\n// PREPARAR CONTEÚDO DA MENSAGEM\n// ============================================\nlet messageContent = message.content || prepData.content || '';\n\n// Para grupos, adicionar nome do remetente (se ainda não tiver)\nconst senderName = message.senderName || prepData.senderName || null;\nconst senderPhone = message.senderPhone || prepData.senderPhone || null;\n\nif (isGroup && senderName && !messageContent.startsWith('*' + senderName)) {\n  messageContent = '*' + senderName + '*:\\n' + messageContent;\n} else if (isGroup && senderPhone && !senderName && !messageContent.startsWith('*')) {\n  messageContent = '*' + senderPhone + '*:\\n' + messageContent;\n}\n\n// Se não tem conteúdo mas tem mídia, usar placeholder\nconst hasMedia = message.hasMedia || prepData.hasMedia || false;\nconst messageType = message.messageType || prepData.messageType || 'text';\n\nif (!messageContent && hasMedia) {\n  messageContent = '[' + messageType + ']';\n}\n\n// ============================================\n// RETORNAR DADOS PROCESSADOS\n// ============================================\nreturn [{\n  json: {\n    // Contato\n    contactId: contactId,\n    sourceId: finalSourceId,\n    hasContact: true,\n    isNewContact: isNewContact,\n    \n    // Inbox\n    inboxId: inboxId,\n    \n    // Mensagem\n    content: messageContent,\n    messageType: messageType,\n    \n    // Mídia\n    hasMedia: hasMedia,\n    mediaUrl: message.mediaUrl || prepData.mediaUrl || null,\n    mimeType: message.mimeType || prepData.mimeType || null,\n    fileName: message.fileName || prepData.fileName || null,\n    \n    // Contexto\n    isGroup: isGroup,\n    groupId: groupId,\n    senderName: senderName,\n    senderPhone: senderPhone,\n    identifier: prepData.identifier,\n    \n    // Mensagem original\n    originalMessage: message\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        -48
+      ],
+      "id": "37b13c15-3f01-4cf6-8b58-c1a67c21b8c1",
+      "name": "Code - Processar Contato"
+    },
+    {
+      "parameters": {
+        "url": "=https://chatwoot.clinicaschappo.com/api/v1/accounts/1/contacts/{{ $json.payload.id || $json.id }}/conversations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2720,
+        -48
+      ],
+      "id": "4239a659-71c4-4a31-826d-c2ab3c1a2ecc",
+      "name": "HTTP - Buscar Conversa",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chatwoot.clinicaschappo.com/api/v1/accounts/1/conversations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inbox_id",
+              "value": "={{ $json.inboxId }}"
+            },
+            {
+              "name": "contact_id",
+              "value": "={{ $json.contactId }}"
+            },
+            {
+              "name": "source_id",
+              "value": "={{ $json.sourceId }}"
+            },
+            {
+              "name": "avatarUrl",
+              "value": "={{ $json.originalMessage.avatarUrl }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3392,
+        112
+      ],
+      "id": "987da58d-24c1-453b-9dbe-07c2a3cdc2c1",
+      "name": "HTTP - Criar Conversa",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PROCESSAR CONVERSA - V3 COM FILTRO INBOX\n// Extrai conversation_id SOMENTE do inbox correto\n// ============================================\n\n// Dados do nó anterior (Processar Contato)\nconst prepData = $('Code - Processar Contato').first().json;\nconst targetInboxId = prepData.inboxId;\n\n// Resposta do HTTP (pode ser de Buscar ou Criar Conversa)\nconst httpResponse = $input.first().json;\n\n// Extrair conversation_id\nlet conversationId = null;\nlet needsNewConversation = false;\n\n// Log para debug\nconsole.log('=== PROCESSAR CONVERSA V3 ===');\nconsole.log('Target Inbox ID:', targetInboxId);\n\n// A resposta pode vir em diferentes formatos\n// 1. Busca conversas: { payload: [{ id, status, inbox_id, ... }] }\n// 2. Criação: { id, inbox_id, ... }\n\nif (httpResponse.payload && Array.isArray(httpResponse.payload)) {\n  // Resposta de busca - FILTRAR PELO INBOX CORRETO\n  console.log('Total de conversas encontradas:', httpResponse.payload.length);\n  \n  // Filtrar conversas pelo inbox correto\n  const conversasDoInbox = httpResponse.payload.filter(c => c.inbox_id === targetInboxId);\n  console.log('Conversas no inbox', targetInboxId + ':', conversasDoInbox.length);\n  \n  if (conversasDoInbox.length > 0) {\n    // Preferir conversa aberta\n    const openConv = conversasDoInbox.find(c => c.status === 'open');\n    if (openConv) {\n      conversationId = openConv.id;\n      console.log('Usando conversa aberta:', conversationId);\n    } else {\n      // Pegar a mais recente (primeira)\n      conversationId = conversasDoInbox[0].id;\n      console.log('Usando conversa mais recente:', conversationId);\n    }\n  } else {\n    // Não encontrou conversa no inbox correto - precisa criar\n    console.log('❌ Nenhuma conversa no inbox', targetInboxId, '- precisa criar nova');\n    needsNewConversation = true;\n  }\n  \n} else if (httpResponse.id) {\n  // Resposta de criação - usar diretamente\n  conversationId = httpResponse.id;\n  console.log('Conversa criada:', conversationId);\n}\n\n// Se não encontrou conversa no inbox correto, sinalizar para criar\nif (needsNewConversation || !conversationId) {\n  return [{\n    json: {\n      hasConversation: false,\n      needsNewConversation: true,\n      \n      // Passar dados para criar conversa\n      contactId: prepData.contactId,\n      sourceId: prepData.sourceId,\n      inboxId: targetInboxId,\n      \n      // Dados da mensagem\n      content: prepData.content,\n      messageType: prepData.messageType,\n      hasMedia: prepData.hasMedia,\n      mediaUrl: prepData.mediaUrl,\n      mimeType: prepData.mimeType,\n      fileName: prepData.fileName,\n      isGroup: prepData.isGroup,\n      \n      // Debug\n      originalMessage: prepData.originalMessage,\n      httpResponse: httpResponse\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    // Conversa\n    conversationId: conversationId,\n    hasConversation: true,\n    needsNewConversation: false,\n    \n    // Dados para criar mensagem\n    content: prepData.content,\n    messageType: prepData.messageType,\n    \n    // Mídia\n    hasMedia: prepData.hasMedia,\n    mediaUrl: prepData.mediaUrl,\n    mimeType: prepData.mimeType,\n    fileName: prepData.fileName,\n    \n    // Contato\n    contactId: prepData.contactId,\n    sourceId: prepData.sourceId,\n    inboxId: targetInboxId,\n    \n    // Contexto\n    isGroup: prepData.isGroup,\n    \n    // Debug\n    originalMessage: prepData.originalMessage\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2928,
+        -48
+      ],
+      "id": "6cc19a30-c5fb-4c83-be47-1147dde89012",
+      "name": "Code - Processar Conversa"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.clinicaschappo.com/api/v1/accounts/1/conversations/{{ $json.conversationId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "=**{{ $json.originalMessage.senderName }}:** {{ $json.originalMessage.content }}"
+            },
+            {
+              "name": "message_type",
+              "value": "incoming"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            },
+            {
+              "name": "=avatar_url",
+              "value": "={{ $json.originalMessage.avatarUrl }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4496,
+        -48
+      ],
+      "id": "ed528db7-fa5e-4b32-8330-45e71e0cb9eb",
+      "name": "HTTP - Enviar Mensagem",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chatwoot.clinicaschappo.com/api/v1/accounts/1/contacts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inbox_id",
+              "value": "={{ $('Code - Preparar Contato').item.json.inboxId }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ $('Code - Preparar Contato').item.json.contactName }}"
+            },
+            {
+              "name": "phone_number",
+              "value": "={{ $('Code - Preparar Contato').item.json.phoneNumber }}"
+            },
+            {
+              "name": "identifier",
+              "value": "={{ $('Code - Preparar Contato').item.json.identifier }}"
+            },
+            {
+              "name": "avatar_url",
+              "value": "={{ $('Code - Preparar Contato').item.json.avatarUrl }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2096,
+        64
+      ],
+      "id": "58771ec9-8f3c-4757-a9c9-643d180441ab",
+      "name": "HTTP - Criar Contato",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PREPARAR CONTATO - V5 COM FORMATAÇÃO MÍDIA\n// Adaptado para UAZAPI\n// ============================================\n// LÓGICA CORRETA:\n// - GRUPO: identifier = groupId (@g.us), SEM phone_number\n// - INDIVIDUAL: identifier = telefone, COM phone_number\n// ============================================\n\nconst input = $input.first().json;\nconst message = input.message || input;\n\n// ============================================\n// FUNÇÃO: Formatar Tipo de Mídia com Emoji\n// ============================================\nfunction formatMediaType(messageType, mimeType) {\n  // Verificar por mimeType primeiro (mais específico)\n  if (mimeType) {\n    if (mimeType === 'application/pdf') return '📄 *PDF*';\n    if (mimeType.startsWith('image/')) return '🖼️ *Imagem*';\n    if (mimeType.startsWith('audio/')) return '🎵 *Áudio*';\n    if (mimeType.startsWith('video/')) return '🎬 *Vídeo*';\n    if (mimeType.includes('document') || mimeType.includes('sheet') || mimeType.includes('word')) {\n      return '📄 *Documento*';\n    }\n    if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('compressed')) {\n      return '🗃️ *Arquivo Compactado*';\n    }\n  }\n  \n  // Fallback por messageType\n  const mediaFormats = {\n    'document': '📄 *Documento*',\n    'image': '🖼️ *Imagem*',\n    'audio': '🎵 *Áudio*',\n    'ptt': '🎤 *Áudio*',\n    'voice': '🎤 *Áudio*',\n    'video': '🎬 *Vídeo*',\n    'sticker': '🎭 *Figurinha*',\n    'location': '📍 *Localização*',\n    'contact': '👤 *Contato*',\n    'gif': '🎞️ *GIF*'\n  };\n  \n  return mediaFormats[messageType] || '📎 *Arquivo*';\n}\n\n// ============================================\n// EXTRAIR DADOS DA MENSAGEM (formato UAZAPI)\n// ============================================\nconst isGroup = message.isGroup || false;\nconst contactPhone = message.contactPhone || '';\nconst contactName = message.contactName || '';\nconst senderPhone = message.senderPhone || '';\nconst senderName = message.senderName || '';\nconst groupId = message.groupId || null;\nconst groupName = message.groupName || '';\nconst avatarUrl = message.avatarUrl || null;\nconst inboxId = message.inboxId || 5;\n\n// ============================================\n// DEFINIR IDENTIFICADORES - LÓGICA CORRETA\n// ============================================\nlet identifier;\nlet sourceId;\nlet phoneNumber;\nlet nameForContact;\n\nif (isGroup && groupId) {\n  // ============================================\n  // GRUPO: O GRUPO É O CONTATO\n  // ============================================\n  \n  // identifier = ID completo do grupo (com @g.us)\n  identifier = groupId;\n  \n  // sourceId = ID do grupo sem @g.us\n  sourceId = groupId.replace('@g.us', '');\n  \n  // IMPORTANTE: Grupos NÃO têm telefone!\n  phoneNumber = null;\n  \n  // Nome do contato = nome do grupo\n  nameForContact = groupName || contactName || 'Grupo ' + sourceId;\n  \n  console.log('✅ GRUPO detectado');\n  console.log('   identifier:', identifier);\n  console.log('   sourceId:', sourceId);\n  console.log('   nome:', nameForContact);\n  \n} else {\n  // ============================================\n  // INDIVIDUAL: A PESSOA É O CONTATO\n  // ============================================\n  \n  // identifier = telefone\n  identifier = contactPhone;\n  \n  // sourceId = telefone\n  sourceId = contactPhone;\n  \n  // Telefone com formato internacional\n  phoneNumber = contactPhone ? \n    (contactPhone.startsWith('+') ? contactPhone : '+' + contactPhone) : null;\n  \n  // Nome do contato = nome da pessoa\n  nameForContact = contactName || senderName || contactPhone;\n  \n  console.log('✅ INDIVIDUAL detectado');\n  console.log('   identifier:', identifier);\n  console.log('   sourceId:', sourceId);\n}\n\n// ============================================\n// PREPARAR CONTEÚDO DA MENSAGEM\n// ============================================\nlet content = message.content || '';\nconst hasMedia = message.hasMedia || false;\nconst messageType = message.messageType || 'text';\nconst mimeType = message.mimeType || null;\n\n// Se tem mídia, formatar o tipo com emoji\nlet mediaLabel = '';\nif (hasMedia && messageType !== 'text') {\n  mediaLabel = formatMediaType(messageType, mimeType);\n}\n\n// Para grupos, adicionar nome do remetente NO CORPO DA MENSAGEM\nif (isGroup && senderName) {\n  if (content && !content.startsWith('*' + senderName)) {\n    // Tem conteúdo texto\n    if (hasMedia && mediaLabel) {\n      // Mídia com caption\n      content = '*' + senderName + '*:\\n' + mediaLabel + '\\n' + content;\n    } else {\n      // Só texto\n      content = '*' + senderName + '*:\\n' + content;\n    }\n  } else if (!content && hasMedia) {\n    // Só mídia, sem texto\n    content = '*' + senderName + '*:\\n' + mediaLabel;\n  }\n} else if (isGroup && senderPhone && !senderName) {\n  // Grupo sem nome do remetente, usar telefone\n  if (content && !content.startsWith('*')) {\n    if (hasMedia && mediaLabel) {\n      content = '*' + senderPhone + '*:\\n' + mediaLabel + '\\n' + content;\n    } else {\n      content = '*' + senderPhone + '*:\\n' + content;\n    }\n  } else if (!content && hasMedia) {\n    content = '*' + senderPhone + '*:\\n' + mediaLabel;\n  }\n} else if (!isGroup && hasMedia && !content) {\n  // Individual, só mídia sem texto\n  content = mediaLabel;\n} else if (!isGroup && hasMedia && content) {\n  // Individual, mídia com caption\n  content = mediaLabel + '\\n' + content;\n}\n\n// ============================================\n// RETORNAR DADOS PREPARADOS\n// ============================================\nreturn [{\n  json: {\n    // Identificadores CORRETOS\n    identifier: identifier,\n    sourceId: sourceId,\n    \n    // Dados do contato\n    contactName: nameForContact,\n    phoneNumber: phoneNumber,  // NULL para grupos!\n    avatarUrl: avatarUrl,\n    \n    // Inbox\n    inboxId: inboxId,\n    \n    // Contexto de grupo\n    isGroup: isGroup,\n    groupId: groupId,\n    groupName: groupName,\n    \n    // Remetente (para mensagem)\n    senderPhone: senderPhone,\n    senderName: senderName,\n    \n    // Mensagem\n    content: content,\n    messageType: messageType,\n    \n    // Mídia\n    hasMedia: hasMedia,\n    mediaUrl: message.mediaUrl || null,\n    mimeType: mimeType,\n    fileName: message.fileName || null,\n    \n    // Original\n    originalMessage: message\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        -112
+      ],
+      "id": "a487cccd-e202-412b-aabc-77d4f8989089",
+      "name": "Code - Preparar Contato"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: VERIFICAR INBOX - V2\n// Corrigido para buscar dados corretamente\n// ============================================\n\nconst input = $input.first().json;\n\n// ============================================\n// BUSCAR DADOS DA MENSAGEM ORIGINAL\n// ============================================\n// Tentar buscar de múltiplos nós possíveis\nlet dadosMensagem = null;\n\nconst possibleNodes = [\n  'Code - Processar Conversa',\n  'Code - Preparar Conversa',\n  'IF - Tem Conversa?',\n  'Code - Processar Contato',\n  'Code - Preparar Contato'\n];\n\nfor (const nodeName of possibleNodes) {\n  try {\n    const nodeData = $(nodeName).first();\n    if (nodeData && nodeData.json) {\n      // Verificar se tem os dados que precisamos\n      if (nodeData.json.originalMessage || nodeData.json.hasMedia !== undefined) {\n        dadosMensagem = nodeData.json;\n        console.log('✅ Dados encontrados no nó:', nodeName);\n        break;\n      }\n    }\n  } catch (e) {\n    // Nó não existe, continuar\n  }\n}\n\n// Se não encontrou, tentar usar o input direto\nif (!dadosMensagem) {\n  dadosMensagem = input;\n  console.log('⚠️ Usando input direto');\n}\n\n// ============================================\n// EXTRAIR DADOS DO CONTATO/CONVERSA\n// ============================================\n// Dados podem vir do input (resposta HTTP) ou de dadosMensagem\nconst dadosContato = input.meta?.sender || input.sender || {};\n\n// ID do contato - pode vir de várias fontes\nconst contactId = dadosMensagem.contactId \n                || dadosContato.id \n                || input.contact_id \n                || null;\n\n// ID da conversa - pode vir do input (resposta da criação)\nconst conversationId = input.id || dadosMensagem.conversationId || null;\n\n// Source ID\nconst sourceId = dadosMensagem.sourceId \n              || input.source_id \n              || null;\n\n// Inbox ID\nconst inboxId = dadosMensagem.inboxId \n             || input.inbox_id \n             || dadosMensagem.originalMessage?.inboxId \n             || 5;\n\n// ============================================\n// EXTRAIR DADOS DA MENSAGEM - PRIORIDADE CORRETA\n// ============================================\n// 1. Primeiro tentar de dadosMensagem diretamente\n// 2. Depois de originalMessage\n// 3. Por último defaults\n\nconst originalMsg = dadosMensagem.originalMessage || {};\n\n// Conteúdo\nconst content = dadosMensagem.content \n             || originalMsg.content \n             || '';\n\n// Tipo de mensagem\nconst messageType = dadosMensagem.messageType \n                 || originalMsg.messageType \n                 || 'text';\n\n// Mídia\nconst hasMedia = dadosMensagem.hasMedia \n              || originalMsg.hasMedia \n              || false;\n\nconst mediaUrl = dadosMensagem.mediaUrl \n              || originalMsg.mediaUrl \n              || null;\n\nconst mimeType = dadosMensagem.mimeType \n              || originalMsg.mimeType \n              || null;\n\nconst fileName = dadosMensagem.fileName \n              || originalMsg.fileName \n              || null;\n\n// Grupo\nconst isGroup = dadosMensagem.isGroup \n             || originalMsg.isGroup \n             || false;\n\n// Nome do remetente\nconst senderName = dadosMensagem.senderName \n                || originalMsg.senderName \n                || dadosMensagem.originalMessage?.senderName\n                || null;\n\n// ============================================\n// VERIFICAR SE TEM CONVERSA NO INBOX CORRETO\n// ============================================\nconst targetInbox = dadosMensagem.targetInbox || inboxId;\n\n// Verificar se a conversa existe e está no inbox correto\nconst hasConversationInbox = !!conversationId && (input.inbox_id === targetInbox || !input.inbox_id);\n\n// ============================================\n// LOG DE DEBUG\n// ============================================\nconsole.log('=== DEBUG VERIFICAR INBOX ===');\nconsole.log('hasMedia:', hasMedia);\nconsole.log('mediaUrl:', mediaUrl ? 'SIM' : 'NÃO');\nconsole.log('messageType:', messageType);\nconsole.log('content:', content ? content.substring(0, 50) + '...' : '(vazio)');\nconsole.log('conversationId:', conversationId);\nconsole.log('contactId:', contactId);\n\n// ============================================\n// RETORNAR DADOS CONSOLIDADOS\n// ============================================\nreturn [{\n  json: {\n    // Status da conversa\n    hasConversationInbox: hasConversationInbox,\n    conversationId: conversationId,\n    \n    // IDs\n    inboxId: inboxId,\n    contactId: contactId,\n    sourceId: sourceId,\n    \n    // Mensagem - DADOS PRESERVADOS\n    content: content,\n    messageType: messageType,\n    \n    // Mídia - DADOS PRESERVADOS\n    hasMedia: hasMedia,\n    mediaUrl: mediaUrl,\n    mimeType: mimeType,\n    fileName: fileName,\n    \n    // Grupo\n    isGroup: isGroup,\n    senderName: senderName,\n    \n    // Inbox alvo\n    targetInbox: targetInbox,\n    \n    // Dados originais para referência\n    originalMessage: dadosMensagem.originalMessage || originalMsg\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3632,
+        112
+      ],
+      "id": "5fff5930-da7a-42d0-bf16-2e0032e16706",
+      "name": "Code - Verificar Inbox"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9fc10535-88c5-439e-a77a-f0983514f1c1",
+              "leftValue": "={{ $json.hasMedia === true && $json.mediaUrl !== null && $json.mediaUrl !== '' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3952,
+        -64
+      ],
+      "id": "6145e381-a2c6-41cd-9a6e-b3c712116af2",
+      "name": "IF - Tem Mídia?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ccd5cd7e-1196-42f7-abbd-628deb41a756",
+              "leftValue": "={{ $json.hasConversation }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3152,
+        -48
+      ],
+      "id": "2a6e13e3-6514-4036-aba4-bb781a0c5da1",
+      "name": "IF - Tem Conversa no Inbox?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dd6d5cfd-8664-4bfd-a04f-3fe5f5874145",
+              "leftValue": "={{ $json.inboxId }}",
+              "rightValue": 8,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3424,
+        -432
+      ],
+      "id": "d7165246-80bb-46e3-b8cf-4c0edf486f89",
+      "name": "é 360dialog"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://schappo.uazapi.com/message/download",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $json.downloadConfig.token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.downloadConfig.messageId }}"
+            },
+            {
+              "name": "return_link",
+              "value": "true"
+            },
+            {
+              "name": "generate_mp3",
+              "value": "={{ $json.downloadConfig.generateMp3 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3808,
+        -320
+      ],
+      "id": "77804700-219f-4b1b-a858-ace00ff5ef87",
+      "name": "HTTP - Download Mídia UAZAPI",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PROCESSAR DOWNLOAD - V6\n// Com tratamento de erros de download CORRIGIDO\n// ============================================\n\nconst input = $input.first().json;\n\n// ============================================\n// BUSCAR DADOS ANTERIORES\n// ============================================\n\nlet prevData = null;\nconst possibleNodes = [\n  'Code - Preparar Download Midia',\n  'Code - Preparar Download Mídia',\n  'IF - Tem Mídia?',\n  'IF - Tem Media?',\n  'Code - Processar Conversa'\n];\n\nfor (const nodeName of possibleNodes) {\n  try {\n    const data = $(nodeName).first();\n    if (data && data.json) {\n      prevData = data.json;\n      break;\n    }\n  } catch (e) {\n    continue;\n  }\n}\n\nif (!prevData) {\n  prevData = {};\n}\n\n// ============================================\n// VERIFICAR SE HOUVE ERRO NO DOWNLOAD\n// ============================================\n\n// Quando \"Continue On Fail\" está ativo, erro vem em input.error\nconst hasError = !!input.error;\n\n// Extrair mensagem de erro (pode ser objeto ou string)\nlet errorMessage = '';\nif (input.error) {\n  if (typeof input.error === 'string') {\n    errorMessage = input.error;\n  } else if (input.error.message) {\n    errorMessage = String(input.error.message);\n  } else {\n    errorMessage = JSON.stringify(input.error);\n  }\n}\n\n// Também verificar outros campos de erro\nif (!errorMessage && input.errorMessage) {\n  errorMessage = String(input.errorMessage);\n}\nif (!errorMessage && input.errorDescription) {\n  errorMessage = String(input.errorDescription);\n}\n\n// Erros comuns do UAZAPI\nconst knownErrors = [\n  'hash of media ciphertext',\n  'no url present',\n  'media not found',\n  'file not found',\n  'expired',\n  'timeout',\n  'failed to download'\n];\n\n// Verificar se é erro conhecido\nconst errorLower = errorMessage.toLowerCase();\nconst isKnownError = knownErrors.some(err => errorLower.includes(err.toLowerCase()));\n\n// ============================================\n// SE HOUVE ERRO - FALLBACK PARA TEXTO\n// ============================================\n\nif (hasError || isKnownError) {\n  console.log('⚠️ Erro no download de mídia:', errorMessage);\n  \n  // Preparar mensagem de fallback\n  let fallbackContent = prevData.content || '';\n  \n  // Tipo de mídia\n  const mediaType = prevData.messageType \n    || prevData.originalMessage?.messageType \n    || 'mídia';\n  \n  // Adicionar aviso sobre mídia não disponível\n  if (fallbackContent && fallbackContent.trim()) {\n    fallbackContent = fallbackContent + '\\n\\n[' + mediaType + ' não disponível]';\n  } else {\n    fallbackContent = '[' + mediaType + ' não disponível]';\n  }\n  \n  return [{\n    json: {\n      downloadSuccess: false,\n      downloadError: errorMessage || 'Erro desconhecido no download',\n      \n      // Fallback para envio como texto\n      sendAsText: true,\n      \n      // Dados da conversa\n      conversationId: prevData.conversationId,\n      hasConversation: prevData.hasConversation,\n      \n      // Mensagem (sem mídia)\n      content: fallbackContent,\n      messageType: 'text',\n      hasMedia: false,\n      \n      // Outros dados\n      contactId: prevData.contactId,\n      sourceId: prevData.sourceId,\n      inboxId: prevData.inboxId,\n      isGroup: prevData.isGroup\n    }\n  }];\n}\n\n// ============================================\n// DOWNLOAD OK - EXTRAIR URL DO ARQUIVO\n// ============================================\n\n// A resposta do UAZAPI vem com fileURL\nconst fileUrl = input.fileURL || input.fileUrl || input.url || input.link || null;\n\nif (!fileUrl) {\n  console.log('⚠️ Download retornou sem URL do arquivo');\n  console.log('Input recebido:', JSON.stringify(input));\n  \n  // Preparar fallback\n  let fallbackContent = prevData.content || '';\n  const mediaType = prevData.messageType || 'mídia';\n  \n  if (fallbackContent && fallbackContent.trim()) {\n    fallbackContent = fallbackContent + '\\n\\n[' + mediaType + ' não disponível]';\n  } else {\n    fallbackContent = '[' + mediaType + ' não disponível]';\n  }\n  \n  return [{\n    json: {\n      downloadSuccess: false,\n      downloadError: 'Resposta sem URL do arquivo',\n      sendAsText: true,\n      conversationId: prevData.conversationId,\n      hasConversation: prevData.hasConversation,\n      content: fallbackContent,\n      messageType: 'text',\n      hasMedia: false,\n      contactId: prevData.contactId,\n      sourceId: prevData.sourceId,\n      inboxId: prevData.inboxId,\n      isGroup: prevData.isGroup\n    }\n  }];\n}\n\n// ============================================\n// SUCESSO - RETORNAR URL PARA BAIXAR\n// ============================================\n\nreturn [{\n  json: {\n    downloadSuccess: true,\n    \n    // URL do arquivo para baixar\n    fileUrl: fileUrl,\n    \n    // Dados da mídia\n    mimeType: input.mimetype || input.mimeType || prevData.mimeType,\n    fileName: input.filename || input.fileName || prevData.fileName,\n    \n    // Dados da conversa\n    conversationId: prevData.conversationId,\n    hasConversation: prevData.hasConversation,\n    \n    // Conteúdo (caption)\n    content: prevData.content,\n    messageType: prevData.messageType,\n    \n    // Outros dados\n    contactId: prevData.contactId,\n    sourceId: prevData.sourceId,\n    inboxId: prevData.inboxId,\n    isGroup: prevData.isGroup\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4016,
+        -320
+      ],
+      "id": "f9698854-9d6d-4a58-9b38-b0a3630ca2c5",
+      "name": "Code - Processar Download"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ddbb0408-5158-42fc-945b-182e68cf86f2",
+              "leftValue": "={{ $json.downloadSuccess }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4208,
+        -320
+      ],
+      "id": "51e18be3-66b5-4bf4-b525-5e73b3b65d6e",
+      "name": "IF - Download OK?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PREPARAR DOWNLOAD MÍDIA - V2\n// Com validação de URL disponível\n// ============================================\n\nconst prevData = $input.first().json;\nconst message = prevData.originalMessage || prevData;\n\n// ============================================\n// VALIDAR SE TEM URL PARA BAIXAR\n// ============================================\n\n// Para UAZAPI: precisa da URL do WhatsApp\n// Para 360Dialog: precisa do media_id\n\nconst platform = message.platform || 'uazapi';\nconst hasMediaUrl = !!message.mediaUrl;\n\n// Se não tem URL/ID de mídia, não pode baixar\nif (!hasMediaUrl) {\n  return [{\n    json: {\n      // Marcar que não pode baixar\n      canDownload: false,\n      downloadError: 'Mídia sem URL disponível - possivelmente expirada',\n      \n      // Passar dados da conversa\n      conversationId: prevData.conversationId,\n      hasConversation: prevData.hasConversation,\n      \n      // Fallback: enviar como texto\n      content: prevData.content || '[Mídia não disponível]',\n      messageType: 'text',\n      hasMedia: false,\n      \n      // Manter outros dados\n      contactId: prevData.contactId,\n      sourceId: prevData.sourceId,\n      inboxId: prevData.inboxId,\n      isGroup: prevData.isGroup,\n      \n      // Mensagem original para referência\n      originalMessage: message\n    }\n  }];\n}\n\n// ============================================\n// PREPARAR DOWNLOAD - UAZAPI\n// ============================================\n\nif (platform === 'uazapi') {\n  // Extrair messageId (remover prefixo owner se tiver)\n  let messageId = message.messageId || '';\n  if (messageId.includes(':')) {\n    messageId = messageId.split(':')[1];\n  }\n  \n  // Determinar token baseado no owner\n  const TOKENS = {\n    '556192894339': '6220a163-28da-40dc-ae09-cc2bdbe695f6',  // EEG\n    '556183008973': '88950a6f-0824-4c1d-a4b6-023f4c66cb28'   // Recepção\n  };\n  \n  const owner = message.owner || '';\n  const token = TOKENS[owner] || '';\n  \n  if (!token) {\n    return [{\n      json: {\n        canDownload: false,\n        downloadError: `Token não encontrado para owner: ${owner}`,\n        conversationId: prevData.conversationId,\n        hasConversation: prevData.hasConversation,\n        content: prevData.content || '[Erro ao baixar mídia]',\n        messageType: 'text',\n        hasMedia: false,\n        contactId: prevData.contactId,\n        sourceId: prevData.sourceId,\n        inboxId: prevData.inboxId,\n        isGroup: prevData.isGroup,\n        originalMessage: message\n      }\n    }];\n  }\n  \n  // Determinar se precisa converter para MP3 (áudio)\n  const isAudio = message.messageType === 'audio' \n               || message.messageType === 'ptt' \n               || message.messageType === 'voice'\n               || message.mimeType?.startsWith('audio/');\n  \n  return [{\n    json: {\n      canDownload: true,\n      \n      // Config para download UAZAPI\n      downloadConfig: {\n        messageId: messageId,\n        token: token,\n        owner: owner,\n        generateMp3: isAudio,\n        returnLink: true,\n        returnBase64: false\n      },\n      \n      // Dados da conversa\n      conversationId: prevData.conversationId,\n      hasConversation: prevData.hasConversation,\n      \n      // Dados da mensagem\n      content: prevData.content,\n      messageType: message.messageType,\n      hasMedia: true,\n      mimeType: message.mimeType,\n      fileName: message.fileName,\n      \n      // Outros dados\n      contactId: prevData.contactId,\n      sourceId: prevData.sourceId,\n      inboxId: prevData.inboxId,\n      isGroup: prevData.isGroup,\n      \n      // Mensagem original\n      originalMessage: message\n    }\n  }];\n}\n\n// ============================================\n// PREPARAR DOWNLOAD - 360DIALOG\n// ============================================\n\nif (platform === '360dialog') {\n  // Para 360Dialog, o mediaUrl é o media_id\n  const mediaId = message.mediaUrl;\n  \n  return [{\n    json: {\n      canDownload: true,\n      \n      // Config para download 360Dialog\n      downloadConfig: {\n        mediaId: mediaId,\n        platform: '360dialog'\n      },\n      \n      // Dados da conversa\n      conversationId: prevData.conversationId,\n      hasConversation: prevData.hasConversation,\n      \n      // Dados da mensagem\n      content: prevData.content,\n      messageType: message.messageType,\n      hasMedia: true,\n      mimeType: message.mimeType,\n      fileName: message.fileName,\n      \n      // Outros dados\n      contactId: prevData.contactId,\n      sourceId: prevData.sourceId,\n      inboxId: prevData.inboxId,\n      isGroup: prevData.isGroup,\n      \n      // Mensagem original\n      originalMessage: message\n    }\n  }];\n}\n\n// ============================================\n// PLATAFORMA NÃO SUPORTADA\n// ============================================\n\nreturn [{\n  json: {\n    canDownload: false,\n    downloadError: `Plataforma não suportada para download: ${platform}`,\n    conversationId: prevData.conversationId,\n    hasConversation: prevData.hasConversation,\n    content: prevData.content || '[Mídia não disponível]',\n    messageType: 'text',\n    hasMedia: false,\n    contactId: prevData.contactId,\n    sourceId: prevData.sourceId,\n    inboxId: prevData.inboxId,\n    isGroup: prevData.isGroup,\n    originalMessage: message\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        -320
+      ],
+      "id": "3624ec62-3f13-46d9-8ad7-2f52a14389c0",
+      "name": "Code - Preparar Download Mídia"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.clinicaschappo.com/api/v1/accounts/1/conversations/{{ $('IF - Download OK?').item.json.conversationId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "=**{{ $json.originalMessage.senderName }}:** {{ $json.content }}"
+            },
+            {
+              "name": "message_type",
+              "value": "incoming"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "attachments[]",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4704,
+        -336
+      ],
+      "id": "a2af0e9b-0222-4182-b4f8-16a24c701218",
+      "name": "HTTP - Enviar Mensagem com Attachment",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.fileUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4480,
+        -336
+      ],
+      "id": "ba11eb3c-e1bf-4cc3-a9dc-7fb0bf1c3bdc",
+      "name": "HTTP - Baixar Arquivo",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://waba-v2.360dialog.io/{{ $json.mediaUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        -544
+      ],
+      "id": "667075b7-2375-4d70-8aff-90613a37bb9d",
+      "name": "HTTP - Buscar Mídia 360Dialog",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "NnzRa5miPa1w6S8b",
+          "name": "360dialog API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-NEW-2: PROCESSAR URL MÍDIA 360DIALOG\n// Extrai a URL real da resposta do 360Dialog\n// e prepara para download\n// ============================================\n\nconst prevData = $input.first().json;\n\n// A resposta do primeiro GET contém a URL do Facebook CDN\n// Precisamos substituir o host para usar via 360Dialog\nconst response = prevData;\n\n// Verificar erro\nif (response.error) {\n  return [{\n    json: {\n      downloadSuccess: false,\n      downloadError: response.error,\n      sendAsText: true,\n      conversationId: prevData.conversationId,\n      content: prevData.content || '[Erro ao obter URL da mídia]'\n    }\n  }];\n}\n\n// A URL vem no campo \"url\" e começa com https://lookaside.fbsbx.com\nconst facebookUrl = response.url;\n\nif (!facebookUrl) {\n  return [{\n    json: {\n      downloadSuccess: false,\n      downloadError: 'URL não retornada pelo 360Dialog',\n      sendAsText: true,\n      conversationId: prevData.conversationId,\n      content: prevData.content || '[Mídia não disponível]'\n    }\n  }];\n}\n\n// Substituir o host do Facebook pelo 360Dialog\n// De: https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=...\n// Para: https://waba-v2.360dialog.io/whatsapp_business/attachments/?mid=...\n\nlet downloadUrl = facebookUrl;\nif (facebookUrl.includes('lookaside.fbsbx.com')) {\n  downloadUrl = facebookUrl.replace('https://lookaside.fbsbx.com', 'https://waba-v2.360dialog.io');\n}\n\n// Se a URL usa escape de barra, corrigir\ndownloadUrl = downloadUrl.replace(/\\\\\\//g, '/');\n\nreturn [{\n  json: {\n    // URL para download\n    downloadUrl: downloadUrl,\n    \n    // Dados da mídia\n    mimeType: response.mime_type || prevData.mimeType,\n    fileSize: response.file_size || null,\n    \n    // Passar dados da conversa\n    conversationId: prevData.conversationId,\n    content: prevData.content,\n    fileName: prevData.fileName,\n    messageType: prevData.messageType,\n    contactId: prevData.contactId,\n    inboxId: prevData.inboxId,\n    isGroup: prevData.isGroup\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3808,
+        -544
+      ],
+      "id": "6051f02c-cb0c-4ba2-873c-37100bc3f027",
+      "name": "Code - Processar URL 360Dialog"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.downloadUrl }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4016,
+        -544
+      ],
+      "id": "b6c6c9bf-0246-4de6-8826-cfb7d3d03aa5",
+      "name": "HTTP - Baixar Arquivo 360Dialog",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "NnzRa5miPa1w6S8b",
+          "name": "360dialog API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chatwoot.clinicaschappo.com/api/v1/accounts/1/conversations/{{ $('é 360dialog').item.json.conversationId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $('é 360dialog').item.json.fileName }}"
+            },
+            {
+              "name": "message_type",
+              "value": "incoming"
+            },
+            {
+              "name": "private",
+              "value": "false"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "attachments[]",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4208,
+        -544
+      ],
+      "id": "b160bbf3-f9ce-45f8-b5ba-be3e2f0313ea",
+      "name": "HTTP - Enviar Mensagem 360Dialog",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://chatwoot.clinicaschappo.com/api/v1/accounts/1/contacts/{{ $json.contactId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.originalMessage.contactName }}"
+            },
+            {
+              "name": "avatar_url",
+              "value": "={{ $json.originalMessage.avatarUrl }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2496,
+        -48
+      ],
+      "id": "bf5878e2-93d8-4a00-aa84-71a9ac01ceb6",
+      "name": "HTTP - Atualizar Contato",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TveRgpyyZ9pEZWK1",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -416,
+        0
+      ],
+      "id": "7540e01e-1147-46c8-91a0-90b60087eddc",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "efb7b9a3-276d-454d-97f8-0646f2b51aaf",
+              "leftValue": "={{ $json.hasMentions }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        656,
+        -128
+      ],
+      "id": "f2c7646a-1b94-46fa-afe9-b7658814fe85",
+      "name": "IF - Tem Menções?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-02: VERIFICAR E PREPARAR BUSCA DE MENÇÕES\n// Colocar APÓS \"Code - Parse Message\"\n// ============================================\n\nconst input = $input.first().json;\n\n// Verificar se tem mensagem válida\nif (!input.hasMessage || !input.message) {\n  return [{\n    json: {\n      ...input,\n      hasMentions: false\n    }\n  }];\n}\n\nconst message = input.message;\n\n// ============================================\n// VERIFICAR SE TEM MENÇÕES (UAZAPI)\n// ============================================\n\n// As menções vêm em message.content.contextInfo.mentionedJID\n// ou podem estar em outros lugares dependendo do formato\n\nlet mentionedJIDs = [];\n\n// Tentar extrair de diferentes locais\nif (message.content?.contextInfo?.mentionedJID) {\n  mentionedJIDs = message.content.contextInfo.mentionedJID;\n} else if (message.mentionedJID) {\n  mentionedJIDs = message.mentionedJID;\n} else if (message.contextInfo?.mentionedJID) {\n  mentionedJIDs = message.contextInfo.mentionedJID;\n}\n\n// Se não tem menções, passar adiante\nif (!mentionedJIDs || mentionedJIDs.length === 0) {\n  return [{\n    json: {\n      ...input,\n      hasMentions: false\n    }\n  }];\n}\n\n// ============================================\n// TEM MENÇÕES - PREPARAR LISTA PARA BUSCA\n// ============================================\n\nconsole.log('🔍 Menções detectadas:', mentionedJIDs.length);\n\nreturn [{\n  json: {\n    ...input,\n    hasMentions: true,\n    mentionedJIDs: mentionedJIDs,\n    originalContent: message.content || ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -128
+      ],
+      "id": "76d570a2-3c0a-413c-87da-7fd4ab0ee45d",
+      "name": "Code - Verificar Menções"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT lid, push_name \nFROM whatsapp_contacts_cache \nWHERE lid IN ({{ $json.mentionedJIDs.map(l => \"'\" + l + \"'\").join(', ') }})",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        944,
+        -256
+      ],
+      "id": "268be4a6-7ddc-4e8a-ae51-651e1d949e81",
+      "name": "PostgreSQL - Buscar Nomes",
+      "credentials": {
+        "postgres": {
+          "id": "PAAPZpr4IkB12Dww",
+          "name": "PostgreSQL Schappo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// WF-02: RESOLVER MENÇÕES\n// Colocar APÓS \"PostgreSQL - Buscar Nomes\"\n// ============================================\n\n// Dados anteriores (do nó IF - Tem Menções? ou Code - Verificar Menções)\nlet prevData;\ntry {\n  prevData = $('Code - Verificar Menções').first().json;\n} catch (e) {\n  prevData = $('IF - Tem Menções?').first().json;\n}\n\n// Se não conseguiu pegar dados anteriores, tentar de outra forma\nif (!prevData || !prevData.message) {\n  prevData = $input.first().json;\n}\n\n// Resultado da busca no PostgreSQL\nconst cacheResults = $input.all().map(item => item.json);\n\n// ============================================\n// CRIAR MAPA LID -> NOME\n// ============================================\n\nconst nameMap = {};\n\nfor (const row of cacheResults) {\n  if (row.lid && row.push_name) {\n    // Mapear LID completo\n    nameMap[row.lid] = row.push_name;\n    \n    // Também mapear só o número (sem @lid)\n    const lidNumber = row.lid.replace('@lid', '');\n    nameMap[lidNumber] = row.push_name;\n  }\n}\n\nconsole.log('📝 Cache de nomes encontrado:', Object.keys(nameMap).length, 'registros');\n\n// ============================================\n// SUBSTITUIR MENÇÕES NO TEXTO\n// ============================================\n\nconst message = prevData.message || {};\nlet originalText = '';\n\n// Tentar extrair texto de diferentes locais\nif (typeof message.content === 'string') {\n  originalText = message.content;\n} else if (message.content?.text) {\n  originalText = message.content.text;\n} else if (message.text) {\n  originalText = message.text;\n}\n\nlet resolvedText = originalText;\nlet replacementsCount = 0;\n\nfor (const mentionJID of (prevData.mentionedJIDs || [])) {\n  // Extrair número do LID\n  const lidNumber = mentionJID.replace('@lid', '').replace('@s.whatsapp.net', '');\n  \n  // Buscar nome no mapa\n  const name = nameMap[mentionJID] || nameMap[lidNumber];\n  \n  if (name) {\n    // Substituir @número por @Nome\n    const regex = new RegExp(`@${lidNumber}`, 'g');\n    resolvedText = resolvedText.replace(regex, `@${name}`);\n    replacementsCount++;\n    console.log(`✅ Substituído: @${lidNumber} -> @${name}`);\n  } else {\n    console.log(`⚠️ Nome não encontrado para: ${lidNumber}`);\n  }\n}\n\n// ============================================\n// ATUALIZAR MENSAGEM COM TEXTO RESOLVIDO\n// ============================================\n\nconst updatedMessage = { ...message };\n\n// Atualizar o texto em todos os lugares possíveis\nif (typeof updatedMessage.content === 'string') {\n  updatedMessage.content = resolvedText;\n} else if (updatedMessage.content?.text) {\n  updatedMessage.content.text = resolvedText;\n}\nif (updatedMessage.text) {\n  updatedMessage.text = resolvedText;\n}\n\n// ============================================\n// RETORNAR DADOS ATUALIZADOS\n// ============================================\n\nconsole.log(`✅ Menções resolvidas: ${replacementsCount} de ${(prevData.mentionedJIDs || []).length}`);\n\nreturn [{\n  json: {\n    hasMessage: true,\n    message: updatedMessage,\n    mentionsResolved: true,\n    replacementsCount: replacementsCount\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        -256
+      ],
+      "id": "0f386cda-18e2-4749-ab56-1441afd371d4",
+      "name": "Code - Resolver Menções"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "skip": false,
+          "message": {
+            "messageId": "556192894339:ACD1A5A3202FFE5AD39E121E8A69D8ED",
+            "platform": "uazapi",
+            "owner": "556192894339",
+            "inboxId": 11,
+            "inboxName": "Grupos EEG",
+            "isGroup": true,
+            "contactPhone": "120363041515450725@g.us",
+            "contactName": "Elaine e Jefferson",
+            "groupId": "120363041515450725@g.us",
+            "groupName": "Elaine e Jefferson",
+            "avatarUrl": "https://pps.whatsapp.net/v/t61.24694-24/306934355_539569284597161_7444801144488416112_n.jpg?stp=dst-jpg_s96x96_tt6&ccb=11-4&oh=01_Q5Aa3wGNygfEuJpV4p0tOb30kZLXHzNxA7X3_6RKgpxPIyfjXA&oe=6998E419&_nc_sid=5e03e0&_nc_cat=109",
+            "senderPhone": "5561981147689",
+            "senderName": "Elaine Tavares",
+            "content": "Esse exame do Lucia Sul, será que o Dr. Alberto libera agora pela manhã ??  Ai eu ja faria logo",
+            "messageType": "text",
+            "hasMedia": false,
+            "mediaUrl": null,
+            "mimeType": null,
+            "fileName": null,
+            "latitude": null,
+            "longitude": null,
+            "locationName": null,
+            "locationAddress": null,
+            "timestamp": 1770815209000,
+            "receivedAt": "2026-02-11T13:06:49.642Z"
+          },
+          "contactCache": {
+            "shouldCache": true,
+            "lid": "268487415083225@lid",
+            "phoneNumber": "556181147689",
+            "pushName": "Elaine Tavares",
+            "groupId": "120363041515450725@g.us",
+            "owner": "556192894339"
+          },
+          "redirectToHub": false,
+          "reason": "Não é Inbox 8"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Redis - Buscar Mensagem": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Mensagem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Mensagem?": {
+      "main": [
+        [
+          {
+            "node": "Code - Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Parse Message": {
+      "main": [
+        [
+          {
+            "node": "Code - Verificar Menções",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Buscar Contato": {
+      "main": [
+        [
+          {
+            "node": "IF - Contato Encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Contato Encontrado?": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - Criar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Processar Contato": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Atualizar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Buscar Conversa": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Criar Conversa": {
+      "main": [
+        [
+          {
+            "node": "Code - Verificar Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Processar Conversa": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Conversa no Inbox?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Criar Contato": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Preparar Contato": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Buscar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Verificar Inbox": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Mídia?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Mídia?": {
+      "main": [
+        [
+          {
+            "node": "é 360dialog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - Enviar Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Conversa no Inbox?": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Mídia?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - Criar Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "é 360dialog": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Buscar Mídia 360Dialog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Preparar Download Mídia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Download Mídia UAZAPI": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Processar Download": {
+      "main": [
+        [
+          {
+            "node": "IF - Download OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Download OK?": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Baixar Arquivo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - Enviar Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Preparar Download Mídia": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Download Mídia UAZAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Baixar Arquivo": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Enviar Mensagem com Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Buscar Mídia 360Dialog": {
+      "main": [
+        [
+          {
+            "node": "Code - Processar URL 360Dialog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Processar URL 360Dialog": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Baixar Arquivo 360Dialog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Baixar Arquivo 360Dialog": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Enviar Mensagem 360Dialog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Atualizar Contato": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Buscar Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Redis - Buscar Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Menções?": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL - Buscar Nomes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Preparar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Verificar Menções": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Menções?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL - Buscar Nomes": {
+      "main": [
+        [
+          {
+            "node": "Code - Resolver Menções",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Resolver Menções": {
+      "main": [
+        [
+          {
+            "node": "Code - Preparar Contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a7b28c0f-3949-4b37-9f34-0fddd6bf2841",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "39839379510888463293d9b5cf3539711545af307873221a51a56fa50d8d12c1"
+  },
+  "id": "ARGnWfZXtmKqPvnr",
+  "tags": []
+}

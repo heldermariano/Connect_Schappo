@@ -51,7 +51,7 @@ export default function PacienteBanner({ telefone, tipo }: PacienteBannerProps) 
       {/* Banner compacto */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-1.5 bg-gray-100 dark:bg-gray-900 flex items-center gap-3 text-xs hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+        className="w-full px-4 py-1.5 bg-gray-100 dark:bg-gray-900 flex items-center gap-3 text-xs hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors min-w-0 overflow-hidden"
       >
         {/* Indicador */}
         <svg className={`w-3 h-3 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,13 +59,13 @@ export default function PacienteBanner({ telefone, tipo }: PacienteBannerProps) 
         </svg>
 
         {/* Nome paciente */}
-        <span className="font-medium text-gray-700 dark:text-gray-300">{pac.nome}</span>
+        <span className="font-medium text-gray-700 dark:text-gray-300 truncate">{pac.nome}</span>
 
         {/* Proximo agendamento */}
         {prox && (
-          <span className="ml-auto flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            <span className="text-green-400">
+          <span className="ml-auto flex items-center gap-1.5 min-w-0 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+            <span className="text-green-400 truncate">
               Proximo: {formatDate(prox.data)} {prox.hora} — {prox.medico}
             </span>
           </span>
@@ -73,13 +73,13 @@ export default function PacienteBanner({ telefone, tipo }: PacienteBannerProps) 
 
         {/* Sem proximo */}
         {!prox && historico.length > 0 && (
-          <span className="ml-auto text-gray-500">Sem agendamento futuro</span>
+          <span className="ml-auto text-gray-500 truncate">Sem agendamento futuro</span>
         )}
       </button>
 
       {/* Expandido: historico */}
       {expanded && historico.length > 0 && (
-        <div className="px-4 py-2 bg-gray-50 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800">
+        <div className="px-4 py-2 bg-gray-50 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 max-h-40 overflow-y-auto">
           <div className="text-[10px] text-gray-500 uppercase font-medium mb-1.5">Ultimos agendamentos</div>
           <div className="space-y-1">
             {historico.map((h, i) => {

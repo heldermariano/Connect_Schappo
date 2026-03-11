@@ -88,7 +88,7 @@ export default function MediaPreview({ tipo, messageId, mimetype, filename }: Me
         <img
           src={url}
           alt="Imagem"
-          className="max-w-full rounded max-h-80 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+          className="max-w-full rounded max-h-60 object-contain cursor-pointer hover:opacity-90 transition-opacity"
           loading="lazy"
           onClick={() => setLightboxOpen(true)}
           onError={() => setImgError(true)}
@@ -111,7 +111,7 @@ export default function MediaPreview({ tipo, messageId, mimetype, filename }: Me
   if (tipo === 'video') {
     return (
       <div className="mb-1">
-        <video controls src={url} className="max-w-full rounded max-h-80" />
+        <video controls src={url} className="max-w-full rounded max-h-60" />
       </div>
     );
   }

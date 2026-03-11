@@ -1,0 +1,635 @@
+{
+  "name": "Whatsapp - 01 (Entrada)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "  // ============================================\n  // WF-NEW-1: NORMALIZAR PAYLOAD - V11\n  // ADICIONADO: Debug para mensagens automáticas\n  // ============================================\n  \n  const input = $input.first().json;\n  const body = input.body || input;\n  const headers = input.headers || {};\n  \n  // ============================================\n  // DEBUG: REGISTRAR TUDO QUE CHEGA NO WEBHOOK\n  // ============================================\n  console.log('=== WEBHOOK RECEBIDO ===');\n  console.log('Timestamp:', new Date().toISOString());\n  console.log('Body keys:', Object.keys(body));\n  console.log('Headers:', JSON.stringify(headers).substring(0, 200));\n  console.log('Body preview:', JSON.stringify(body).substring(0, 500));\n  \n  // ============================================\n  // IGNORAR WEBHOOKS DO CHATWOOT\n  // ============================================\n  if (body.event === 'message_created' || body.event === 'message_updated') {\n    console.log('⏭️ IGNORADO: Webhook do Chatwoot');\n    return [{\n      json: {\n        skip: true,\n        reason: 'Webhook do Chatwoot - ignorar no WF-INBOUND',\n        platform: 'chatwoot',\n        event: body.event\n      }\n    }];\n  }\n  \n  if (body.account && body.conversation && body.inbox && !body.owner && !body.messages) {\n    console.log('⏭️ IGNORADO: Payload do Chatwoot detectado');\n    return [{\n      json: {\n        skip: true,\n        reason: 'Payload do Chatwoot detectado - ignorar',\n        platform: 'chatwoot'\n      }\n    }];\n  }\n  \n  // ============================================\n  // CONFIGURAÇÃO DE INBOXES\n  // ============================================\n  const INBOX_MAP = {\n    '556192894339': { inboxId: 5, name: 'EEG' },\n    '556183008973': { inboxId: 4, name: 'Recepção' },\n    '556133455701': { inboxId: 8, name: 'Geral (360Dialog)' }\n  };\n  \n  // ============================================\n  // MAPEAMENTO DE GRUPOS PARA INBOXES SEPARADOS\n  // ============================================\n  const GROUP_INBOX_MAP = {\n    4: 10,  // Recepção → Grupos Recepção\n    5: 11   // EEG → Grupos EEG\n  };\n  \n  // ============================================\n  // FUNÇÃO DE NORMALIZAÇÃO DE TELEFONE\n  // ============================================\n  function normalizePhone(phone) {\n    if (!phone) return null;\n    if (phone.includes('@g.us')) return phone;\n    \n    let cleaned = phone\n      .replace('@s.whatsapp.net', '')\n      .replace('@lid', '')\n      .replace(/\\D/g, '');\n    \n    if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);\n    if (!cleaned.startsWith('55')) cleaned = '55' + cleaned;\n    \n    if (cleaned.length === 12) {\n      const countryCode = cleaned.substring(0, 2);\n      const ddd = cleaned.substring(2, 4);\n      const number = cleaned.substring(4);\n      cleaned = countryCode + ddd + '9' + number;\n    }\n    \n    if (cleaned.length < 10 || cleaned.length > 15) return null;\n    return cleaned;\n  }\n  \n  // ============================================\n  // DETECTAR PLATAFORMA\n  // ============================================\n  let platform = 'unknown';\n  let normalizedMessage = null;\n  \n  if (body.owner && body.message) {\n    platform = 'uazapi';\n  } else if (body.messages && Array.isArray(body.messages)) {\n    platform = '360dialog';\n  } else if (body.entry || body.object === 'whatsapp_business_account') {\n    platform = '360dialog';\n  }\n  \n  console.log('📱 Plataforma detectada:', platform);\n  \n  // ============================================\n  // NORMALIZAR UAZAPI\n  // ============================================\n  if (platform === 'uazapi') {\n    const msg = body.message || {};\n    const chat = body.chat || {};\n    const owner = body.owner || '';\n    \n    // Ignorar mensagens enviadas por nós (fromMe)\n    if (msg.fromMe === true) {\n      console.log('⏭️ IGNORADO: Mensagem fromMe (enviada por nós)');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Mensagem enviada por nós (fromMe)',\n          platform: platform\n        }\n      }];\n    }\n    \n    // Ignorar status updates\n    if (body.EventType && body.EventType !== 'messages') {\n      if (body.EventType === 'messages_update') {\n      console.log('📋 STATUS UPDATE CAPTURADO:', JSON.stringify(body).substring(0, 500));\n      return [{\n        json: {\n          skip: true,\n          reason: 'Status update capturado para debug',\n          debugPayload: body\n        }\n      }];\n    }\n    console.log('⭕ IGNORADO: EventType =', body.EventType);\n    return [{\n      json: {\n        skip: true,\n        reason: `Evento ignorado: ${body.EventType}`,\n        platform: platform\n      }\n    }];\n  }\n    \n    // Determinar inbox\n    const inboxConfig = INBOX_MAP[owner] || { inboxId: 5, name: 'Default' };\n    \n    // Extrair informações do contato/grupo\n    const isGroup = chat.wa_isGroup === true || msg.isGroup === true;\n    \n    // ============================================\n    // REDIRECIONAR GRUPOS PARA INBOX SEPARADO\n    // ============================================\n    let finalInboxId = inboxConfig.inboxId;\n    let finalInboxName = inboxConfig.name;\n    \n    if (isGroup && GROUP_INBOX_MAP[inboxConfig.inboxId]) {\n      finalInboxId = GROUP_INBOX_MAP[inboxConfig.inboxId];\n      finalInboxName = inboxConfig.inboxId === 4 ? 'Grupos Recepção' : 'Grupos EEG';\n    }\n    \n    // Foto do contato/grupo\n    const avatarUrl = chat.imagePreview || chat.image || null;\n    \n    // ============================================\n    // EXTRAIR TELEFONES E NOMES\n    // ============================================\n    let rawContactPhone = '';\n    let rawSenderPhone = '';\n    let groupId = null;\n    let groupName = null;\n    let contactName = '';\n    let senderName = '';\n    \n    if (isGroup) {\n      rawContactPhone = chat.wa_chatid || msg.chatid || '';\n      groupId = rawContactPhone;\n      \n      groupName = msg.groupName && msg.groupName !== 'Unknown' ? msg.groupName : null\n                || chat.subject      \n                || chat.wa_name\n                || chat.name\n                || chat.groupName    \n                || groupId;\n      \n      contactName = groupName;\n      \n      rawSenderPhone = msg.sender_pn || msg.sender || '';\n      senderName = msg.senderName || msg.pushName || msg.sender_name || '';\n      \n      if (!senderName && rawSenderPhone) {\n        senderName = normalizePhone(rawSenderPhone) || rawSenderPhone;\n      }\n      \n    } else {\n      rawContactPhone = msg.sender_pn || chat.wa_chatid || chat.phone || '';\n      rawSenderPhone = rawContactPhone;\n      contactName = chat.wa_name || chat.name || chat.wa_contactName || '';\n      \n      if (!contactName) {\n        contactName = normalizePhone(rawContactPhone) || rawContactPhone;\n      }\n      \n      senderName = msg.senderName || contactName;\n    }\n    \n    const contactPhone = isGroup ? rawContactPhone : normalizePhone(rawContactPhone);\n    const senderPhone = normalizePhone(rawSenderPhone);\n    \n    // ============================================\n    // DETECTAR MÍDIA - PRIORIDADE PARA PTT/ÁUDIO\n    // ============================================\n    const msgType = msg.type || '';\n    const mediaType = msg.mediaType || '';\n    const messageType = msg.messageType || '';\n    \n    let hasMedia = false;\n    let detectedMediaType = null;\n    let mediaUrl = null;\n    let mimeType = null;\n    let fileName = null;\n    \n    // ============================================\n    // v10: DETECTAR LOCALIZAÇÃO (UAZAPI)\n    // ============================================\n    let latitude = null;\n    let longitude = null;\n    let locationName = null;\n    let locationAddress = null;\n    \n    if (msgType === 'location' || messageType === 'LocationMessage' || msg.location) {\n      const loc = msg.location || msg.content || {};\n      latitude = loc.degreesLatitude || loc.latitude || null;\n      longitude = loc.degreesLongitude || loc.longitude || null;\n      locationName = loc.name || null;\n      locationAddress = loc.address || null;\n      detectedMediaType = 'location';\n      console.log('✅ Localização detectada (UAZAPI):', latitude, longitude);\n    }\n    \n    // ============================================\n    // PRIMEIRO: Verificar se tem URL no content\n    // ============================================\n    if (!detectedMediaType && msg.content && typeof msg.content === 'object') {\n      const contentUrl = msg.content.URL || msg.content.url;\n      const contentMime = msg.content.mimetype || msg.content.mimeType;\n      \n      if (contentUrl) {\n        hasMedia = true;\n        mediaUrl = contentUrl;\n        mimeType = contentMime || null;\n        fileName = msg.content.fileName || msg.content.filename || null;\n        \n        // Detectar se é PTT pelo campo PTT ou pelo mimetype\n        if (msg.content.PTT === true || mediaType === 'ptt') {\n          detectedMediaType = 'audio';\n          console.log('✅ PTT detectado via content.PTT ou mediaType');\n        }\n        // Detectar tipo pela mimetype\n        else if (contentMime) {\n          if (contentMime.startsWith('image/')) {\n            detectedMediaType = 'image';\n          } else if (contentMime.startsWith('video/')) {\n            detectedMediaType = 'video';\n          } else if (contentMime.startsWith('audio/') || contentMime.includes('ogg') || contentMime.includes('opus')) {\n            detectedMediaType = 'audio';\n          } else {\n            detectedMediaType = 'document';\n          }\n        }\n      }\n    }\n    \n    // ============================================\n    // SEGUNDO: Verificar campos de tipo\n    // ============================================\n    if (!detectedMediaType) {\n      // PTT específico\n      if (mediaType === 'ptt' || msgType === 'ptt' || messageType === 'PttMessage') {\n        hasMedia = true;\n        detectedMediaType = 'audio';\n        if (!mimeType) mimeType = 'audio/ogg; codecs=opus';\n        console.log('✅ PTT detectado via mediaType/msgType/messageType');\n      }\n      // AudioMessage\n      else if (messageType === 'AudioMessage' || mediaType === 'audio') {\n        hasMedia = true;\n        detectedMediaType = 'audio';\n        console.log('✅ Áudio detectado via messageType/mediaType');\n      }\n      // Outros tipos de mídia\n      else if (msgType === 'media' || ['image', 'video', 'document', 'sticker', 'voice'].includes(mediaType)) {\n        hasMedia = true;\n        detectedMediaType = mediaType || 'document';\n        \n        // Normalizar voice para audio\n        if (detectedMediaType === 'voice') {\n          detectedMediaType = 'audio';\n        }\n      }\n      // Por messageType\n      else if (['ImageMessage', 'VideoMessage', 'DocumentMessage', 'StickerMessage'].some(t => messageType.includes(t.replace('Message', '')))) {\n        hasMedia = true;\n        detectedMediaType = messageType.replace('Message', '').toLowerCase();\n      }\n    }\n    \n    // ============================================\n    // TERCEIRO: Fallback para campos diretos\n    // ============================================\n    if (hasMedia && !mediaUrl) {\n      mediaUrl = msg.mediaUrl || msg.media || null;\n    }\n    if (!mimeType) {\n      mimeType = msg.mimetype || msg.mimeType || null;\n    }\n    if (!fileName) {\n      fileName = msg.filename || msg.fileName || null;\n    }\n    \n    // ============================================\n    // EXTRAIR CONTEÚDO DE TEXTO\n    // ============================================\n    let content = '';\n    \n    if (typeof msg.text === 'string' && msg.text) {\n      content = msg.text;\n    } else if (typeof msg.content === 'string' && msg.content) {\n      content = msg.content;\n    } else if (msg.content && typeof msg.content === 'object') {\n      // Para mídia, o texto pode estar em caption\n      content = msg.content.caption || msg.content.text || '';\n    } else if (msg.caption) {\n      content = msg.caption;\n    }\n    \n    // ============================================\n    // LOG DE DEBUG PARA MÍDIA\n    // ============================================\n    if (hasMedia) {\n      console.log('=== DEBUG MÍDIA ===');\n      console.log('hasMedia:', hasMedia);\n      console.log('detectedMediaType:', detectedMediaType);\n      console.log('mediaUrl:', mediaUrl ? 'SIM (URL presente)' : 'NÃO');\n      console.log('mimeType:', mimeType);\n      console.log('msg.mediaType:', mediaType);\n      console.log('msg.messageType:', messageType);\n      console.log('msg.type:', msgType);\n    }\n    \n    // ============================================\n    // LOG DE DEBUG PARA REDIRECIONAMENTO DE GRUPOS\n    // ============================================\n    if (isGroup) {\n      console.log('=== DEBUG GRUPO ===');\n      console.log('isGroup:', isGroup);\n      console.log('Original inboxId:', inboxConfig.inboxId);\n      console.log('Final inboxId:', finalInboxId);\n      console.log('Final inboxName:', finalInboxName);\n    }\n    \n    // ============================================\n    // VALIDAÇÃO: MÍDIA SEM URL\n    // ============================================\n    if (hasMedia && !mediaUrl) {\n      console.log('⚠️ Mídia detectada sem URL disponível');\n      \n      if (!content) {\n        content = '[' + (detectedMediaType || 'Mídia') + ' não disponível]';\n      }\n    }\n    \n    // Validar telefone\n    if (!contactPhone) {\n      console.log('⏭️ IGNORADO: Telefone inválido');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Telefone inválido ou não encontrado',\n          platform: platform,\n          rawPhone: rawContactPhone\n        }\n      }];\n    }\n    \n    // Validar que tem conteúdo ou mídia ou localização\n    if (!content && !hasMedia && !latitude) {\n      console.log('⏭️ IGNORADO: Sem conteúdo, mídia ou localização');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Mensagem sem conteúdo, sem mídia e sem localização',\n          platform: platform\n        }\n      }];\n    }\n    \n    console.log('✅ Mensagem UAZAPI processada:', contactPhone, content.substring(0, 50));\n    \n    normalizedMessage = {\n      messageId: msg.id || `${owner}:${Date.now()}`,\n      platform: 'uazapi',\n      owner: owner,\n      inboxId: finalInboxId,\n      inboxName: finalInboxName,\n      \n      // Contato/Grupo\n      isGroup: isGroup,\n      contactPhone: contactPhone,\n      contactName: contactName,\n      groupId: groupId,\n      groupName: groupName,\n      \n      // Foto\n      avatarUrl: avatarUrl,\n      \n      // Remetente\n      senderPhone: senderPhone,\n      senderName: senderName,\n      \n      // Mensagem\n      content: content,\n      messageType: detectedMediaType || 'text',\n      \n      // Mídia\n      hasMedia: hasMedia,\n      mediaUrl: mediaUrl,\n      mimeType: mimeType,\n      fileName: fileName,\n      \n      // v10: Localização\n      latitude: latitude,\n      longitude: longitude,\n      locationName: locationName,\n      locationAddress: locationAddress,\n      \n      // Metadata\n      timestamp: msg.messageTimestamp || Date.now(),\n      receivedAt: new Date().toISOString()\n    };\n  }\n  \n  // ============================================\n  // NORMALIZAR 360DIALOG\n  // ============================================\n  else if (platform === '360dialog') {\n    const entry = body.entry?.[0] || body;\n    const changes = entry.changes?.[0] || {};\n    const value = changes.value || body;\n    const messages = value.messages || body.messages || [];\n    const contacts = value.contacts || body.contacts || [];\n    \n    // ============================================\n    // IGNORAR STATUS UPDATES (delivered, read, sent)\n    // ============================================\n    if (value.statuses || body.statuses) {\n      console.log('⏭️ IGNORADO: Status update (delivered/read/sent)');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Status update ignorado',\n          platform: platform\n        }\n      }];\n    }\n    \n    if (messages.length === 0) {\n      console.log('⏭️ IGNORADO: Nenhuma mensagem no payload');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Nenhuma mensagem no payload 360Dialog',\n          platform: platform\n        }\n      }];\n    }\n    \n    const msg = messages[0];\n    const contact = contacts[0] || {};\n    \n    const inboxConfig = INBOX_MAP['556133455701'] || { inboxId: 8, name: 'Geral' };\n    \n    const rawContactPhone = msg.from || contact.wa_id || '';\n    const contactPhone = normalizePhone(rawContactPhone);\n    const contactName = contact.profile?.name || contactPhone;\n    \n    const messageType = msg.type || 'text';\n    let content = '';\n    let mediaUrl = null;\n    let mimeType = null;\n    let fileName = null;\n    let hasMedia = false;\n    let detectedMediaType = messageType;\n    \n    // ============================================\n    // v10: DETECTAR LOCALIZAÇÃO (360Dialog)\n    // ============================================\n    let latitude = null;\n    let longitude = null;\n    let locationName = null;\n    let locationAddress = null;\n    \n    if (messageType === 'location' && msg.location) {\n      latitude = msg.location.latitude || null;\n      longitude = msg.location.longitude || null;\n      locationName = msg.location.name || null;\n      locationAddress = msg.location.address || null;\n      detectedMediaType = 'location';\n      content = `📍 Localização: ${latitude}, ${longitude}`;\n      console.log('✅ Localização detectada (360Dialog):', latitude, longitude);\n    }\n    \n    // ============================================\n    // TRATAR MENSAGENS INTERATIVAS (BOTÕES)\n    // ============================================\n    let buttonId = null;\n    let buttonTitle = null;\n    \n    if (messageType === 'interactive') {\n      const interactive = msg.interactive || {};\n      const interactiveType = interactive.type || '';\n      \n      if (interactiveType === 'button_reply' && interactive.button_reply) {\n        // Clique em botão de resposta rápida\n        buttonId = interactive.button_reply.id;\n        buttonTitle = interactive.button_reply.title;\n        content = buttonId; // Usar o ID do botão como conteúdo\n        detectedMediaType = 'interactive_button';\n      } else if (interactiveType === 'list_reply' && interactive.list_reply) {\n        // Seleção em lista\n        buttonId = interactive.list_reply.id;\n        buttonTitle = interactive.list_reply.title;\n        content = buttonId; // Usar o ID da seleção como conteúdo\n        detectedMediaType = 'interactive_list';\n      }\n      \n      console.log('🔘 Botão/Lista:', buttonId, buttonTitle);\n    }\n    // ============================================\n    // TEXTO NORMAL\n    // ============================================\n    else if (messageType === 'text') {\n      content = msg.text?.body || '';\n    } \n    // ============================================\n    // MÍDIA (imagem, vídeo, áudio, documento)\n    // ============================================\n    else if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {\n      hasMedia = true;\n      const mediaObj = msg[messageType] || {};\n      content = mediaObj.caption || '';\n      mediaUrl = mediaObj.id;\n      mimeType = mediaObj.mime_type || null;\n      fileName = mediaObj.filename || null;\n    }\n    \n    if (hasMedia && !mediaUrl) {\n      if (!content) {\n        content = '[' + messageType + ' não disponível]';\n      }\n    }\n    \n    if (!contactPhone) {\n      console.log('⏭️ IGNORADO: Telefone inválido');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Telefone inválido ou não encontrado',\n          platform: platform,\n          rawPhone: rawContactPhone\n        }\n      }];\n    }\n    \n    // Validar que tem conteúdo ou mídia ou localização\n    if (!content && !hasMedia && !latitude) {\n      console.log('⏭️ IGNORADO: Sem conteúdo, mídia ou localização');\n      return [{\n        json: {\n          skip: true,\n          reason: 'Mensagem sem conteúdo, sem mídia e sem localização',\n          platform: platform\n        }\n      }];\n    }\n    \n    console.log('✅ Mensagem 360Dialog processada:', contactPhone, content.substring(0, 50));\n    \n    normalizedMessage = {\n      messageId: msg.id || `360dialog:${Date.now()}`,\n      platform: '360dialog',\n      owner: '556133455701',\n      inboxId: inboxConfig.inboxId,\n      inboxName: inboxConfig.name,\n      isGroup: false,\n      contactPhone: contactPhone,\n      contactName: contactName,\n      groupId: null,\n      groupName: null,\n      avatarUrl: null,\n      senderPhone: contactPhone,\n      senderName: contactName,\n      content: content,\n      messageType: detectedMediaType,\n      hasMedia: hasMedia,\n      mediaUrl: mediaUrl,\n      mimeType: mimeType,\n      fileName: fileName,\n      // Campos de botão\n      buttonId: buttonId,\n      buttonTitle: buttonTitle,\n      // v10: Localização\n      latitude: latitude,\n      longitude: longitude,\n      locationName: locationName,\n      locationAddress: locationAddress,\n      // Metadata\n      timestamp: parseInt(msg.timestamp) * 1000 || Date.now(),\n      receivedAt: new Date().toISOString()\n    };\n  }\n  \n  // ============================================\n  // PLATAFORMA NÃO RECONHECIDA\n  // ============================================\n  if (!normalizedMessage) {\n    console.log('⏭️ IGNORADO: Plataforma não reconhecida:', platform);\n    return [{\n      json: {\n        skip: true,\n        reason: `Plataforma não reconhecida: ${platform}`,\n        platform: platform,\n        body: body\n      }\n    }];\n  }\n  \n // ============================================\n// EXTRAIR DADOS PARA CACHE DE CONTATOS\n// ============================================\n\nlet contactCache = {\n  shouldCache: false,\n  lid: '',\n  phoneNumber: '',\n  pushName: '',\n  groupId: null,\n  owner: ''\n};\n\n// Só cachear para UAZAPI e mensagens de grupo\nif (platform === 'uazapi' && normalizedMessage && normalizedMessage.isGroup) {\n  const msgCache = body.message || {};\n  const cacheSenderLid = msgCache.sender || msgCache.sender_lid || '';\n  const cacheSenderPhone = (msgCache.sender_pn || '').replace('@s.whatsapp.net', '');\n  const cacheSenderName = msgCache.senderName || '';\n  \n  contactCache = {\n    shouldCache: !!(cacheSenderLid && cacheSenderName),\n    lid: cacheSenderLid,\n    phoneNumber: cacheSenderPhone,\n    pushName: cacheSenderName,\n    groupId: msgCache.chatid || null,\n    owner: body.owner || ''\n  };\n  \n  if (contactCache.shouldCache) {\n    console.log('📝 Cache de contato preparado:', cacheSenderName, cacheSenderLid);\n  }\n}\n\n// ============================================\n// RETORNAR MENSAGEM NORMALIZADA\n// ============================================\nconsole.log('✅ Mensagem normalizada com sucesso');\nreturn [{\n  json: {\n    skip: false,\n    message: normalizedMessage,\n    contactCache: contactCache\n  }\n}];\n  \n  // ============================================\n  // RETORNAR MENSAGEM NORMALIZADA\n  // ============================================\n  console.log('✅ Mensagem normalizada com sucesso');\n  return [{\n    json: {\n      skip: false,\n      message: normalizedMessage,\n      contactCache: contactCache\n    }\n  }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        352
+      ],
+      "id": "bcee2451-fbe6-46fb-9cca-9a751610b992",
+      "name": "Code - Normalizar Payload"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1344,
+        352
+      ],
+      "id": "13e49d74-aecb-43b4-b181-0f831a51690c",
+      "name": "Webhook Trigger",
+      "webhookId": "05fc3192-a1bd-43e0-ad33-01cfc7b1b7ec"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "88344556-34e3-4922-bfab-0e4013749d81",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -512,
+        384
+      ],
+      "id": "79f00ea2-7be6-4fd1-a9d5-54de2e0d8514",
+      "name": "IF - Mensagem Válida?"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "queue:chatwoot",
+        "messageData": "={{ JSON.stringify($json.message) }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        208,
+        224
+      ],
+      "id": "fb4a0e28-daf1-42f1-b550-59bd6e5f0bbe",
+      "name": "Redis",
+      "credentials": {
+        "redis": {
+          "id": "Lfx8om9rqorcf6Cl",
+          "name": "Redis Schappo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"queued\",\n  \"messageId\": \"{{ $json.message.messageId }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        432,
+        224
+      ],
+      "id": "cc1b9d11-aab3-4e6e-a0e3-23f0d3cd29c4",
+      "name": "Respond - Sucesso"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"skipped\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -240,
+        400
+      ],
+      "id": "00bfb8c4-ba6d-450a-84aa-6643196c542e",
+      "name": "Respond - Skip"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f1572dcd-80aa-433a-96b7-ac3dd71e24f7",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -688,
+        368
+      ],
+      "id": "f4517502-0777-4677-ab97-fc81a63125d0",
+      "name": "IF - Skip Message?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"queued\",\n  \"messageId\": \"{{ $json.message.messageId }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -512,
+        208
+      ],
+      "id": "79e58d0b-db18-45a6-9b5e-9381a9047181",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst message = input.message || input;\n\n// Verificar se é Inbox 8\nconst isInbox8 = message.inboxId === 8;\nconst telefone = message.senderPhone || message.contactPhone;\n\nif (!isInbox8) {\n  return [{\n    json: {\n      ...input,\n      redirectToHub: false,\n      reason: 'Não é Inbox 8'\n    }\n  }];\n}\n\n// Lista de usuários cadastrados no Hub\nconst USUARIOS_HUB = [\n  '5561981220485', '5561991495059', '5561981573841', '5561996628353',\n  '5561991474378', '5561996638353', '5561992349256', '5561996714043', \n  '5561981147689', '5561984958038', '5561996723612', \n  '5562994449267', '5561991827054','5565992456963', '5565992707250', '5548988166469',\n  '5591982105285', '5561999313834', '5561982081494', '5561981573841'\n];\n\nconst isUsuarioCadastrado = USUARIOS_HUB.includes(telefone);\n\nif (isUsuarioCadastrado) {\n  return [{\n    json: {\n      redirectToHub: true,\n      message: message,\n      telefone: telefone\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...input,\n    redirectToHub: false,\n    reason: 'Usuário não cadastrado no Hub'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        208
+      ],
+      "id": "8c2ed81c-d347-4d65-89dd-eab2efffccc6",
+      "name": "Verificar Hub Automações"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "133b913b-ccf7-41ec-a3a1-93e894e2e14b",
+              "leftValue": "={{ $json.redirectToHub }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -32,
+        208
+      ],
+      "id": "87420a3b-04e7-47da-8abd-b83a88f0bbfa",
+      "name": "IF - Redirecionar para Hub?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"queued\",\n  \"messageId\": \"{{ $json.message.messageId }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "d1d26b62-7342-43ac-9146-fca2a7a49d31",
+      "name": "Respond - Hub"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "3yAwwP38asN18j26",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/3yAwwP38asN18j26",
+          "cachedResultName": "Whatsapp - 04: Automações V3.0"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {}
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "fe991d1f-50ff-41c5-9182-1d9fa7a8f02a",
+      "name": "Whatsapp - 04: Automações"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ARGnWfZXtmKqPvnr",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ARGnWfZXtmKqPvnr",
+          "cachedResultName": "Whatsapp - 02 (Recebimento)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {}
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        640,
+        224
+      ],
+      "id": "7ddfaaca-4155-4623-a0d8-3fe253174a6f",
+      "name": "Whatsapp - 02"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "91b6e29e-053e-4e4f-8fa9-175517626fde",
+              "leftValue": "={{ $json.contactCache.shouldCache }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -944,
+        352
+      ],
+      "id": "f2508fdb-205f-428d-b14c-637169801758",
+      "name": "IF - Deve Cachear?"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO whatsapp_contacts_cache (lid, phone_number, push_name, group_id, owner)\nVALUES (\n  '{{ $json.contactCache.lid }}',\n  '{{ $json.contactCache.phoneNumber }}',\n  '{{ $json.contactCache.pushName }}',\n  '{{ $json.contactCache.groupId }}',\n  '{{ $json.contactCache.owner }}'\n)\nON CONFLICT (lid, owner) \nDO UPDATE SET \n  phone_number = EXCLUDED.phone_number,\n  push_name = EXCLUDED.push_name,\n  group_id = EXCLUDED.group_id,\n  updated_at = CURRENT_TIMESTAMP;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -512,
+        32
+      ],
+      "id": "7b91442e-0abb-49bf-bad2-f2968693eddf",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "PAAPZpr4IkB12Dww",
+          "name": "PostgreSQL Schappo"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n.clinicaschappo.com",
+            "user-agent": "rest-client/2.1.0 (linux-musl x86_64) ruby/3.4.4p34",
+            "content-length": "2634",
+            "accept": "application/json",
+            "accept-encoding": "gzip;q=1.0,deflate;q=0.6,identity;q=0.3",
+            "content-type": "application/json",
+            "x-forwarded-for": "10.150.77.254",
+            "x-forwarded-host": "n8n.clinicaschappo.com",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "8aee781b3851",
+            "x-real-ip": "10.150.77.254"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "additional_attributes": {
+              "mail_subject": "undefined"
+            },
+            "can_reply": true,
+            "channel": "Channel::Api",
+            "contact_inbox": {
+              "id": 417,
+              "contact_id": 49859,
+              "inbox_id": 4,
+              "source_id": "a7edca92-e3ec-4e65-954b-c82955b36034",
+              "created_at": "2025-11-21T20:28:01.332Z",
+              "updated_at": "2025-11-21T20:28:01.332Z",
+              "hmac_verified": false,
+              "pubsub_token": "SaaGFTcxwuV6qchZRfPB9M9P"
+            },
+            "id": 5119,
+            "inbox_id": 4,
+            "messages": [
+              {
+                "id": 73106,
+                "content": "teste",
+                "account_id": 1,
+                "inbox_id": 4,
+                "conversation_id": 5119,
+                "message_type": 1,
+                "created_at": 1770813625,
+                "updated_at": "2026-02-11T12:40:25.375Z",
+                "private": false,
+                "status": "sent",
+                "source_id": null,
+                "content_type": "text",
+                "content_attributes": {},
+                "sender_type": "User",
+                "sender_id": 1,
+                "external_source_ids": {},
+                "additional_attributes": {},
+                "processed_message_content": "teste",
+                "sentiment": {},
+                "conversation": {
+                  "assignee_id": null,
+                  "unread_count": 0,
+                  "last_activity_at": 1770813625,
+                  "contact_inbox": {
+                    "source_id": "a7edca92-e3ec-4e65-954b-c82955b36034"
+                  }
+                },
+                "sender": {
+                  "id": 1,
+                  "name": "Agente Virtual",
+                  "available_name": "Agente Virtual",
+                  "avatar_url": "",
+                  "type": "user",
+                  "availability_status": null,
+                  "thumbnail": ""
+                }
+              }
+            ],
+            "labels": [],
+            "meta": {
+              "sender": {
+                "additional_attributes": {
+                  "city": "",
+                  "country": "",
+                  "description": "",
+                  "company_name": "",
+                  "country_code": "",
+                  "avatar_url_hash": "00ca6b10e1f58383c99ef9857d74924f51d77110b45938721bdb6860880ea0cf",
+                  "social_profiles": {},
+                  "last_avatar_sync_at": "2026-02-11T11:17:31Z"
+                },
+                "custom_attributes": {},
+                "email": "heldersm.01@gmail.com",
+                "id": 49859,
+                "identifier": "+5561981573841",
+                "name": "Helder Mariano",
+                "phone_number": "+5561981573841",
+                "thumbnail": "https://chatwoot.clinicaschappo.com/rails/active_storage/representations/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBBaStPIiwiZXhwIjpudWxsLCJwdXIiOiJibG9iX2lkIn19--38e07a8d0797297a492b0892a14481f43560ddf5/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaDdCem9MWm05eWJXRjBTU0lJYW5CbkJqb0dSVlE2RTNKbGMybDZaVjkwYjE5bWFXeHNXd2RwQWZvdyIsImV4cCI6bnVsbCwicHVyIjoidmFyaWF0aW9uIn19--5cf7f72ed75db5b1a26a743b38dbe3b0dd7a0257/514005276_1254056062596801_1723374586108656811_n.jpg",
+                "blocked": false,
+                "type": "contact"
+              },
+              "assignee": null,
+              "assignee_type": null,
+              "team": null,
+              "hmac_verified": false
+            },
+            "status": "open",
+            "custom_attributes": {},
+            "snoozed_until": null,
+            "unread_count": 0,
+            "first_reply_created_at": "2026-02-10T19:59:04.761Z",
+            "priority": null,
+            "waiting_since": 0,
+            "agent_last_seen_at": 1770815031,
+            "contact_last_seen_at": 0,
+            "last_activity_at": 1770813625,
+            "timestamp": 1770813625,
+            "created_at": 1770753544,
+            "updated_at": 1770815038.161986,
+            "event": "conversation_updated",
+            "changed_attributes": [
+              {
+                "assignee_id": {
+                  "previous_value": 1,
+                  "current_value": null
+                }
+              },
+              {
+                "updated_at": {
+                  "previous_value": "2026-02-11T12:40:25.430Z",
+                  "current_value": "2026-02-11T13:03:58.161Z"
+                }
+              }
+            ]
+          },
+          "webhookUrl": "https://n8n.clinicaschappo.com/webhook/whatsapp-webhook",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code - Normalizar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Normalizar Payload": {
+      "main": [
+        [
+          {
+            "node": "IF - Deve Cachear?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Mensagem Válida?": {
+      "main": [
+        [
+          {
+            "node": "Verificar Hub Automações",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis": {
+      "main": [
+        [
+          {
+            "node": "Respond - Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Skip Message?": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Mensagem Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Hub Automações": {
+      "main": [
+        [
+          {
+            "node": "IF - Redirecionar para Hub?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Redirecionar para Hub?": {
+      "main": [
+        [
+          {
+            "node": "Respond - Hub",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Redis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond - Sucesso": {
+      "main": [
+        [
+          {
+            "node": "Whatsapp - 02",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond - Hub": {
+      "main": [
+        [
+          {
+            "node": "Whatsapp - 04: Automações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Deve Cachear?": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF - Skip Message?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Skip Message?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "46a9b04e-27de-4da7-b083-6f536fbef4f2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "39839379510888463293d9b5cf3539711545af307873221a51a56fa50d8d12c1"
+  },
+  "id": "T9eNO2HYykQT9q0t",
+  "tags": []
+}

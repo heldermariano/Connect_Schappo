@@ -1,0 +1,17 @@
+{
+  "name": "Connect Schappo",
+  "short_name": "Connect",
+  "description": "Plataforma de atendimento unificada - Clinica Schappo",
+  "start_url": "/conversas",
+  "display": "standalone",
+  "background_color": "#1A1A1A",
+  "theme_color": "#F58220",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

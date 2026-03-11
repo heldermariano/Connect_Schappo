@@ -14,6 +14,7 @@ interface UseAgendaResult {
   fetchAgendamentos: (medicoId: number, data: string) => Promise<void>;
   enviarConfirmacao: (chaves: number[], mensagem: string, medicoId: number, data: string) => Promise<DisparoResult>;
   atualizarStatus: (chave: number, status: string) => Promise<void>;
+  reenviarConfirmacao: (chave: number, medicoId: number, data: string) => Promise<DisparoResult>;
 }
 
 export function useAgenda(): UseAgendaResult {
@@ -76,6 +77,19 @@ export function useAgenda(): UseAgendaResult {
     return result;
   }, []);
 
+  const reenviarConfirmacao = useCallback(async (chave: number, medicoId: number, data: string): Promise<DisparoResult> => {
+    const res = await fetch('/api/agenda/disparo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chaves: [chave], mensagem: '', medico_id: medicoId, data }),
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Erro ao reenviar confirmacao');
+    }
+    return await res.json();
+  }, []);
+
   const atualizarStatus = useCallback(async (chave: number, status: string) => {
     const res = await fetch(`/api/agenda/${chave}/status`, {
       method: 'PATCH',
@@ -99,5 +113,6 @@ export function useAgenda(): UseAgendaResult {
     fetchAgendamentos,
     enviarConfirmacao,
     atualizarStatus,
+    reenviarConfirmacao,
   };
 }

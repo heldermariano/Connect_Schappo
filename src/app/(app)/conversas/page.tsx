@@ -622,9 +622,9 @@ export default function ConversasPage() {
     <>
       <Header busca={busca} onBuscaChange={setBusca} presenca={operatorStatus as StatusPresenca} onPresencaChange={setOperatorStatus} />
       {/* TODO: reativar CallAlert quando softphone voltar */}
-      <div className="flex flex-1 min-h-0">
+      <div className="grid grid-cols-[20rem_1fr] flex-1 min-h-0 overflow-hidden">
         {/* Painel esquerdo: filtros + lista */}
-        <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 bg-white dark:bg-black">
+        <div className="border-r border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden bg-white dark:bg-black">
           <CategoryFilter
             selected={filtro}
             onChange={setFiltro}
@@ -651,23 +651,8 @@ export default function ConversasPage() {
           />
         </div>
 
-        {/* Modal listar grupos */}
-        {canal && (
-          <GrupoListModal
-            open={showGrupoList}
-            canal={canal}
-            onClose={() => setShowGrupoList(false)}
-            onSelectGrupo={(grupo) => {
-              setShowGrupoList(false);
-              setSelectedConversa(grupo);
-              if (grupo.nao_lida > 0) marcarComoLida(grupo.id);
-              // Mudar para tab grupo se nao estiver
-              if (filtro !== 'grupo') setFiltro('grupo');
-            }}
-          />
-        )}
-
-        {/* Painel central: mensagens */}
+        {/* Painel central: mensagens (overflow-hidden impede qualquer conteudo de expandir a coluna grid) */}
+        <div className="overflow-hidden min-w-0 min-h-0">
         <MessageView
           conversa={selectedConversa}
           mensagens={mensagens}
@@ -688,7 +673,23 @@ export default function ConversasPage() {
           onDeleteMensagem={handleDeleteMensagem}
           onEditMensagem={handleEditMensagem}
         />
+        </div>
       </div>
+
+      {/* Modal listar grupos (fora do grid — eh fixed/overlay) */}
+      {canal && (
+        <GrupoListModal
+          open={showGrupoList}
+          canal={canal}
+          onClose={() => setShowGrupoList(false)}
+          onSelectGrupo={(grupo) => {
+            setShowGrupoList(false);
+            setSelectedConversa(grupo);
+            if (grupo.nao_lida > 0) marcarComoLida(grupo.id);
+            if (filtro !== 'grupo') setFiltro('grupo');
+          }}
+        />
+      )}
     </>
   );
 }
