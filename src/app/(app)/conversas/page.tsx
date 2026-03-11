@@ -652,7 +652,7 @@ export default function ConversasPage() {
         </div>
 
         {/* Painel central: mensagens (overflow-hidden impede qualquer conteudo de expandir a coluna grid) */}
-        <div className="overflow-hidden min-w-0 min-h-0">
+        <div className="overflow-hidden min-w-0 min-h-0 h-full flex flex-col">
         <MessageView
           conversa={selectedConversa}
           mensagens={mensagens}
