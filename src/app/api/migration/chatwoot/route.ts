@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
             const insertResult = await pool.query(
               `INSERT INTO atd.mensagens (conversa_id, wa_message_id, from_me, tipo_mensagem, conteudo, sender_name, metadata, created_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-               ON CONFLICT (wa_message_id) DO NOTHING
+               ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
                RETURNING id`,
               [
                 conversaId,

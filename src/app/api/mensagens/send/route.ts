@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
         conversa_id, wa_message_id, from_me, sender_phone, sender_name,
         tipo_mensagem, conteudo, status, metadata, mencoes, quoted_msg_id
       ) VALUES ($1, $2, true, $3, $4, 'text', $5, $6, $7, $8, $9)
-      ON CONFLICT (wa_message_id) DO NOTHING
+      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
       RETURNING *`,
       [
         conversa_id,

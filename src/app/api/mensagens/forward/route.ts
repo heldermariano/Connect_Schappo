@@ -345,7 +345,7 @@ export async function POST(request: NextRequest) {
         tipo_mensagem, conteudo, media_mimetype, media_filename,
         is_forwarded, status, metadata
       ) VALUES ($1, $2, true, $3, $4, $5, $6, $7, $8, true, 'sent', $9)
-      ON CONFLICT (wa_message_id) DO NOTHING
+      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
       RETURNING *`,
       [
         target_conversa_id,
