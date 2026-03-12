@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { RespostaPronta } from '@/lib/types';
+import { useAutocomplete } from '@/hooks/useAutocomplete';
 
 interface QuickReplyAutocompleteProps {
   query: string;
@@ -23,7 +24,6 @@ export default function QuickReplyAutocomplete({
   onSelect,
   onClose,
 }: QuickReplyAutocompleteProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   const normalizedQuery = normalize(query);
@@ -37,9 +37,17 @@ export default function QuickReplyAutocomplete({
     })
     .slice(0, 6);
 
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+  const handleSelect = useCallback((index: number) => {
+    if (filtered[index]) onSelect(filtered[index]);
+  }, [filtered, onSelect]);
+
+  const { selectedIndex, setSelectedIndex } = useAutocomplete({
+    trigger: '/',
+    query,
+    onClose,
+    itemCount: filtered.length,
+    onSelect: handleSelect,
+  });
 
   useEffect(() => {
     const list = listRef.current;
@@ -49,28 +57,6 @@ export default function QuickReplyAutocomplete({
       item.scrollIntoView({ block: 'nearest' });
     }
   }, [selectedIndex]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % Math.max(filtered.length, 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filtered.length) % Math.max(filtered.length, 1));
-      } else if (e.key === 'Enter' && filtered.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        onSelect(filtered[selectedIndex]);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [filtered, selectedIndex, onSelect, onClose]);
 
   if (filtered.length === 0) {
     return (

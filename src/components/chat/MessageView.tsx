@@ -13,6 +13,7 @@ import Avatar from '@/components/ui/Avatar';
 import CallButton from '@/components/calls/CallButton';
 import PacienteBanner from './PacienteBanner';
 import TemplateSendModal from './TemplateSendModal';
+import { getDateLabel, shouldShowDateSeparator, filterMessagesBySearch } from '@/lib/message-utils';
 
 interface MessageViewProps {
   conversa: Conversa | null;
@@ -314,9 +315,7 @@ export default function MessageView({
 
   // Search matches
   const searchMatches = useMemo(() => {
-    if (!searchTerm || searchTerm.length < 2) return [];
-    const term = searchTerm.toLowerCase();
-    return mensagens.filter((m) => m.conteudo?.toLowerCase().includes(term));
+    return filterMessagesBySearch(mensagens, searchTerm);
   }, [mensagens, searchTerm]);
 
   // Scroll to current match
@@ -536,24 +535,12 @@ export default function MessageView({
         ) : (
           mensagens.map((msg, idx) => {
             // Separador de data: exibir quando a data muda entre mensagens
-            let dateSeparator: React.ReactNode = null;
-            const msgDate = msg.created_at ? new Date(msg.created_at) : null;
             const prevMsg = idx > 0 ? mensagens[idx - 1] : null;
-            const prevDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
+            const showSeparator = shouldShowDateSeparator(msg, prevMsg);
+            let dateSeparator: React.ReactNode = null;
 
-            if (msgDate && (!prevDate || msgDate.toDateString() !== prevDate.toDateString())) {
-              const today = new Date();
-              const yesterday = new Date();
-              yesterday.setDate(yesterday.getDate() - 1);
-
-              let dateLabel: string;
-              if (msgDate.toDateString() === today.toDateString()) {
-                dateLabel = 'Hoje';
-              } else if (msgDate.toDateString() === yesterday.toDateString()) {
-                dateLabel = 'Ontem';
-              } else {
-                dateLabel = msgDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-              }
+            if (showSeparator) {
+              const dateLabel = getDateLabel(new Date(msg.created_at));
 
               dateSeparator = (
                 <div key={`date-${msg.id}`} className="flex items-center justify-center my-3">

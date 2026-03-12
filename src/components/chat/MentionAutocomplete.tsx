@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import Avatar from '@/components/ui/Avatar';
+import { useAutocomplete } from '@/hooks/useAutocomplete';
 
 export interface Participant {
   phone: string;
@@ -41,7 +42,6 @@ export default function MentionAutocomplete({
   onSelect,
   onClose,
 }: MentionAutocompleteProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
   const normalizedQuery = normalize(query);
@@ -53,10 +53,17 @@ export default function MentionAutocomplete({
     );
   }).slice(0, 6);
 
-  // Reset index quando filtro muda
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+  const handleSelect = useCallback((index: number) => {
+    if (filtered[index]) onSelect(filtered[index]);
+  }, [filtered, onSelect]);
+
+  const { selectedIndex, setSelectedIndex } = useAutocomplete({
+    trigger: '@',
+    query,
+    onClose,
+    itemCount: filtered.length,
+    onSelect: handleSelect,
+  });
 
   // Scroll item selecionado para visivel
   useEffect(() => {
@@ -67,29 +74,6 @@ export default function MentionAutocomplete({
       item.scrollIntoView({ block: 'nearest' });
     }
   }, [selectedIndex]);
-
-  // Keyboard handler (chamado pelo pai via ref ou event bubbling)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % Math.max(filtered.length, 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filtered.length) % Math.max(filtered.length, 1));
-      } else if (e.key === 'Enter' && filtered.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        onSelect(filtered[selectedIndex]);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [filtered, selectedIndex, onSelect, onClose]);
 
   if (filtered.length === 0) {
     return (

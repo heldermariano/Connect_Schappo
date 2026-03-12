@@ -1,15 +1,10 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  UserAgent,
-  Registerer,
-  Inviter,
-  SessionState,
-  RegistererState,
-  type Invitation,
-  type Session,
-} from 'sip.js';
+import type { UserAgent, Registerer, Session } from 'sip.js';
+import { useSipAudio } from './sip/useSipAudio';
+import { useSipCall } from './sip/useSipCall';
+import { useSipRegistration } from './sip/useSipRegistration';
 import type { SipSettings, SipRegistrationState, SipCallState } from '@/lib/types';
 
 export interface UseSipPhoneReturn {
@@ -42,540 +37,87 @@ export interface UseSipPhoneReturn {
 }
 
 export function useSipPhone(operatorStatus?: string): UseSipPhoneReturn {
-  const [registrationState, setRegistrationState] = useState<SipRegistrationState>('unregistered');
-  const [callState, setCallState] = useState<SipCallState>('idle');
-  const [currentCallNumber, setCurrentCallNumber] = useState('');
-  const [callDuration, setCallDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isOnHold, setIsOnHold] = useState(false);
-  const [sipSettings, setSipSettings] = useState<SipSettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // UI-only state
   const [dialNumber, setDialNumber] = useState('');
+  const [callError, setCallError] = useState<string | null>(null);
 
+  // Shared callState — single source of truth, used by both audio and call sub-hooks
+  const [callState, _setCallState] = useState<SipCallState>('idle');
+  const callStateRef = useRef<SipCallState>('idle');
+  const setCallState = useCallback((state: SipCallState) => {
+    callStateRef.current = state;
+    _setCallState(state);
+  }, []);
+
+  // Shared refs — owned by orchestrator, passed down to break circular deps
+  const sessionRef = useRef<Session | null>(null);
   const userAgentRef = useRef<UserAgent | null>(null);
   const registererRef = useRef<Registerer | null>(null);
-  const sessionRef = useRef<Session | null>(null);
-  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
-  const autoRegisteredRef = useRef(false);
+  const registrationStateRef = useRef<SipRegistrationState>('unregistered');
+  const sipSettingsRef = useRef<SipSettings | null>(null);
 
-  // Inicializar audio elements (lazy)
-  const getRemoteAudio = useCallback(() => {
-    if (!remoteAudioRef.current) {
-      remoteAudioRef.current = document.getElementById('sip-remote-audio') as HTMLAudioElement;
-      if (!remoteAudioRef.current) {
-        const el = document.createElement('audio');
-        el.id = 'sip-remote-audio';
-        el.autoplay = true;
-        el.style.display = 'none';
-        document.body.appendChild(el);
-        remoteAudioRef.current = el;
-      }
-    }
-    return remoteAudioRef.current;
-  }, []);
+  // 1) Audio sub-hook
+  const audio = useSipAudio(sessionRef, callStateRef, setCallState);
 
-  const getRingtone = useCallback(() => {
-    if (!ringtoneRef.current) {
-      ringtoneRef.current = document.getElementById('sip-ringtone') as HTMLAudioElement;
-      if (!ringtoneRef.current) {
-        const el = document.createElement('audio');
-        el.id = 'sip-ringtone';
-        el.src = '/sounds/ringtone.wav';
-        el.loop = true;
-        el.style.display = 'none';
-        document.body.appendChild(el);
-        ringtoneRef.current = el;
-      }
-    }
-    return ringtoneRef.current;
-  }, []);
+  // 2) Call sub-hook
+  const call = useSipCall(
+    sessionRef,
+    userAgentRef,
+    callStateRef,
+    setCallState,
+    registrationStateRef,
+    sipSettingsRef,
+    operatorStatus,
+    setCallError,
+    {
+      setupSessionMedia: audio.setupSessionMedia,
+      startDurationTimer: audio.startDurationTimer,
+      cleanupAudio: audio.cleanupAudio,
+      getRingtone: audio.getRingtone,
+    },
+  );
 
-  // Iniciar timer de duracao
-  const startDurationTimer = useCallback(() => {
-    setCallDuration(0);
-    durationTimerRef.current = setInterval(() => {
-      setCallDuration((prev) => prev + 1);
-    }, 1000);
-  }, []);
+  // 3) Registration sub-hook
+  const registration = useSipRegistration(
+    operatorStatus,
+    call.handleIncomingCall,
+    userAgentRef,
+    registererRef,
+  );
 
-  const stopDurationTimer = useCallback(() => {
-    if (durationTimerRef.current) {
-      clearInterval(durationTimerRef.current);
-      durationTimerRef.current = null;
-    }
-  }, []);
-
-  // Setup media para sessao ativa
-  const setupSessionMedia = useCallback((session: Session) => {
-    const remoteAudio = getRemoteAudio();
-
-    const peerConnection = (session as unknown as { sessionDescriptionHandler?: { peerConnection?: RTCPeerConnection } }).sessionDescriptionHandler?.peerConnection;
-    if (!peerConnection) {
-      console.warn('[SIP] setupSessionMedia: peerConnection nao encontrado');
-      return;
-    }
-
-    console.log('[SIP] setupSessionMedia: configurando midia');
-    console.log('[SIP] ICE connectionState:', peerConnection.iceConnectionState);
-    console.log('[SIP] ICE gatheringState:', peerConnection.iceGatheringState);
-    console.log('[SIP] signaling state:', peerConnection.signalingState);
-
-    // Monitorar estado ICE
-    peerConnection.oniceconnectionstatechange = () => {
-      console.log('[SIP] ICE connectionState mudou:', peerConnection.iceConnectionState);
-    };
-    peerConnection.onconnectionstatechange = () => {
-      console.log('[SIP] connectionState mudou:', peerConnection.connectionState);
-    };
-    peerConnection.onicegatheringstatechange = () => {
-      console.log('[SIP] ICE gatheringState mudou:', peerConnection.iceGatheringState);
-    };
-    peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('[SIP] ICE candidate:', event.candidate.candidate);
-      } else {
-        console.log('[SIP] ICE gathering completo');
-      }
-    };
-
-    // Escutar tracks remotos
-    peerConnection.ontrack = (event) => {
-      console.log('[SIP] ontrack recebido:', event.track.kind, 'readyState:', event.track.readyState);
-      if (event.streams[0]) {
-        remoteAudio.srcObject = event.streams[0];
-        console.log('[SIP] remoteAudio.srcObject configurado, tracks:', event.streams[0].getTracks().map(t => `${t.kind}:${t.readyState}`));
-      }
-    };
-
-    // Se ja tem streams, conectar
-    const receivers = peerConnection.getReceivers();
-    console.log('[SIP] receivers existentes:', receivers.length);
-    if (receivers.length > 0) {
-      const stream = new MediaStream();
-      receivers.forEach((r) => {
-        if (r.track) {
-          stream.addTrack(r.track);
-          console.log('[SIP] track adicionada:', r.track.kind, 'enabled:', r.track.enabled, 'readyState:', r.track.readyState);
-        }
-      });
-      remoteAudio.srcObject = stream;
-    }
-
-    // Log senders (audio local)
-    const senders = peerConnection.getSenders();
-    console.log('[SIP] senders:', senders.length);
-    senders.forEach((s) => {
-      if (s.track) {
-        console.log('[SIP] sender track:', s.track.kind, 'enabled:', s.track.enabled, 'readyState:', s.track.readyState);
-      }
-    });
-  }, [getRemoteAudio]);
-
-  // Cleanup sessao
-  const cleanupSession = useCallback(() => {
-    stopDurationTimer();
-    setCallState('idle');
-    setCurrentCallNumber('');
-    setCallDuration(0);
-    setIsMuted(false);
-    setIsOnHold(false);
-    sessionRef.current = null;
-    const remoteAudio = getRemoteAudio();
-    remoteAudio.srcObject = null;
-    const ringtone = getRingtone();
-    ringtone.pause();
-    ringtone.currentTime = 0;
-  }, [stopDurationTimer, getRemoteAudio, getRingtone]);
-
-  // Observar mudancas de estado da sessao
-  const watchSession = useCallback((session: Session) => {
-    session.stateChange.addListener((state) => {
-      console.log('[SIP] Session state mudou:', state);
-      switch (state) {
-        case SessionState.Establishing:
-          setCallState('calling');
-          break;
-        case SessionState.Established:
-          console.log('[SIP] Chamada ESTABELECIDA - configurando midia');
-          setCallState('in-call');
-          setupSessionMedia(session);
-          startDurationTimer();
-          getRingtone().pause();
-          break;
-        case SessionState.Terminating:
-          console.log('[SIP] Chamada TERMINANDO');
-          cleanupSession();
-          break;
-        case SessionState.Terminated:
-          console.log('[SIP] Chamada TERMINADA');
-          cleanupSession();
-          break;
-      }
-    });
-
-    // Log SDP para debug
-    const sdh = (session as unknown as { sessionDescriptionHandler?: { on?: (event: string, cb: () => void) => void } }).sessionDescriptionHandler;
-    if (sdh && typeof sdh.on === 'function') {
-      sdh.on('sdp', () => console.log('[SIP] SDP event'));
-    }
-  }, [setupSessionMedia, startDurationTimer, cleanupSession, getRingtone]);
-
-  // Handler para chamadas recebidas
-  const handleIncomingCall = useCallback((invitation: Invitation) => {
-    // Se operador nao esta disponivel, rejeitar com 486
-    if (operatorStatus && operatorStatus !== 'disponivel') {
-      invitation.reject({ statusCode: 486 });
-      return;
-    }
-
-    // Se ja tem chamada ativa, rejeitar
-    if (sessionRef.current) {
-      invitation.reject({ statusCode: 486 });
-      return;
-    }
-
-    sessionRef.current = invitation;
-    const callerUri = invitation.remoteIdentity.uri.user || 'Desconhecido';
-    setCurrentCallNumber(callerUri);
-    setCallState('ringing');
-    watchSession(invitation);
-
-    // Tocar ringtone
-    const ringtone = getRingtone();
-    ringtone.play().catch(() => {});
-  }, [operatorStatus, watchSession, getRingtone]);
-
-  // Carregar configuracoes SIP
-  const loadSettings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/atendentes/sip');
-      if (!res.ok) return;
-      const data: SipSettings = await res.json();
-      setSipSettings(data);
-    } catch {
-      // Silently fail
-    }
-  }, []);
-
-  // Salvar configuracoes SIP
-  const saveSipSettings = useCallback(async (settings: SipSettings) => {
-    try {
-      setError(null);
-      const res = await fetch('/api/atendentes/sip', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
-      if (!res.ok) throw new Error('Erro ao salvar');
-      setSipSettings(settings);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar configuracoes');
-    }
-  }, []);
-
-  // Registrar no SIP
-  const register = useCallback(async () => {
-    if (!sipSettings || !sipSettings.sip_server || !sipSettings.sip_username) {
-      setError('Configure o servidor SIP primeiro');
-      return;
-    }
-
-    try {
-      setError(null);
-      setRegistrationState('registering');
-
-      // Limpar UA anterior
-      if (userAgentRef.current) {
-        try { await userAgentRef.current.stop(); } catch {}
-      }
-
-      const scheme = sipSettings.sip_transport === 'wss' ? 'wss' : 'ws';
-      const wsServer = `${scheme}://${sipSettings.sip_server}:${sipSettings.sip_port}/ws`;
-      console.log('[SIP] Conectando a:', wsServer);
-      console.log('[SIP] Usuario:', sipSettings.sip_username);
-
-      const ua = new UserAgent({
-        uri: UserAgent.makeURI(`sip:${sipSettings.sip_username}@${sipSettings.sip_server}`),
-        transportOptions: {
-          server: wsServer,
-        },
-        authorizationUsername: sipSettings.sip_username,
-        authorizationPassword: sipSettings.sip_password,
-        displayName: sipSettings.sip_username,
-        logLevel: 'warn',
-        delegate: {
-          onInvite: handleIncomingCall,
-        },
-      });
-
-      userAgentRef.current = ua;
-
-      await ua.start();
-
-      const registerer = new Registerer(ua);
-      registererRef.current = registerer;
-
-      registerer.stateChange.addListener((state) => {
-        switch (state) {
-          case RegistererState.Registered:
-            setRegistrationState('registered');
-            setError(null);
-            break;
-          case RegistererState.Unregistered:
-            setRegistrationState('unregistered');
-            break;
-          case RegistererState.Terminated:
-            setRegistrationState('unregistered');
-            autoRegisteredRef.current = false;
-            break;
-        }
-      });
-
-      await registerer.register();
-    } catch (err) {
-      setRegistrationState('error');
-      setError(err instanceof Error ? err.message : 'Erro ao registrar');
-    }
-  }, [sipSettings, handleIncomingCall]);
-
-  // Desregistrar
-  const unregister = useCallback(async () => {
-    try {
-      if (registererRef.current) {
-        await registererRef.current.unregister();
-      }
-      if (userAgentRef.current) {
-        await userAgentRef.current.stop();
-      }
-      setRegistrationState('unregistered');
-    } catch {
-      setRegistrationState('unregistered');
-    }
-  }, []);
-
-  // Fazer chamada
-  const makeCall = useCallback(async (number: string) => {
-    if (!userAgentRef.current || registrationState !== 'registered') {
-      setError('Nao registrado no SIP');
-      return;
-    }
-    if (operatorStatus && operatorStatus !== 'disponivel') {
-      setError('Mude o status para Disponivel para fazer chamadas');
-      return;
-    }
-    if (sessionRef.current) {
-      setError('Ja existe uma chamada ativa');
-      return;
-    }
-
-    try {
-      setError(null);
-      const target = UserAgent.makeURI(`sip:${number}@${sipSettings?.sip_server}`);
-      if (!target) {
-        setError('Numero invalido');
-        return;
-      }
-
-      console.log('[SIP] Iniciando chamada para:', number);
-      console.log('[SIP] URI destino:', `sip:${number}@${sipSettings?.sip_server}`);
-
-      const inviter = new Inviter(userAgentRef.current, target, {
-        sessionDescriptionHandlerOptions: {
-          constraints: { audio: true, video: false },
-        },
-      });
-
-      sessionRef.current = inviter;
-      setCurrentCallNumber(number);
-      setCallState('calling');
-      watchSession(inviter);
-
-      await inviter.invite();
-      console.log('[SIP] INVITE enviado com sucesso');
-    } catch (err) {
-      cleanupSession();
-      setError(err instanceof Error ? err.message : 'Erro ao ligar');
-    }
-  }, [registrationState, operatorStatus, sipSettings, watchSession, cleanupSession]);
-
-  // Atender chamada recebida
-  const answerCall = useCallback(async () => {
-    const session = sessionRef.current;
-    if (!session || callState !== 'ringing') return;
-
-    try {
-      await (session as Invitation).accept({
-        sessionDescriptionHandlerOptions: {
-          constraints: { audio: true, video: false },
-        },
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao atender');
-    }
-  }, [callState]);
-
-  // Desligar
-  const hangup = useCallback(() => {
-    const session = sessionRef.current;
-    if (!session) return;
-
-    try {
-      switch (session.state) {
-        case SessionState.Initial:
-        case SessionState.Establishing:
-          if (session instanceof Inviter) {
-            session.cancel();
-          } else {
-            (session as Invitation).reject();
-          }
-          break;
-        case SessionState.Established:
-          session.bye();
-          break;
-        default:
-          break;
-      }
-    } catch {
-      // Force cleanup
-    }
-    cleanupSession();
-  }, [cleanupSession]);
-
-  // Mudo
-  const toggleMute = useCallback(() => {
-    const session = sessionRef.current;
-    if (!session || callState !== 'in-call') return;
-
-    const pc = (session as unknown as { sessionDescriptionHandler?: { peerConnection?: RTCPeerConnection } }).sessionDescriptionHandler?.peerConnection;
-    if (!pc) return;
-
-    const senders = pc.getSenders();
-    senders.forEach((sender) => {
-      if (sender.track?.kind === 'audio') {
-        sender.track.enabled = isMuted;
-      }
-    });
-    setIsMuted(!isMuted);
-  }, [callState, isMuted]);
-
-  // Espera (hold)
-  const toggleHold = useCallback(async () => {
-    const session = sessionRef.current;
-    if (!session || callState !== 'in-call' && callState !== 'on-hold') return;
-
-    const pc = (session as unknown as { sessionDescriptionHandler?: { peerConnection?: RTCPeerConnection } }).sessionDescriptionHandler?.peerConnection;
-    if (!pc) return;
-
-    if (isOnHold) {
-      // Unhold: reabilitar audio
-      pc.getSenders().forEach((s) => { if (s.track) s.track.enabled = true; });
-      pc.getReceivers().forEach((r) => { if (r.track) r.track.enabled = true; });
-      setIsOnHold(false);
-      setCallState('in-call');
-    } else {
-      // Hold: desabilitar audio
-      pc.getSenders().forEach((s) => { if (s.track) s.track.enabled = false; });
-      pc.getReceivers().forEach((r) => { if (r.track) r.track.enabled = false; });
-      setIsOnHold(true);
-      setCallState('on-hold');
-    }
-  }, [callState, isOnHold]);
-
-  // DTMF
-  const sendDTMF = useCallback((digit: string) => {
-    const session = sessionRef.current;
-    if (!session || callState !== 'in-call') return;
-
-    try {
-      const body = {
-        contentDisposition: 'render',
-        contentType: 'application/dtmf-relay',
-        content: `Signal=${digit}\r\nDuration=100`,
-      };
-      session.info({ requestOptions: { body } });
-    } catch {
-      // Fallback: RFC 2833 via RTP (nao suportado em todos os browsers)
-    }
-  }, [callState]);
-
-  // Auto-registro: quando sipSettings carrega com sip_enabled=true, registrar automaticamente
-  useEffect(() => {
-    if (
-      sipSettings &&
-      sipSettings.sip_enabled &&
-      sipSettings.sip_server &&
-      sipSettings.sip_username &&
-      sipSettings.sip_password &&
-      !autoRegisteredRef.current &&
-      registrationState === 'unregistered' &&
-      operatorStatus !== 'offline'
-    ) {
-      autoRegisteredRef.current = true;
-      register();
-    }
-  }, [sipSettings, registrationState, operatorStatus, register]);
-
-  // Integrar com status do operador
-  useEffect(() => {
-    if (operatorStatus === 'offline' && registrationState === 'registered') {
-      autoRegisteredRef.current = false;
-      unregister();
-    }
-  }, [operatorStatus, registrationState, unregister]);
-
-  // Re-registrar ao voltar de offline
-  useEffect(() => {
-    if (
-      operatorStatus &&
-      operatorStatus !== 'offline' &&
-      sipSettings?.sip_enabled &&
-      sipSettings?.sip_server &&
-      sipSettings?.sip_username &&
-      sipSettings?.sip_password &&
-      registrationState === 'unregistered' &&
-      !autoRegisteredRef.current
-    ) {
-      autoRegisteredRef.current = true;
-      register();
-    }
-  }, [operatorStatus, sipSettings, registrationState, register]);
-
-  // Carregar settings ao montar
-  useEffect(() => {
-    loadSettings();
-  }, [loadSettings]);
+  // Keep refs synced with registration state so useSipCall reads current values via refs
+  registrationStateRef.current = registration.registrationState;
+  sipSettingsRef.current = registration.sipSettings;
 
   // Cleanup ao desmontar
   useEffect(() => {
     return () => {
-      stopDurationTimer();
+      audio.stopDurationTimer();
       if (userAgentRef.current) {
         try { userAgentRef.current.stop(); } catch {}
       }
     };
-  }, [stopDurationTimer]);
+  }, [audio.stopDurationTimer]);
 
   return {
-    registrationState,
-    register,
-    unregister,
+    registrationState: registration.registrationState,
+    register: registration.register,
+    unregister: registration.unregister,
     callState,
-    currentCallNumber,
-    callDuration,
-    isMuted,
-    isOnHold,
-    makeCall,
-    answerCall,
-    hangup,
-    toggleMute,
-    toggleHold,
-    sendDTMF,
-    sipSettings,
-    saveSipSettings,
-    loadSettings,
-    error,
+    currentCallNumber: call.currentCallNumber,
+    callDuration: audio.callDuration,
+    isMuted: audio.isMuted,
+    isOnHold: audio.isOnHold,
+    makeCall: call.makeCall,
+    answerCall: call.answerCall,
+    hangup: call.hangup,
+    toggleMute: audio.toggleMute,
+    toggleHold: audio.toggleHold,
+    sendDTMF: audio.sendDTMF,
+    sipSettings: registration.sipSettings,
+    saveSipSettings: registration.saveSipSettings,
+    loadSettings: registration.loadSettings,
+    error: callError || registration.error,
     setDialNumber,
     dialNumber,
   };
