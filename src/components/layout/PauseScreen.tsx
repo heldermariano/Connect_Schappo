@@ -2,22 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Logo from '@/components/Logo';
+import { formatTimer } from '@/lib/format';
 
 interface PauseScreenProps {
   status: 'pausa' | 'almoco' | 'cafe' | 'lanche';
   onResume: () => void;
-}
-
-function formatTimer(seconds: number): string {
-  if (seconds >= 3600) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  }
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
 export default function PauseScreen({ status, onResume }: PauseScreenProps) {

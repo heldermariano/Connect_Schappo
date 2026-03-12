@@ -1,4 +1,5 @@
 import pool from './db';
+import { formatPhone } from './format';
 
 /**
  * Faz upsert de um participante de grupo no cache.
@@ -62,24 +63,5 @@ export async function resolveParticipantName(
   return row.nome_salvo || row.nome_whatsapp || null;
 }
 
-/**
- * Formata um numero de telefone para exibicao.
- * Ex: "5561999999999" → "(61) 99999-9999"
- */
-export function formatPhoneDisplay(phone: string): string {
-  // Remover prefixo 55 (Brasil)
-  const num = phone.replace(/\D/g, '');
-  if (num.length === 13 && num.startsWith('55')) {
-    const ddd = num.slice(2, 4);
-    const part1 = num.slice(4, 9);
-    const part2 = num.slice(9);
-    return `(${ddd}) ${part1}-${part2}`;
-  }
-  if (num.length === 12 && num.startsWith('55')) {
-    const ddd = num.slice(2, 4);
-    const part1 = num.slice(4, 8);
-    const part2 = num.slice(8);
-    return `(${ddd}) ${part1}-${part2}`;
-  }
-  return phone;
-}
+/** @deprecated Use formatPhone from '@/lib/format' */
+export const formatPhoneDisplay = (phone: string) => formatPhone(phone);

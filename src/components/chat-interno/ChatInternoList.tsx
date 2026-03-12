@@ -2,20 +2,12 @@
 
 import { ChatInterno } from '@/lib/types';
 import StatusBadge, { StatusPresenca } from '@/components/ui/StatusBadge';
+import { formatTimeOrDate } from '@/lib/format';
 
 interface ChatInternoListProps {
   chats: ChatInterno[];
   activeId: number | null;
   onSelect: (chat: ChatInterno) => void;
-}
-
-function formatTime(dateStr: string | null): string {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  if (isToday) return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
 export default function ChatInternoList({ chats, activeId, onSelect }: ChatInternoListProps) {
@@ -40,7 +32,7 @@ export default function ChatInternoList({ chats, activeId, onSelect }: ChatInter
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{chat.outro_nome}</span>
-              <span className="text-[11px] text-gray-400 shrink-0 ml-2">{formatTime(chat.ultima_msg_at)}</span>
+              <span className="text-[11px] text-gray-400 shrink-0 ml-2">{formatTimeOrDate(chat.ultima_msg_at)}</span>
             </div>
             <div className="flex items-center justify-between mt-0.5">
               <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{chat.ultima_mensagem || 'Sem mensagens'}</span>

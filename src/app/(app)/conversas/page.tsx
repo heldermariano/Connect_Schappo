@@ -14,8 +14,7 @@ import { useSSE } from '@/hooks/useSSE';
 import { useConversas } from '@/hooks/useConversas';
 import { useMensagens } from '@/hooks/useMensagens';
 import { useAppContext } from '@/contexts/AppContext';
-import { playNotificationBeep, showMentionToast } from '@/lib/notification';
-import { showDesktopNotification } from '@/lib/desktop-notification';
+import { playNotificationBeep, showMentionToast, showDesktopNotification } from '@/lib/notification';
 import type { StatusPresenca } from '@/components/ui/StatusBadge';
 
 export default function ConversasPage() {

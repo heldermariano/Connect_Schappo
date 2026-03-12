@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 import { execFileSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -71,11 +71,6 @@ function convertToOgg(buffer: Buffer): Buffer {
   }
 }
 
-const GRUPO_CATEGORIAS: Record<string, string[]> = {
-  recepcao: ['recepcao', 'geral'],
-  eeg: ['eeg'],
-  todos: ['eeg', 'recepcao', 'geral'],
-};
 
 // Determina tipo de midia baseado no mimetype
 function getMediaType(mimetype: string): 'image' | 'audio' | 'video' | 'document' {

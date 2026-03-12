@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Contato, WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
 import Avatar from '@/components/ui/Avatar';
+import { formatPhoneWithDDI } from '@/lib/format';
 
 interface ContatoDetailModalProps {
   contato: Contato | null;
@@ -190,12 +191,6 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
 
   if (!open || !contato) return null;
 
-  const formatPhone = (phone: string) => {
-    if (phone.length === 13) {
-      return `+${phone.slice(0, 2)} (${phone.slice(2, 4)}) ${phone.slice(4, 9)}-${phone.slice(9)}`;
-    }
-    return phone;
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50" onClick={onClose}>
@@ -268,7 +263,7 @@ export default function ContatoDetailModal({ contato, open, onClose, onSaved }: 
                       </svg>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{channel.label}</div>
-                        <div className="text-xs text-gray-500">{formatPhone(channel.phone)}</div>
+                        <div className="text-xs text-gray-500">{formatPhoneWithDDI(channel.phone)}</div>
                         {temHistorico && (
                           <div className="text-[10px] text-green-600 dark:text-green-400 mt-0.5">
                             {arquivada ? 'Conversa existente (arquivada)' : 'Conversa existente'}

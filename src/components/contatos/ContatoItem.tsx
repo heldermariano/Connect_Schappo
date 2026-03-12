@@ -2,22 +2,11 @@
 
 import { Contato } from '@/lib/types';
 import Avatar from '@/components/ui/Avatar';
+import { formatPhone } from '@/lib/format';
 
 interface ContatoItemProps {
   contato: Contato;
   onClick: () => void;
-}
-
-function formatPhone(phone: string | null): string {
-  if (!phone) return '';
-  const num = phone.replace(/\D/g, '');
-  if (num.length === 13 && num.startsWith('55')) {
-    return `(${num.slice(2, 4)}) ${num.slice(4, 9)}-${num.slice(9)}`;
-  }
-  if (num.length === 12 && num.startsWith('55')) {
-    return `(${num.slice(2, 4)}) ${num.slice(4, 8)}-${num.slice(8)}`;
-  }
-  return phone;
 }
 
 const CATEGORIA_LABELS: Record<string, string> = {

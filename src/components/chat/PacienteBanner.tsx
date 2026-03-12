@@ -2,16 +2,11 @@
 
 import { useState } from 'react';
 import { usePacienteInfo } from '@/hooks/usePacienteInfo';
+import { formatDate } from '@/lib/format';
 
 interface PacienteBannerProps {
   telefone: string | null;
   tipo: 'individual' | 'grupo';
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
-  const [y, m, d] = dateStr.split('-');
-  return `${d}/${m}/${y}`;
 }
 
 function statusLabel(status: string | null): { text: string; color: string } {

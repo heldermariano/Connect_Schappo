@@ -3,26 +3,12 @@
 import { useEffect } from 'react';
 import { HubUsuario, EegAlertaFicha } from '@/lib/types';
 import { useAlertasTecnico } from '@/hooks/useAlertasTecnico';
+import { formatDate, formatDateTime } from '@/lib/format';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   tecnico: HubUsuario;
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return 'Nao informada';
-  return new Date(dateStr).toLocaleDateString('pt-BR');
-}
-
-function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export default function AlertaHistoricoModal({ open, onClose, tecnico }: Props) {

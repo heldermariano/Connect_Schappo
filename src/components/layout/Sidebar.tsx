@@ -7,6 +7,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
 import { useAppContext } from '@/contexts/AppContext';
 import Logo from '@/components/Logo';
+import { formatPhone } from '@/lib/format';
 
 const NAV_ITEMS = [
   { href: '/conversas', label: 'Conversas', icon: 'chat' },
@@ -79,15 +80,6 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
-function formatPhone(phone: string): string {
-  // 556192894339 → (61) 9289-4339
-  const ddd = phone.slice(2, 4);
-  const num = phone.slice(4);
-  if (num.length === 9) {
-    return `(${ddd}) ${num.slice(0, 5)}-${num.slice(5)}`;
-  }
-  return `(${ddd}) ${num.slice(0, 4)}-${num.slice(4)}`;
-}
 
 function SidebarLogo() {
   return <Logo variant="icon" size="sm" />;

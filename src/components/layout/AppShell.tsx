@@ -9,8 +9,7 @@ import BottomNav from '@/components/layout/BottomNav';
 import PauseScreen from '@/components/layout/PauseScreen';
 import { AppProvider, useAppContext } from '@/contexts/AppContext';
 import { useSSE } from '@/hooks/useSSE';
-import { requestNotificationPermission } from '@/lib/desktop-notification';
-import { showToastNotification, playNotificationBeep } from '@/lib/notification';
+import { requestNotificationPermission, showToastNotification, playNotificationBeep } from '@/lib/notification';
 import type { ChatInternoSSEData, ChatInternoReacaoSSEData } from '@/components/chat-interno/ChatInternoPopup';
 
 // Importar SoftphoneFloating dinamicamente sem SSR (sip.js usa APIs do browser)

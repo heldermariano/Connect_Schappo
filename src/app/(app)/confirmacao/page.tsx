@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAgenda } from '@/hooks/useAgenda';
 import { AgendamentoPaciente } from '@/lib/types';
 import CalendarioMedico from '@/components/agenda/CalendarioMedico';
+import { formatDate, formatPhone } from '@/lib/format';
 
 const MENSAGEM_PADRAO = `Clínica Schappo - Confirmação de Agendamento
 
@@ -21,23 +22,6 @@ function getAmanha(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
   return d.toISOString().split('T')[0];
-}
-
-function formatDate(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-');
-  return `${d}/${m}/${y}`;
-}
-
-function formatPhone(phone: string | null): string {
-  if (!phone) return '--';
-  const clean = phone.replace(/\D/g, '');
-  if (clean.length === 13) {
-    return `(${clean.slice(2, 4)}) ${clean.slice(4, 9)}-${clean.slice(9)}`;
-  }
-  if (clean.length === 12) {
-    return `(${clean.slice(2, 4)}) ${clean.slice(4, 8)}-${clean.slice(8)}`;
-  }
-  return phone;
 }
 
 function StatusBadge({ status, indStatus }: { status: string | null; indStatus: string | null }) {

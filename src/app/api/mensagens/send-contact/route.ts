@@ -3,13 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
-
-const GRUPO_CATEGORIAS: Record<string, string[]> = {
-  recepcao: ['recepcao', 'geral'],
-  eeg: ['eeg'],
-  todos: ['eeg', 'recepcao', 'geral'],
-};
+import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
 
 async function sendContactViaUAZAPI(
   number: string,

@@ -8,13 +8,9 @@ interface AudioRecorderProps {
   disabled?: boolean;
 }
 
-const MAX_DURATION = 5 * 60; // 5 minutos
+import { formatTimer } from '@/lib/format';
 
-function formatTimer(seconds: number): string {
-  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-  const s = (seconds % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-}
+const MAX_DURATION = 5 * 60; // 5 minutos
 
 // Formato de gravacao: priorizar ogg (aceito nativamente pelo WhatsApp)
 // Firefox suporta ogg. Chrome suporta webm (convertido no server via ffmpeg).

@@ -2,6 +2,7 @@
 
 import { Chamada } from '@/lib/types';
 import CallButton from './CallButton';
+import { formatTimeWithDate } from '@/lib/format';
 
 interface CallItemProps {
   chamada: Chamada & { atendente_nome?: string | null };
@@ -12,16 +13,6 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return time;
-  const day = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-  return `${day} ${time}`;
 }
 
 function getStatusConfig(status: string): { label: string; color: string; icon: string } {
@@ -131,7 +122,7 @@ export default function CallItem({ chamada }: CallItemProps) {
           {statusConfig.icon} {statusConfig.label}
         </span>
         <div className="text-[11px] text-gray-400 mt-0.5">
-          {formatDuration(chamada.duracao_seg)} &middot; {formatTime(chamada.inicio_at)}
+          {formatDuration(chamada.duracao_seg)} &middot; {formatTimeWithDate(chamada.inicio_at)}
         </div>
       </div>
     </div>

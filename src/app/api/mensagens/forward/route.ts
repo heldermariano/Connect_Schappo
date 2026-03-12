@@ -3,17 +3,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
 
 const UAZAPI_URL = process.env.UAZAPI_URL || '';
 const DIALOG360_API_URL = process.env.DIALOG360_API_URL || '';
 const DIALOG360_API_KEY = process.env.DIALOG360_API_KEY || '';
-
-const GRUPO_CATEGORIAS: Record<string, string[]> = {
-  recepcao: ['recepcao', 'geral'],
-  eeg: ['eeg'],
-  todos: ['eeg', 'recepcao', 'geral'],
-};
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document', 'sticker'];
 

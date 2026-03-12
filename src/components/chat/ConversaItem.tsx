@@ -4,6 +4,7 @@ import { Conversa } from '@/lib/types';
 import Avatar from '@/components/ui/Avatar';
 import StatusBadge, { normalizeStatus } from '@/components/ui/StatusBadge';
 import WaitTimer from './WaitTimer';
+import { formatTimeOrDate } from '@/lib/format';
 
 interface ConversaItemProps {
   conversa: Conversa;
@@ -12,17 +13,6 @@ interface ConversaItemProps {
   mencionado?: boolean;
   flash?: boolean;
   isUrgent?: boolean;
-}
-
-function formatTime(dateStr: string | null): string {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  if (isToday) {
-    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  }
-  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
 function getCategoryBadge(conversa: Conversa): string | null {
@@ -76,7 +66,7 @@ export default function ConversaItem({ conversa, active, onClick, mencionado, fl
               <WaitTimer since={conversa.ultima_msg_at} />
             )}
             <span className={`text-[11px] ${conversa.nao_lida > 0 ? 'text-schappo-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
-              {formatTime(conversa.ultima_msg_at)}
+              {formatTimeOrDate(conversa.ultima_msg_at)}
             </span>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { Mensagem } from '@/lib/types';
 import MediaPreview from './MediaPreview';
 import QuotedMessage from './QuotedMessage';
 import Avatar, { getSenderColor } from '@/components/ui/Avatar';
+import { formatTime, formatPhoneShort } from '@/lib/format';
 
 interface MessageBubbleProps {
   mensagem: Mensagem;
@@ -13,11 +14,6 @@ interface MessageBubbleProps {
   onDelete?: (msgId: number) => void;
   onResend?: (msgId: number) => void;
   onContextMenu?: (data: { x: number; y: number; mensagem: Mensagem }) => void;
-}
-
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -126,17 +122,6 @@ function StatusIcon({ status, metadata }: { status: string; metadata?: Record<st
   );
 }
 
-/**
- * Formata um telefone para exibicao curta.
- */
-function formatPhoneShort(phone: string | null): string {
-  if (!phone) return '';
-  const num = phone.replace(/\D/g, '');
-  if (num.length >= 12 && num.startsWith('55')) {
-    return `(${num.slice(2, 4)}) ${num.slice(4)}`;
-  }
-  return phone;
-}
 
 /**
  * Limpa conteudo que pode ter sido salvo como JSON bruto.

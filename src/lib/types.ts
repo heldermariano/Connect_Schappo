@@ -354,6 +354,13 @@ export const CATEGORIA_OWNER: Record<string, string> = {
   geral: '556133455701',
 };
 
+// Mapeamento Grupo do operador -> Categorias que ele pode acessar
+export const GRUPO_CATEGORIAS: Record<string, string[]> = {
+  recepcao: ['recepcao', 'geral'],
+  eeg: ['eeg'],
+  todos: ['eeg', 'recepcao', 'geral'],
+};
+
 // Mapeamento Owner -> Token UAZAPI (seleciona instancia correta)
 // UAZAPI_INSTANCE_TOKENS: token_eeg,token_recepcao (mesma ordem dos owners)
 const OWNER_TOKEN_MAP: Record<string, number> = {

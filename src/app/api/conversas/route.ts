@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
-
-// Categorias permitidas por grupo de atendimento
-const GRUPO_CATEGORIAS: Record<string, string[]> = {
-  recepcao: ['recepcao', 'geral'],
-  eeg: ['eeg'],
-  todos: ['eeg', 'recepcao', 'geral'],
-};
+import { GRUPO_CATEGORIAS } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useSSE } from '@/hooks/useSSE';
 import StatusBadge, { normalizeStatus } from '@/components/ui/StatusBadge';
+import { formatTimeAgo } from '@/lib/format';
 
 interface SupervisaoAtendente {
   id: number;
@@ -25,17 +26,6 @@ interface Metricas {
   finalizadas_hoje: number;
   pendentes_agora: number;
   tempo_medio_global: number;
-}
-
-function formatTimeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Nunca';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return 'Agora';
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h ${min % 60}min`;
-  return `${Math.floor(h / 24)}d`;
 }
 
 function getMinutesSince(dateStr: string | null): number {

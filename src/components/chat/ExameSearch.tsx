@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { formatDate } from '@/lib/format';
 
 interface ArquivoExame {
   tipo: string;
@@ -223,16 +224,6 @@ export default function ExameSearch({ searchTerm, onClose, onAttachFiles }: Exam
   );
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '';
-  try {
-    const parts = dateStr.split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    return dateStr;
-  } catch {
-    return dateStr;
-  }
-}
 
 function statusLabel(status: string): { text: string; className: string } {
   switch (status) {

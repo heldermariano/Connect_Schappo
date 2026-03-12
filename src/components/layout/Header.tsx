@@ -11,24 +11,13 @@ import Avatar from '@/components/ui/Avatar';
 import { Contato, WHATSAPP_CHANNELS, GRUPO_CHANNELS } from '@/lib/types';
 import AddContatoModal from '@/components/contatos/AddContatoModal';
 import { useAppContext } from '@/contexts/AppContext';
+import { formatPhone } from '@/lib/format';
 
 interface HeaderProps {
   busca: string;
   onBuscaChange: (value: string) => void;
   presenca?: StatusPresenca;
   onPresencaChange?: (status: StatusPresenca) => void;
-}
-
-function formatPhone(phone: string | null): string {
-  if (!phone) return '';
-  const num = phone.replace(/\D/g, '');
-  if (num.length === 13 && num.startsWith('55')) {
-    return `(${num.slice(2, 4)}) ${num.slice(4, 9)}-${num.slice(9)}`;
-  }
-  if (num.length === 12 && num.startsWith('55')) {
-    return `(${num.slice(2, 4)}) ${num.slice(4, 8)}-${num.slice(8)}`;
-  }
-  return phone;
 }
 
 export default function Header({ busca, onBuscaChange, presenca: presencaProp, onPresencaChange }: HeaderProps) {

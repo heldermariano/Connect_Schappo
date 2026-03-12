@@ -10,12 +10,9 @@ interface ChatInternoMessageProps {
   onReply?: (mensagem: ChatInternoMensagem) => void;
 }
 
-const QUICK_EMOJIS = ['\uD83D\uDC4D', '\u2764\uFE0F', '\uD83D\uDE02', '\uD83D\uDE2E', '\uD83D\uDE22', '\uD83D\uDE4F'];
+import { formatTime } from '@/lib/format';
 
-function formatTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
+const QUICK_EMOJIS = ['\uD83D\uDC4D', '\u2764\uFE0F', '\uD83D\uDE02', '\uD83D\uDE2E', '\uD83D\uDE22', '\uD83D\uDE4F'];
 
 function renderMedia(mensagem: ChatInternoMensagem) {
   const tipo = mensagem.tipo || 'text';
