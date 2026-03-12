@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import { queryLatin1 } from '@/lib/db-agenda';
 import pool from '@/lib/db';
 import { normalizePhone } from '@/lib/types';
@@ -13,10 +12,8 @@ const BYTEA_FIELDS = [
 ];
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const { searchParams } = new URL(request.url);
   const medicoId = searchParams.get('medico');

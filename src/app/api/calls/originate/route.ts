@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import { originate, isAMIConnected } from '@/lib/ami-listener';
 import pool from '@/lib/db';
 
 // POST: Iniciar chamada click-to-call
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { destino } = await request.json();
@@ -26,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se atendente tem ramal
-    const ramal = session.user.ramal;
+    const ramal = auth.session.user.ramal;
     if (!ramal) {
       return NextResponse.json({ error: 'Atendente sem ramal configurado' }, { status: 400 });
     }
@@ -34,7 +31,7 @@ export async function POST(request: NextRequest) {
     // Verificar se atendente esta disponivel
     const statusResult = await pool.query(
       `SELECT status_presenca FROM atd.atendentes WHERE id = $1`,
-      [parseInt(session.user.id)],
+      [auth.userId],
     );
     const presenca = statusResult.rows[0]?.status_presenca;
     if (presenca && presenca !== 'disponivel') {

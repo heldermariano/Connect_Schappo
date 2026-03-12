@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
 
 // Envia mensagem via UAZAPI
 // Campos conforme docs: number, text, replyid, mentions (string csv)
@@ -88,15 +87,12 @@ async function sendVia360Dialog(to: string, text: string): Promise<{ success: bo
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    console.error('[send] Sessao nao autenticada');
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { conversa_id, conteudo, mencoes, quoted_msg_id } = await request.json();
-    console.log(`[send] Inicio: conversa=${conversa_id} user=${session.user.nome}`);
+    console.log(`[send] Inicio: conversa=${conversa_id} user=${auth.session.user.nome}`);
 
     if (!conversa_id || !conteudo || typeof conteudo !== 'string' || !conteudo.trim()) {
       return NextResponse.json({ error: 'conversa_id e conteudo sao obrigatorios' }, { status: 400 });
@@ -119,10 +115,8 @@ export async function POST(request: NextRequest) {
     const conversa = conversaResult.rows[0];
 
     // Verificar permissao do atendente
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-    const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
-    if (!categoriasPermitidas.includes(conversa.categoria)) {
-      return NextResponse.json({ error: 'Sem permissao para esta conversa' }, { status: 403 });
+    if (!auth.categoriasPermitidas.includes(conversa.categoria)) {
+      return apiError('Sem permissao para esta conversa', 403);
     }
 
     // Determinar destinatario — usar wa_chatid (JID real do WhatsApp) para garantir
@@ -136,7 +130,7 @@ export async function POST(request: NextRequest) {
     let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
 
     // Prefixar nome do operador em negrito (visivel no WhatsApp)
-    const nomeOperador = session.user.nome;
+    const nomeOperador = auth.session.user.nome;
     const textToSend = `*${nomeOperador}:*\n${conteudo.trim()}`;
 
     // Converter identificadores em JIDs do WhatsApp para mencoes
@@ -188,12 +182,12 @@ export async function POST(request: NextRequest) {
         conversa_id,
         waMessageId,
         owner,
-        session.user.nome,
+        auth.session.user.nome,
         conteudo.trim(),
         msgStatus,
         JSON.stringify({
-          sent_by: session.user.id,
-          sent_by_name: session.user.nome,
+          sent_by: auth.session.user.id,
+          sent_by_name: auth.session.user.nome,
           message_id_full: sendResult.fullMessageId || waMessageId,
           ...(sendResult.error ? { send_error: sendResult.error } : {}),
         }),

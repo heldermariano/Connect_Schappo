@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ chave: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const { chave } = await params;
   const chaveInt = parseInt(chave);
@@ -26,7 +23,7 @@ export async function PATCH(
       return NextResponse.json({ error: `status invalido. Valores aceitos: ${statusValidos.join(', ')}` }, { status: 400 });
     }
 
-    const atendenteId = parseInt(session.user.id as string);
+    const atendenteId = auth.userId;
 
     const result = await pool.query(
       `UPDATE atd.confirmacao_agendamento

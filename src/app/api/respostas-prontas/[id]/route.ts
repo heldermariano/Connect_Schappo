@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const atendenteId = parseInt(session.user.id as string);
-  if (!atendenteId) {
-    return NextResponse.json({ error: 'Atendente nao identificado' }, { status: 401 });
-  }
+  const atendenteId = auth.userId;
 
   const { id } = await params;
   const body = await request.json();
@@ -55,15 +49,10 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const atendenteId = parseInt(session.user.id as string);
-  if (!atendenteId) {
-    return NextResponse.json({ error: 'Atendente nao identificado' }, { status: 401 });
-  }
+  const atendenteId = auth.userId;
 
   const { id } = await params;
 

@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 import { pauseQueue } from '@/lib/ami-listener';
 
 // PATCH: Atualizar status de presenca do atendente logado
 export async function PATCH(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { status } = await request.json();
@@ -20,7 +17,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Status invalido' }, { status: 400 });
     }
 
-    const atendenteId = parseInt(session.user.id);
+    const atendenteId = auth.userId;
 
     // Buscar status atual antes de atualizar
     const currentResult = await pool.query(
@@ -66,10 +63,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Se tem ramal, enviar QueuePause ao AMI
-    if (session.user.ramal) {
+    if (auth.session.user.ramal) {
       const paused = status !== 'disponivel';
       const reason = isPause ? status : '';
-      pauseQueue(session.user.ramal, paused, reason);
+      pauseQueue(auth.session.user.ramal, paused, reason);
     }
 
     // Emitir SSE para todos os clientes
@@ -77,7 +74,7 @@ export async function PATCH(request: NextRequest) {
       type: 'atendente_status',
       data: {
         atendente_id: atendenteId,
-        nome: session.user.nome,
+        nome: auth.session.user.nome,
         status,
       },
     });
@@ -92,10 +89,8 @@ export async function PATCH(request: NextRequest) {
 // GET: Retorna status de todos os atendentes ativos
 // Cross-check com conexoes SSE para corrigir status de quem nao tem conexao ativa
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const authGet = await requireAuth();
+  if (!isAuthed(authGet)) return authGet;
 
   try {
     const result = await pool.query(

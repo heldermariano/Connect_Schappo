@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { encryptSipPassword, decryptSipPassword } from '@/lib/sip-config';
 
@@ -9,16 +8,14 @@ import { encryptSipPassword, decryptSipPassword } from '@/lib/sip-config';
  * A senha eh descriptografada e enviada via HTTPS.
  */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const result = await pool.query(
       `SELECT sip_server, sip_port, sip_username, sip_password_encrypted, sip_transport, sip_enabled
        FROM atd.atendentes WHERE id = $1`,
-      [session.user.id],
+      [auth.userId],
     );
 
     if (result.rows.length === 0) {
@@ -55,10 +52,8 @@ export async function GET() {
  * A senha eh criptografada antes de gravar.
  */
 export async function PUT(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const authPut = await requireAuth();
+  if (!isAuthed(authPut)) return authPut;
 
   try {
     const body = await request.json();
@@ -104,7 +99,7 @@ export async function PUT(request: NextRequest) {
     }
 
     setClauses.push(`updated_at = NOW()`);
-    values.push(session.user.id);
+    values.push(authPut.userId);
 
     await pool.query(
       `UPDATE atd.atendentes SET ${setClauses.join(', ')} WHERE id = $${idx}`,

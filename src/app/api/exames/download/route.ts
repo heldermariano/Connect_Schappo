@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 
 // Proxy para download de PDFs do NeuroSchappo (evita CORS)
 // Recebe a download_url completa (já inclui token HMAC)
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const url = request.nextUrl.searchParams.get('url');
   if (!url) {

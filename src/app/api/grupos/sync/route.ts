@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
 
@@ -9,10 +8,8 @@ import { CATEGORIA_OWNER, getUazapiToken } from '@/lib/types';
  * Chama POST {url}/group/list para cada instancia e faz upsert em atd.conversas.
  */
 export async function POST() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const url = process.env.UAZAPI_URL;
   if (!url) {

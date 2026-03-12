@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 
 const TEMPLATE_NAME = 'confirmacao_agendamento';
 const TEMPLATE_LANG = 'pt_BR';
@@ -58,10 +57,8 @@ async function sendTemplate360(
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { conversa_id, nome_paciente, data, hora, nome_medico, procedimento } = await request.json();
@@ -112,8 +109,8 @@ export async function POST(request: NextRequest) {
       source: 'template_manual',
       template_name: TEMPLATE_NAME,
       provider: '360dialog',
-      sent_by: session.user.id,
-      sent_by_name: session.user.nome,
+      sent_by: auth.session.user.id,
+      sent_by_name: auth.session.user.nome,
     });
 
     const msgResult = await pool.query(
@@ -127,7 +124,7 @@ export async function POST(request: NextRequest) {
         conversa_id,
         waMessageId,
         '556133455701',
-        session.user.nome,
+        auth.session.user.nome,
         textoLocal,
         meta,
       ],

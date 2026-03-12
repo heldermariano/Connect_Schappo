@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import examesPool from '@/lib/db-exames';
 import { HubUsuario } from '@/lib/types';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   // Queries em paralelo: tecnicos + alertas de hoje + exames de hoje
   const [tecnicosRes, alertasRes, examesRes] = await Promise.all([
@@ -78,12 +75,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const role = (session.user as { role?: string }).role;
+  const role = auth.session.user.role;
   if (role !== 'admin' && role !== 'supervisor') {
     return NextResponse.json({ error: 'Sem permissao' }, { status: 403 });
   }

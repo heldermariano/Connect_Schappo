@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const userId = parseInt(session.user.id as string);
-  const userName = session.user.nome || 'Operador';
+  const userId = auth.userId;
+  const userName = auth.session.user.nome || 'Operador';
 
   try {
     const { destinatario_ids, conteudo } = await request.json();

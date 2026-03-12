@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
 import { execFileSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -250,10 +249,8 @@ async function sendMediaVia360Dialog(
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const formData = await request.formData();
@@ -282,10 +279,8 @@ export async function POST(request: NextRequest) {
     const conversa = conversaResult.rows[0];
 
     // Verificar permissao
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-    const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
-    if (!categoriasPermitidas.includes(conversa.categoria)) {
-      return NextResponse.json({ error: 'Sem permissao para esta conversa' }, { status: 403 });
+    if (!auth.categoriasPermitidas.includes(conversa.categoria)) {
+      return apiError('Sem permissao para esta conversa', 403);
     }
 
     const isGroup = conversa.tipo === 'grupo';
@@ -315,7 +310,7 @@ export async function POST(request: NextRequest) {
 
     // Prefixar nome do operador em negrito no caption (visivel no WhatsApp)
     // PTT/audio nao suporta caption no WhatsApp
-    const nomeOperador = session.user.nome;
+    const nomeOperador = auth.session.user.nome;
     const captionToSend = mediaType === 'ptt' ? undefined : (caption ? `*${nomeOperador}:*\n${caption}` : `*${nomeOperador}*`);
 
     console.log(`[send-media] provider=${conversa.provider} type=${mediaType} mime=${mimetype} file=${file.name} size=${fileBuffer.length} voice=${isVoiceRecording}`);
@@ -344,8 +339,8 @@ export async function POST(request: NextRequest) {
 
     // Metadata: incluir provider e media_id da 360Dialog para o media proxy
     const metadata: Record<string, unknown> = {
-      sent_by: session.user.id,
-      sent_by_name: session.user.nome,
+      sent_by: auth.session.user.id,
+      sent_by_name: auth.session.user.nome,
       provider: conversa.provider,
       ...(sendResult.error ? { send_error: sendResult.error } : {}),
     };
@@ -367,7 +362,7 @@ export async function POST(request: NextRequest) {
         conversaId,
         waMessageId,
         owner,
-        session.user.nome,
+        auth.session.user.nome,
         dbMediaType,
         conteudo,
         mimetype,

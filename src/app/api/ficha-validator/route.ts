@@ -1,24 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import { getFichaValidatorStatus, startFichaValidator, stopFichaValidator } from '@/lib/ficha-validator';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   return NextResponse.json(getFichaValidatorStatus());
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const role = (session.user as { role?: string }).role;
+  const role = auth.session.user.role;
   if (role !== 'admin') {
     return NextResponse.json({ error: 'Sem permissao' }, { status: 403 });
   }

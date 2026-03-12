@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
 
 // Envia texto via UAZAPI
 async function sendTextUAZAPI(number: string, text: string, instanceToken: string): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
@@ -51,10 +50,8 @@ async function sendText360(to: string, text: string): Promise<{ success: boolean
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { mensagem_id } = await request.json();
@@ -84,10 +81,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar permissao do grupo
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-    const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
-    if (!categoriasPermitidas.includes(original.categoria)) {
-      return NextResponse.json({ error: 'Sem permissao para esta conversa' }, { status: 403 });
+    if (!auth.categoriasPermitidas.includes(original.categoria)) {
+      return apiError('Sem permissao para esta conversa', 403);
     }
 
     // Determinar destinatario
@@ -98,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     // Montar texto para reenvio
     const conteudoOriginal = original.conteudo || `[${original.tipo_mensagem}]`;
-    const nomeOperador = session.user.nome;
+    const nomeOperador = auth.session.user.nome;
     const textToSend = `*${nomeOperador}:*\n${conteudoOriginal}`;
 
     // Enviar via provider correto
@@ -135,7 +130,7 @@ export async function POST(request: NextRequest) {
           waMessageId,
           JSON.stringify({
             resent_at: new Date().toISOString(),
-            resent_by: session.user.nome,
+            resent_by: auth.session.user.nome,
             message_id_full: sendResult.fullMessageId || waMessageId,
             send_error: null,
           }),
@@ -162,11 +157,11 @@ export async function POST(request: NextRequest) {
           original.conversa_id,
           waMessageId,
           owner,
-          session.user.nome,
+          auth.session.user.nome,
           conteudoOriginal,
           JSON.stringify({
-            sent_by: session.user.id,
-            sent_by_name: session.user.nome,
+            sent_by: auth.session.user.id,
+            sent_by_name: auth.session.user.nome,
             resent_from: mensagem_id,
             message_id_full: sendResult.fullMessageId || waMessageId,
           }),
@@ -182,7 +177,7 @@ export async function POST(request: NextRequest) {
       // Marcar original com info de reenvio
       await pool.query(
         `UPDATE atd.mensagens SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
-        [JSON.stringify({ resent_at: new Date().toISOString(), resent_by: session.user.nome }), mensagem_id],
+        [JSON.stringify({ resent_at: new Date().toISOString(), resent_by: auth.session.user.nome }), mensagem_id],
       );
 
       // Emitir SSE nova mensagem

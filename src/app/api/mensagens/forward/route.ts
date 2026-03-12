@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
 
 const UAZAPI_URL = process.env.UAZAPI_URL || '';
 const DIALOG360_API_URL = process.env.DIALOG360_API_URL || '';
@@ -189,10 +188,8 @@ async function sendText360(to: string, text: string): Promise<{ success: boolean
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { source_message_id, target_conversa_id } = await request.json();
@@ -226,10 +223,8 @@ export async function POST(request: NextRequest) {
     const conversa = conversaResult.rows[0];
 
     // Verificar permissao
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-    const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
-    if (!categoriasPermitidas.includes(conversa.categoria)) {
-      return NextResponse.json({ error: 'Sem permissao para esta conversa' }, { status: 403 });
+    if (!auth.categoriasPermitidas.includes(conversa.categoria)) {
+      return apiError('Sem permissao para esta conversa', 403);
     }
 
     const isGroup = conversa.tipo === 'grupo';
@@ -238,7 +233,7 @@ export async function POST(request: NextRequest) {
       : conversa.wa_chatid.replace('@s.whatsapp.net', '');
 
     const senderLabel = originalMsg.sender_name || originalMsg.sender_phone || 'Desconhecido';
-    const nomeOperador = session.user.nome;
+    const nomeOperador = auth.session.user.nome;
     const isMedia = MEDIA_TYPES.includes(originalMsg.tipo_mensagem);
 
     let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; mediaId?: string; error?: string };
@@ -323,8 +318,8 @@ export async function POST(request: NextRequest) {
 
     const metadata: Record<string, unknown> = {
       forwarded_from_msg_id: source_message_id,
-      forwarded_by: session.user.id,
-      forwarded_by_name: session.user.nome,
+      forwarded_by: auth.session.user.id,
+      forwarded_by_name: auth.session.user.nome,
       original_sender: senderLabel,
       message_id_full: sendResult.fullMessageId || waMessageId,
       provider: conversa.provider,
@@ -345,7 +340,7 @@ export async function POST(request: NextRequest) {
         target_conversa_id,
         waMessageId,
         owner,
-        session.user.nome,
+        auth.session.user.nome,
         dbTipoMensagem,
         dbConteudo,
         dbMediaMimetype,

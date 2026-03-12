@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 import { writeFile, mkdir } from 'fs/promises';
@@ -10,12 +9,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const userId = parseInt(session.user.id as string);
+  const userId = auth.userId;
   const { id: chatId } = await params;
 
   try {
@@ -71,7 +68,7 @@ export async function POST(
     );
 
     const mensagem = msgResult.rows[0];
-    mensagem.nome_remetente = session.user.nome;
+    mensagem.nome_remetente = auth.session.user.nome;
 
     // Atualizar chat
     const previewText = caption || (tipo === 'image' ? 'Imagem' : tipo === 'audio' || tipo === 'ptt' ? 'Audio' : tipo === 'video' ? 'Video' : 'Documento');

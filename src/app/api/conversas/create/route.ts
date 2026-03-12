@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 
 // Mapeamento grupo → categoria + provider padrão para novas conversas
@@ -16,10 +15,8 @@ const GRUPO_CONFIG: Record<string, { categoria: string; provider: string; owner:
  * Body: { telefone: string, nome?: string }
  */
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { telefone, nome, categoria: categoriaParam } = await request.json();
@@ -34,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determinar configuração do canal
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
+    const grupo = auth.grupo;
     const config = categoriaParam && GRUPO_CONFIG[categoriaParam]
       ? GRUPO_CONFIG[categoriaParam]
       : (GRUPO_CONFIG[grupo] || GRUPO_CONFIG.todos);

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import chatwootPool from '@/lib/db-chatwoot';
 
@@ -64,11 +63,9 @@ interface CwMessage {
 
 // GET: preview da migracao
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
-  const role = (session.user as { role?: string }).role;
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
+  const role = auth.session.user.role;
   if (role !== 'admin') {
     return NextResponse.json({ error: 'Apenas admin' }, { status: 403 });
   }
@@ -118,12 +115,10 @@ export async function GET(request: NextRequest) {
 
 // POST: executar migracao
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
-  const role = (session.user as { role?: string }).role;
-  if (role !== 'admin') {
+  const authPost = await requireAuth();
+  if (!isAuthed(authPost)) return authPost;
+  const rolePost = authPost.session.user.role;
+  if (rolePost !== 'admin') {
     return NextResponse.json({ error: 'Apenas admin' }, { status: 403 });
   }
 

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 
@@ -8,12 +7,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const userId = parseInt(session.user.id as string);
+  const userId = auth.userId;
   const { id: chatId } = await params;
 
   try {
@@ -50,7 +47,7 @@ export async function POST(
       // Remover reacao anterior do mesmo usuario (so permite 1 reacao por pessoa)
       const prevIdx = currentReacoes.findIndex((r) => r.atendente_id === userId);
       if (prevIdx >= 0) currentReacoes.splice(prevIdx, 1);
-      currentReacoes.push({ emoji, atendente_id: userId, nome: session.user.nome });
+      currentReacoes.push({ emoji, atendente_id: userId, nome: auth.session.user.nome });
     }
 
     // Atualizar no banco

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import { queryLatin1 } from '@/lib/db-agenda';
 import pool from '@/lib/db';
 import { normalizePhone } from '@/lib/types';
@@ -67,10 +66,8 @@ async function sendTemplate360(
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { chaves, mensagem, medico_id, data } = await request.json();
@@ -110,7 +107,7 @@ export async function POST(request: NextRequest) {
       agendaMap.set(row.chave, row);
     }
 
-    const atendenteId = parseInt(session.user.id as string);
+    const atendenteId = auth.userId;
 
     const detalhes: Array<{
       chave: number;

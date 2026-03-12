@@ -1,18 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { GRUPO_CHANNELS } from '@/lib/types';
 
 // GET: Dados de inatividade do operador logado (leve, chamado a cada 30s)
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
-    const role = (session.user as { role?: string }).role || 'atendente';
+    const role = auth.session.user.role || 'atendente';
     if (role === 'admin' || role === 'supervisor') {
       return NextResponse.json({
         conversas_pendentes: 0,
@@ -22,7 +19,7 @@ export async function GET() {
       });
     }
 
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
+    const grupo = auth.grupo;
     const allowedChannels = GRUPO_CHANNELS[grupo] || GRUPO_CHANNELS.todos;
 
     // Conversas individuais pendentes filtradas por grupo
@@ -48,7 +45,7 @@ export async function GET() {
     `, [allowedChannels]);
 
     // Ultima resposta from_me em conversas individuais do atendente
-    const nome = (session.user as { nome?: string }).nome || '';
+    const nome = auth.session.user.nome || '';
     const respostaResult = await pool.query(`
       SELECT MAX(m.created_at) AS ultima_resposta_at
       FROM atd.mensagens m

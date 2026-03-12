@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 
 // GET: Metricas de supervisao — apenas admin
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
-  if (session.user.role !== 'admin') {
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
+  if (auth.session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
   }
 

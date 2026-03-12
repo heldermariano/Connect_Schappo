@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 
 // GET: listar templates (padrao + do operador logado)
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const atendenteId = parseInt(session.user.id as string);
+  const atendenteId = auth.userId;
 
   try {
     const result = await pool.query(
@@ -30,10 +27,8 @@ export async function GET() {
 
 // POST: criar template
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const authPost = await requireAuth();
+  if (!isAuthed(authPost)) return authPost;
 
   try {
     const { nome, conteudo } = await request.json();
@@ -42,7 +37,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'nome e conteudo sao obrigatorios' }, { status: 400 });
     }
 
-    const atendenteId = parseInt(session.user.id as string);
+    const atendenteId = authPost.userId;
 
     const result = await pool.query(
       `INSERT INTO atd.template_confirmacao (nome, conteudo, atendente_id)

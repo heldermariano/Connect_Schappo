@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import examesPool from '@/lib/db-exames';
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const grupo = session.user.grupo || 'todos';
+  const grupo = auth.grupo;
   if (!['recepcao', 'eeg', 'todos'].includes(grupo)) {
     return NextResponse.json({ error: 'Sem permissao para buscar exames' }, { status: 403 });
   }

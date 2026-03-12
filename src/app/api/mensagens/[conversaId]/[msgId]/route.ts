@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 import { getUazapiToken } from '@/lib/types';
@@ -39,10 +38,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ conversaId: string; msgId: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const { conversaId, msgId } = await params;
   const cId = parseInt(conversaId, 10);
@@ -126,10 +123,8 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ conversaId: string; msgId: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const { conversaId, msgId } = await params;
   const cId = parseInt(conversaId, 10);
@@ -138,8 +133,8 @@ export async function DELETE(
     return NextResponse.json({ error: 'IDs invalidos' }, { status: 400 });
   }
 
-  const isAdmin = session.user.role === 'admin';
-  const userId = parseInt(session.user.id as string);
+  const isAdmin = auth.session.user.role === 'admin';
+  const userId = auth.userId;
 
   try {
     // Buscar mensagem para verificar permissao

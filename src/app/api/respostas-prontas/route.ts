@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const atendenteId = parseInt(session.user.id as string);
-  if (!atendenteId) {
-    return NextResponse.json({ error: 'Atendente nao identificado' }, { status: 401 });
-  }
+  const atendenteId = auth.userId;
 
   const result = await pool.query(
     `SELECT * FROM atd.respostas_prontas WHERE atendente_id = $1 ORDER BY atalho`,
@@ -23,15 +17,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const atendenteId = parseInt(session.user.id as string);
-  if (!atendenteId) {
-    return NextResponse.json({ error: 'Atendente nao identificado' }, { status: 401 });
-  }
+  const atendenteId = auth.userId;
 
   const body = await request.json();
   const { atalho, conteudo } = body;

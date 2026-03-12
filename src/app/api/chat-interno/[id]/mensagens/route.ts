@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
 
@@ -8,12 +7,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const userId = parseInt(session.user.id as string);
+  const userId = auth.userId;
   const { id: chatId } = await params;
 
   try {
@@ -79,12 +76,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const authPost = await requireAuth();
+  if (!isAuthed(authPost)) return authPost;
 
-  const userId = parseInt(session.user.id as string);
+  const userId = authPost.userId;
   const { id: chatId } = await params;
 
   try {
@@ -114,7 +109,7 @@ export async function POST(
     );
 
     const mensagem = msgResult.rows[0];
-    mensagem.nome_remetente = session.user.nome;
+    mensagem.nome_remetente = authPost.session.user.nome;
 
     // Buscar dados do reply se houver
     if (reply_to_id) {

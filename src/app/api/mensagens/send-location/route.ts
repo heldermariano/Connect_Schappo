@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, GRUPO_CATEGORIAS, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
 
 async function sendLocationViaUAZAPI(
   number: string,
@@ -85,10 +84,8 @@ async function sendLocationVia360Dialog(
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { conversa_id, latitude, longitude, name, address } = await request.json();
@@ -113,10 +110,8 @@ export async function POST(request: NextRequest) {
 
     const conversa = conversaResult.rows[0];
 
-    const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-    const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
-    if (!categoriasPermitidas.includes(conversa.categoria)) {
-      return NextResponse.json({ error: 'Sem permissao' }, { status: 403 });
+    if (!auth.categoriasPermitidas.includes(conversa.categoria)) {
+      return apiError('Sem permissao', 403);
     }
 
     const destinatario = conversa.tipo === 'grupo'
@@ -151,9 +146,9 @@ export async function POST(request: NextRequest) {
         conversa_id,
         waMessageId,
         owner,
-        session.user.nome,
+        auth.session.user.nome,
         conteudoTexto,
-        JSON.stringify({ latitude: lat, longitude: lng, name, address, sent_by: session.user.id, message_id_full: sendResult.fullMessageId || waMessageId }),
+        JSON.stringify({ latitude: lat, longitude: lng, name, address, sent_by: auth.session.user.id, message_id_full: sendResult.fullMessageId || waMessageId }),
       ],
     );
 

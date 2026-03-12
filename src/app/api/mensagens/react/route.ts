@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 import { CATEGORIA_OWNER, getUazapiToken, normalizePhone } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   try {
     const { conversa_id, wa_message_id, emoji } = await request.json();
@@ -82,9 +79,9 @@ export async function POST(request: NextRequest) {
         conversa_id,
         reactionMsgId,
         owner,
-        session.user.nome,
+        auth.session.user.nome,
         emoji,
-        JSON.stringify({ reacted_to: wa_message_id, sent_by: session.user.id }),
+        JSON.stringify({ reacted_to: wa_message_id, sent_by: auth.session.user.id }),
       ],
     );
 

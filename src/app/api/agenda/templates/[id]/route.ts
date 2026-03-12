@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
 
 // PUT: editar template (apenas do proprio operador, nao padrao)
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
   const { id } = await params;
   const templateId = parseInt(id);
-  const atendenteId = parseInt(session.user.id as string);
+  const atendenteId = auth.userId;
 
   try {
     const { nome, conteudo } = await request.json();
@@ -55,14 +52,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 // DELETE: excluir template (apenas do proprio operador, nao padrao)
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const authDel = await requireAuth();
+  if (!isAuthed(authDel)) return authDel;
 
   const { id } = await params;
   const templateId = parseInt(id);
-  const atendenteId = parseInt(session.user.id as string);
+  const atendenteId = authDel.userId;
 
   try {
     const check = await pool.query(

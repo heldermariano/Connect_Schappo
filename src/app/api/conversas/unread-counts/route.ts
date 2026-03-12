@@ -1,17 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAuth, isAuthed } from '@/lib/api-auth';
 import pool from '@/lib/db';
-import { GRUPO_CATEGORIAS } from '@/lib/types';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
-  }
+  const auth = await requireAuth();
+  if (!isAuthed(auth)) return auth;
 
-  const grupo = (session.user as { grupo?: string }).grupo || 'todos';
-  const categoriasPermitidas = GRUPO_CATEGORIAS[grupo] || GRUPO_CATEGORIAS.todos;
+  const { categoriasPermitidas } = auth;
 
   try {
     const placeholders = categoriasPermitidas.map((_, i) => `$${i + 1}`).join(', ');
