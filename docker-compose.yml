@@ -32,6 +32,7 @@ services:
       start_period: 15s
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik_default"
       - "traefik.http.routers.connect.rule=Host(`connect.clinicaschappo.com`)"
       - "traefik.http.routers.connect.entrypoints=websecure"
       - "traefik.http.routers.connect.tls=true"
