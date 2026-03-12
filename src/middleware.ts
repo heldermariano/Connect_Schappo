@@ -22,22 +22,40 @@ function hasBotToken(request: NextRequest): boolean {
   return !!botToken && !!secret && botToken === secret;
 }
 
+function addSecurityHeaders(response: NextResponse): NextResponse {
+  // Prevenir clickjacking
+  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  // Prevenir MIME sniffing
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  // Referrer policy
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Permissoes de features do browser — microphone=(self) necessario para Softphone WebRTC
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
+  // XSS protection (legacy browsers)
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  // HSTS (apenas se HTTPS ativo)
+  if (process.env.NEXTAUTH_URL?.startsWith('https')) {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Libera rotas publicas
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // Libera /api/eeg/* com token bot (N8N)
   if (pathname.startsWith('/api/eeg/') && hasBotToken(request)) {
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // Libera arquivos estaticos
   if (pathname.includes('.') && !pathname.startsWith('/api/')) {
-    return NextResponse.next();
+    return addSecurityHeaders(NextResponse.next());
   }
 
   // Verificar sessao JWT do NextAuth
@@ -46,7 +64,7 @@ export async function middleware(request: NextRequest) {
   if (!token) {
     // Para rotas de API, retornar 401 JSON
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 });
+      return addSecurityHeaders(NextResponse.json({ error: 'Nao autenticado' }, { status: 401 }));
     }
     // Para paginas, redirecionar para login
     const loginUrl = new URL('/login', request.url);
@@ -54,7 +72,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return addSecurityHeaders(NextResponse.next());
 }
 
 export const config = {

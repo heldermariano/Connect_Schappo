@@ -1,13 +1,18 @@
 import { Pool, QueryResult, QueryResultRow } from 'pg';
 
+// Validar variaveis obrigatorias do banco agenda
+if (!process.env.AGENDA_DB_HOST || !process.env.AGENDA_DB_NAME || !process.env.AGENDA_DB_USER || !process.env.AGENDA_DB_PASSWORD) {
+  console.error('[db-agenda] ERRO: Variaveis AGENDA_DB_HOST, AGENDA_DB_NAME, AGENDA_DB_USER e AGENDA_DB_PASSWORD sao obrigatorias');
+}
+
 // Pool separado para banco externo do ERP (schappo) — somente leitura
 // Banco usa encoding SQL_ASCII com dados em LATIN1
 const agendaPool = new Pool({
-  host: process.env.AGENDA_DB_HOST || '10.150.77.61',
+  host: process.env.AGENDA_DB_HOST,
   port: parseInt(process.env.AGENDA_DB_PORT || '5432'),
-  database: process.env.AGENDA_DB_NAME || 'schappo',
-  user: process.env.AGENDA_DB_USER || 'usuariobackup',
-  password: process.env.AGENDA_DB_PASSWORD || 'usuariobackup',
+  database: process.env.AGENDA_DB_NAME,
+  user: process.env.AGENDA_DB_USER,
+  password: process.env.AGENDA_DB_PASSWORD,
   max: 3,
   idleTimeoutMillis: 30000,
 });

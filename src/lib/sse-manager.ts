@@ -9,6 +9,37 @@ type SSEClient = {
 // Singleton que gerencia conexoes SSE ativas
 class SSEManager {
   private clients: Map<string, SSEClient> = new Map();
+  private redisReady = false;
+
+  constructor() {
+    this.initRedis();
+  }
+
+  private async initRedis(): Promise<void> {
+    try {
+      const { default: redis, createSubscriber } = await import('./redis');
+      await redis.connect();
+
+      const sub = createSubscriber();
+      await sub.connect();
+      await sub.subscribe('sse:events');
+
+      sub.on('message', (_channel: string, message: string) => {
+        try {
+          const event = JSON.parse(message) as SSEEvent;
+          this.localBroadcast(event);
+        } catch (err) {
+          console.error('[SSE] Erro ao parsear evento Redis:', err);
+        }
+      });
+
+      this.redisReady = true;
+      console.log('[SSE] Redis pub/sub ativo');
+    } catch (err) {
+      console.warn('[SSE] Redis indisponivel, usando broadcast local apenas:', (err as Error).message);
+      this.redisReady = false;
+    }
+  }
 
   addClient(id: string, controller: ReadableStreamDefaultController): void {
     this.clients.set(id, { id, controller, atendenteId: null });
@@ -85,8 +116,27 @@ class SSEManager {
     return this.clients.size;
   }
 
-  // Envia evento para todos os clientes conectados
+  // Envia evento para todos os clientes conectados (via Redis se disponivel, senao local)
   broadcast(event: SSEEvent): void {
+    if (this.redisReady) {
+      // Publicar no Redis para todas as instancias receberem
+      import('./redis').then(({ default: redis }) => {
+        redis.publish('sse:events', JSON.stringify(event)).catch((err) => {
+          console.error('[SSE] Erro ao publicar no Redis:', err);
+          // Fallback: broadcast local
+          this.localBroadcast(event);
+        });
+      }).catch(() => {
+        this.localBroadcast(event);
+      });
+    } else {
+      // Sem Redis, broadcast direto para clientes desta instancia
+      this.localBroadcast(event);
+    }
+  }
+
+  // Envia evento diretamente para clientes conectados NESTA instancia
+  private localBroadcast(event: SSEEvent): void {
     const payload = `event: ${event.type}\ndata: ${JSON.stringify(event.data)}\n\n`;
     const encoder = new TextEncoder();
     const encoded = encoder.encode(payload);

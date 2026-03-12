@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import { poolRead } from '@/lib/db';
 
 export async function GET(
   _request: NextRequest,
@@ -12,7 +12,7 @@ export async function GET(
   }
 
   try {
-    const result = await pool.query(
+    const result = await poolRead.query(
       `SELECT wa_phone AS phone,
               COALESCE(nome_salvo, nome_whatsapp, wa_phone) AS nome,
               avatar_url,

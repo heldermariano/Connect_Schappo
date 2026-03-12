@@ -1,0 +1,19 @@
+-- 021: Separacao de usuarios DB — Read / Write
+-- Executar como superuser ou owner do schema atd
+
+-- Usuario somente leitura
+CREATE ROLE connect_read WITH LOGIN PASSWORD 'TROCAR_SENHA_FORTE_READ';
+GRANT USAGE ON SCHEMA atd TO connect_read;
+GRANT SELECT ON ALL TABLES IN SCHEMA atd TO connect_read;
+ALTER DEFAULT PRIVILEGES IN SCHEMA atd GRANT SELECT ON TABLES TO connect_read;
+
+-- Usuario escrita (INSERT, UPDATE, DELETE — sem DROP/ALTER)
+CREATE ROLE connect_write WITH LOGIN PASSWORD 'TROCAR_SENHA_FORTE_WRITE';
+GRANT USAGE ON SCHEMA atd TO connect_write;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA atd TO connect_write;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA atd TO connect_write;
+ALTER DEFAULT PRIVILEGES IN SCHEMA atd GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO connect_write;
+ALTER DEFAULT PRIVILEGES IN SCHEMA atd GRANT USAGE, SELECT ON SEQUENCES TO connect_write;
+-- Permissao para executar funcoes (registrar_mensagem, etc.)
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA atd TO connect_write;
+ALTER DEFAULT PRIVILEGES IN SCHEMA atd GRANT EXECUTE ON FUNCTIONS TO connect_write;

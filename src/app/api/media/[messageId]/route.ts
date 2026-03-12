@@ -96,6 +96,11 @@ export async function GET(
     const msg = result.rows[0];
     const meta = typeof msg.metadata === 'string' ? JSON.parse(msg.metadata) : (msg.metadata || {});
 
+    // Mensagens migradas do Chatwoot (cw_*) nao tem midia disponivel no UAZAPI
+    if (msg.wa_message_id && msg.wa_message_id.startsWith('cw_')) {
+      return NextResponse.json({ error: 'media_unavailable', message: 'Midia de mensagem migrada nao disponivel' }, { status: 404 });
+    }
+
     // Detectar provider: 360Dialog ou UAZAPI
     const is360Dialog = meta.provider === '360dialog' || !!meta.dialog360_media_id;
 

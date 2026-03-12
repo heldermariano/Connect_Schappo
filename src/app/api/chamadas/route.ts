@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import { poolRead } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   try {
-    const countResult = await pool.query(
+    const countResult = await poolRead.query(
       `SELECT COUNT(*) FROM atd.chamadas ch ${whereClause}`,
       values,
     );
     const total = parseInt(countResult.rows[0].count);
 
-    const result = await pool.query(
+    const result = await poolRead.query(
       `SELECT ch.*, a.nome AS atendente_nome
        FROM atd.chamadas ch
        LEFT JOIN atd.atendentes a ON a.id = ch.atendente_id

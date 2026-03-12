@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import { poolRead } from '@/lib/db';
 import { isAMIConnected, getActiveCallsCount } from '@/lib/ami-listener';
 
 export async function GET() {
@@ -8,7 +8,7 @@ export async function GET() {
 
   // Verifica conexao com PostgreSQL
   try {
-    const result = await pool.query('SELECT NOW() AS time, current_schema() AS schema');
+    const result = await poolRead.query('SELECT NOW() AS time, current_schema() AS schema');
     checks.database = 'ok';
     checks.db_time = result.rows[0].time;
   } catch (err) {
@@ -19,7 +19,7 @@ export async function GET() {
 
   // Verifica se tabelas do schema atd existem
   try {
-    const result = await pool.query(`
+    const result = await poolRead.query(`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'atd'
       ORDER BY table_name

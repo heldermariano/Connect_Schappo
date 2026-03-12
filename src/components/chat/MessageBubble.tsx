@@ -259,7 +259,8 @@ export default function MessageBubble({ mensagem, showSender, isAdmin, onDelete,
   const textoLimpo = cleanContent(mensagem.conteudo, mensagem.tipo_mensagem);
 
   // Usar messageId para proxy de midia (em vez de URL direta do WhatsApp)
-  const hasWaMessageId = !!mensagem.wa_message_id;
+  // Mensagens migradas do Chatwoot (cw_*) nao tem midia disponivel
+  const hasWaMessageId = !!mensagem.wa_message_id && !mensagem.wa_message_id.startsWith('cw_');
 
   // Nome a exibir: sender_name ou telefone formatado
   const senderDisplay = mensagem.sender_name || formatPhoneShort(mensagem.sender_phone);

@@ -1,0 +1,26 @@
+services:
+  redis-test:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  connect-test:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      redis-test:
+        condition: service_healthy
+    env_file: .env.test
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+      - REDIS_URL=redis://redis-test:6379
+    ports:
+      - "3001:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

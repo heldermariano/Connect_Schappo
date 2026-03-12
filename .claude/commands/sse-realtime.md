@@ -7,7 +7,8 @@
 
 | Arquivo | Funcao |
 |---------|--------|
-| `src/lib/sse-manager.ts` | Broadcast SSE server-side |
+| `src/lib/sse-manager.ts` | Broadcast SSE server-side (Redis pub/sub + fallback local) |
+| `src/lib/redis.ts` | Cliente Redis + factory subscriber (pub/sub) |
 | `src/app/api/events/route.ts` | GET: SSE endpoint (TextEventStream) |
 | `src/hooks/useSSE.ts` | Hook cliente (auto-reconnect 3s) |
 
@@ -68,8 +69,19 @@ Auto-reconnect em 3s se conexao cair.
 
 ---
 
+## Redis Pub/Sub (Multi-Instancia)
+
+O SSE Manager usa Redis pub/sub para permitir multiplas instancias do app (preparacao SaaS):
+- `broadcast()` publica no canal `sse:events` via Redis
+- Cada instancia tem subscriber que recebe e repassa para clientes locais via `localBroadcast()`
+- **Fallback**: Se Redis indisponivel, broadcast vai direto para clientes locais (Map<>)
+- Subscriber usa conexao Redis dedicada (pub/sub exige conexao separada)
+
+---
+
 ## Regras
 
 1. **Webhooks rapidos** — Retornar 200 OK imediato, processar async, depois broadcast SSE
 2. **Reconnect 3s** — Frontend reconecta automaticamente
 3. **Todos os dominios usam SSE** — Mensagens, conversas, chamadas, presenca, chat interno, confirmacao
+4. **Redis opcional** — SSE funciona sem Redis (broadcast local), mas multi-instancia requer Redis

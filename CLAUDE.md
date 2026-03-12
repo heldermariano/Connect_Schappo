@@ -20,6 +20,8 @@
 | Tailwind CSS | 4.x | Estilos |
 | PostgreSQL | 16 | Banco (schema: `atd`) |
 | pg | 8.18.0 | Client PostgreSQL |
+| Redis | 7 | Cache e SSE pub/sub (via ioredis) |
+| ioredis | 5.x | Client Redis |
 | NextAuth | 4.24.13 | Autenticacao JWT |
 | sip.js | 0.21.2 | Softphone WebRTC |
 | ffmpeg-static | 5.3.0 | Conversao audio webm→ogg |
@@ -36,12 +38,13 @@ connect-schappo/
 ├── package.json
 ├── capacitor.config.ts          # Capacitor: URL remota
 ├── Dockerfile / docker-compose.yml
-├── sql/                         # Migracoes 001-019
+├── docker-compose.test.yml      # Ambiente de teste (:3001)
+├── sql/                         # Migracoes 001-021
 ├── config/                      # PJSIP, extensions, N8N
 ├── docs/                        # Guias deploy, PJSIP, payload UAZAPI
 ├── public/                      # Favicon, manifest, sons
 └── src/
-    ├── middleware.ts             # Auth JWT
+    ├── middleware.ts             # Auth JWT + Security Headers
     ├── instrumentation.ts       # Boot: FichaValidator
     ├── app/
     │   ├── layout.tsx / globals.css
@@ -59,7 +62,7 @@ connect-schappo/
     ├── components/              # chat/, softphone/, layout/, contatos/, etc.
     ├── hooks/                   # useSSE, useConversas, useSipPhone, etc.
     ├── contexts/AppContext.tsx   # isMobile, operatorStatus
-    ├── lib/                     # db pools, parsers, SSE manager, AMI
+    ├── lib/                     # db pools (read/write), redis, SSE manager, AMI
     └── types/
 ```
 
@@ -78,6 +81,21 @@ connect-schappo/
 - **TIMESTAMPTZ** — Nunca usar TIMESTAMP sem timezone
 - **Idempotencia** — `wa_message_id` UNIQUE, `ON CONFLICT DO NOTHING`
 - **Soft-delete** — `is_deleted + deleted_at + deleted_by` em mensagens
+- **Pools separados** — `pool` (default, escrita via `connect_write`) e `poolRead` (leitura via `connect_read`)
+  - Rotas GET-only: usar `import { poolRead } from '@/lib/db'`
+  - Rotas com escrita: usar `import pool from '@/lib/db'` (default)
+  - Rotas mistas (GET+POST): importar ambos, usar `poolRead` no GET e `pool` no POST
+- **Sem credenciais hardcoded** — Todas as conexoes via variaveis de ambiente, sem defaults
+
+### Redis
+- **SSE pub/sub** — `src/lib/sse-manager.ts` publica eventos via Redis para multi-instancia
+- **Fallback local** — Se Redis indisponivel, SSE usa broadcast local (Map<>)
+- **Import**: `import redis from '@/lib/redis'` ou `import { createSubscriber } from '@/lib/redis'`
+
+### Security Headers
+- Middleware injeta headers em todas as respostas: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, HSTS
+- **Permissions-Policy**: `microphone=(self)` obrigatorio para Softphone WebRTC
+- **Sem CSP restritivo** por ora — inline scripts do Next.js exigem `nonce` (iteracao futura)
 
 ### Auth
 - `session.user.id` eh **string** — Usar `parseInt(session.user.id as string)`
@@ -92,6 +110,12 @@ connect-schappo/
 ### Webhooks
 - Retornar **200 OK imediato**, processar async
 - **NUNCA alterar fluxo N8N** — Bot EEG independente via webhook #1
+
+### Build / Producao
+- **Source maps desabilitados** no browser (`productionBrowserSourceMaps: false`)
+- **console.log removido** em producao (mantém `console.error` e `console.warn`)
+- **Docker**: Redis como servico separado no `docker-compose.yml` (depends_on com healthcheck)
+- **Teste**: `docker-compose.test.yml` sobe ambiente isolado na porta 3001
 
 ---
 
@@ -120,33 +144,45 @@ Cada skill contem arquivos, APIs, banco, regras e gotchas do seu dominio. Usar `
 ## Variaveis de Ambiente
 
 ```env
-DATABASE_URL=postgresql://connect_dev:SENHA@localhost:5432/connect_schappo
+# PostgreSQL — pools separados read/write
+DATABASE_URL=postgresql://connect_write:SENHA@localhost:5432/connect_schappo
+DATABASE_READ_URL=postgresql://connect_read:SENHA@localhost:5432/connect_schappo
+# UAZAPI
 UAZAPI_URL=https://schappo.uazapi.com
 UAZAPI_TOKEN=token_default
 UAZAPI_INSTANCE_TOKENS=token1,token2
+# 360Dialog
 DIALOG360_API_URL=https://waba-v2.360dialog.io
 DIALOG360_API_KEY=chave_api
+# Owners
 OWNER_EEG=556192894339
 OWNER_RECEPCAO=556183008973
 OWNER_GERAL=556133455701
+# Issabel AMI
 AMI_HOST=ip_servidor
 AMI_PORT=5038
 AMI_USER=admin
 AMI_PASSWORD=senha
+# Seguranca
 WEBHOOK_SECRET=token_validacao
 SIP_ENCRYPTION_KEY=chave_aes_256
 NEXTAUTH_SECRET=jwt_secret
 NEXTAUTH_URL=https://connect.clinicaschappo.com
+# Banco Exames (Neuro Schappo — somente leitura)
 EXAMES_DB_HOST=10.150.77.77
 EXAMES_DB_PORT=5432
 EXAMES_DB_NAME=neuro_schappo
 EXAMES_DB_USER=neuro_schappo
 EXAMES_DB_PASSWORD=senha
+# Banco Agenda/ERP Konsyst (obrigatorio, sem defaults)
 AGENDA_DB_HOST=ip_servidor
 AGENDA_DB_PORT=5432
 AGENDA_DB_NAME=schappo
 AGENDA_DB_USER=usuario
 AGENDA_DB_PASSWORD=senha
+# Redis (SSE pub/sub, cache)
+REDIS_URL=redis://localhost:6379
+# Geral
 TZ=America/Sao_Paulo
 NEXT_PUBLIC_APP_URL=http://10.150.77.78:3000
 NEXT_PUBLIC_APP_NAME=Connect Schappo

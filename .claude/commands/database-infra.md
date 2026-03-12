@@ -7,26 +7,38 @@
 
 | Arquivo | Funcao |
 |---------|--------|
-| `src/lib/db.ts` | Pool principal (schema atd, TZ Sao_Paulo) |
+| `src/lib/db.ts` | Pool escrita (`pool`) + leitura (`poolRead`) |
 | `src/lib/db-exames.ts` | Pool externo neuro_schappo (read-only, max 5) |
-| `src/lib/db-agenda.ts` | Pool externo schappo ERP (LATIN1, max 3) |
+| `src/lib/db-agenda.ts` | Pool externo schappo ERP (LATIN1, max 3, sem defaults) |
 | `src/lib/db-chatwoot.ts` | Pool Chatwoot (somente migracao) |
+| `src/lib/redis.ts` | Cliente Redis (ioredis) + factory subscriber |
 | `Dockerfile` | Multi-stage Node 20 Alpine (TZ + tzdata) |
-| `docker-compose.yml` | Producao com Traefik + Let's Encrypt |
-| `sql/*.sql` | Migracoes 001-019 |
+| `docker-compose.yml` | Producao com Traefik + Let's Encrypt + Redis |
+| `docker-compose.test.yml` | Ambiente de teste isolado na porta 3001 |
+| `sql/*.sql` | Migracoes 001-021 |
 
 ---
 
 ## Pools de Conexao
 
-| Pool | Arquivo | DB | Encoding | Max | Uso |
-|------|---------|-----|----------|-----|-----|
-| Principal | `db.ts` | connect_schappo | UTF8 | default | Schema atd |
-| Exames | `db-exames.ts` | neuro_schappo | UTF8 | 5 | Busca exames (read-only) |
-| Agenda | `db-agenda.ts` | schappo | LATIN1 | 3 | ERP agendamento (read-only) |
-| Chatwoot | `db-chatwoot.ts` | chatwoot | UTF8 | - | Somente migracao |
+| Pool | Arquivo | DB | User | Max | Uso |
+|------|---------|-----|------|-----|-----|
+| Escrita | `db.ts` (default) | connect_schappo | `connect_write` | default | INSERT/UPDATE/DELETE |
+| Leitura | `db.ts` (`poolRead`) | connect_schappo | `connect_read` | 15 | SELECT-only |
+| Exames | `db-exames.ts` | neuro_schappo | neuro_schappo | 5 | Busca exames (read-only) |
+| Agenda | `db-agenda.ts` | schappo | via env | 3 | ERP agendamento (LATIN1) |
+| Chatwoot | `db-chatwoot.ts` | chatwoot | postgres | - | Somente migracao |
 
 Todos os pools configuram `SET timezone TO 'America/Sao_Paulo'` no `pool.on('connect')`.
+
+### Usuarios DB (roles)
+
+| Role | Permissoes | Variavel |
+|------|-----------|----------|
+| `connect_write` | SELECT, INSERT, UPDATE, DELETE + sequences + functions | `DATABASE_URL` |
+| `connect_read` | SELECT only | `DATABASE_READ_URL` |
+
+Criados em `sql/021_db_users_separation.sql`. O `poolRead` faz fallback para `DATABASE_URL` se `DATABASE_READ_URL` nao estiver definida.
 
 ---
 
@@ -55,6 +67,8 @@ Executar em ordem com psql. Arquivos em `sql/`:
 | 017 | Ramais PJSIP individuais (251-259) |
 | 018 | EEG exame ficha vinculo |
 | 019 | Mensagens soft-delete |
+| 020 | wa_message_id composite unique (chatid+categoria) |
+| 021 | Separacao usuarios DB (connect_read + connect_write) |
 
 ---
 

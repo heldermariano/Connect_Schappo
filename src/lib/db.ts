@@ -1,13 +1,20 @@
 import { Pool } from 'pg';
 
-// Pool de conexao PostgreSQL — schema atd
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+function createPool(connectionString: string | undefined, max?: number): Pool {
+  const p = new Pool({ connectionString, max });
+  p.on('connect', (client) => {
+    client.query("SET search_path TO atd, public; SET timezone TO 'America/Sao_Paulo'");
+  });
+  return p;
+}
 
-// Seta search_path e timezone em cada conexao
-pool.on('connect', (client) => {
-  client.query("SET search_path TO atd, public; SET timezone TO 'America/Sao_Paulo'");
-});
+// Pool principal (escrita) — usado por rotas que fazem INSERT/UPDATE/DELETE
+const pool = createPool(process.env.DATABASE_URL);
+
+// Pool somente leitura — usa DATABASE_READ_URL se disponivel, senao fallback para DATABASE_URL
+export const poolRead = createPool(
+  process.env.DATABASE_READ_URL || process.env.DATABASE_URL,
+  15,
+);
 
 export default pool;
