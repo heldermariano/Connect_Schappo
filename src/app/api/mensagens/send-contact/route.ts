@@ -1,84 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { getUazapiToken } from '@/lib/types';
 import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
-
-async function sendContactViaUAZAPI(
-  number: string,
-  contactName: string,
-  contactPhone: string,
-  instanceToken: string,
-): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
-  const url = process.env.UAZAPI_URL;
-  const token = instanceToken;
-  if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
-
-  try {
-    const res = await fetch(`${url}/send/contact`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', token },
-      body: JSON.stringify({
-        number,
-        contact: [{
-          name: { formatted_name: contactName, first_name: contactName },
-          phones: [{ phone: contactPhone, type: 'CELL' }],
-        }],
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send-contact/uazapi] Erro:', res.status, body);
-      return { success: false, error: `UAZAPI retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    const ids = extractUazapiMessageIds(data);
-    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
-  } catch (err) {
-    console.error('[send-contact/uazapi] Erro:', err);
-    return { success: false, error: 'Erro de conexao com UAZAPI' };
-  }
-}
-
-async function sendContactVia360Dialog(
-  to: string,
-  contactName: string,
-  contactPhone: string,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!url || !apiKey) return { success: false, error: '360Dialog nao configurado' };
-
-  try {
-    const res = await fetch(`${url}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'contacts',
-        contacts: [{
-          name: { formatted_name: contactName, first_name: contactName },
-          phones: [{ phone: contactPhone, type: 'CELL' }],
-        }],
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send-contact/360dialog] Erro:', res.status, body);
-      return { success: false, error: `360Dialog retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    return { success: true, messageId: data.messages?.[0]?.id };
-  } catch (err) {
-    console.error('[send-contact/360dialog] Erro:', err);
-    return { success: false, error: 'Erro de conexao com 360Dialog' };
-  }
-}
+import { sendContactUAZAPI, sendContact360Dialog } from '@/lib/whatsapp-provider';
+import { saveOutgoingMessage, updateConversaAfterSend, broadcastNewMessage, formatRecipient, generateMessageId, buildSendMetadata } from '@/lib/conversa-update';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -105,63 +30,40 @@ export async function POST(request: NextRequest) {
       return apiError('Sem permissao', 403);
     }
 
-    const destinatario = conversa.tipo === 'grupo'
-      ? conversa.wa_chatid
-      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    const dest = formatRecipient(conversa.wa_chatid, conversa.tipo, conversa.provider);
 
-    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
+    let sendResult;
     if (conversa.provider === '360dialog') {
-      const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      sendResult = await sendContactVia360Dialog(to, contact_name, contact_phone);
+      sendResult = await sendContact360Dialog(dest, contact_name, contact_phone);
     } else {
       const uazapiToken = getUazapiToken(conversa.categoria);
-      sendResult = await sendContactViaUAZAPI(destinatario, contact_name, contact_phone, uazapiToken);
+      sendResult = await sendContactUAZAPI(dest, contact_name, contact_phone, uazapiToken);
     }
 
     if (!sendResult.success) {
       return NextResponse.json({ error: sendResult.error || 'Falha ao enviar' }, { status: 502 });
     }
 
-    const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `sent_contact_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const waMessageId = sendResult.messageId || generateMessageId('sent_contact');
     const conteudoTexto = `👤 ${contact_name}\n${contact_phone}`;
+    const metadata = buildSendMetadata(auth.session.user.id, auth.session.user.nome, sendResult, { contact_name, contact_phone });
 
-    const msgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, 'contacts', $5, 'sent', $6)
-      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        conversa_id,
-        waMessageId,
-        owner,
-        auth.session.user.nome,
-        conteudoTexto,
-        JSON.stringify({ contact_name, contact_phone, sent_by: auth.session.user.id, message_id_full: sendResult.fullMessageId || waMessageId }),
-      ],
-    );
+    const mensagem = await saveOutgoingMessage(pool, {
+      conversa_id,
+      wa_message_id: waMessageId,
+      tipo_mensagem: 'contacts',
+      conteudo: conteudoTexto,
+      sender_name: auth.session.user.nome,
+      categoria: conversa.categoria,
+      metadata,
+    });
 
-    if (msgResult.rows.length === 0) {
+    if (!mensagem) {
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
-    const mensagem = msgResult.rows[0];
-
-    await pool.query(
-      `UPDATE atd.conversas SET
-        ultima_mensagem = LEFT($1, 200), ultima_msg_at = NOW(),
-        ultima_msg_from_me = TRUE, nao_lida = 0, updated_at = NOW()
-       WHERE id = $2`,
-      [conteudoTexto, conversa_id],
-    );
-
-    sseManager.broadcast({ type: 'nova_mensagem', data: { conversa_id, mensagem, categoria: conversa.categoria } });
-    sseManager.broadcast({
-      type: 'conversa_atualizada',
-      data: { conversa_id, ultima_msg: conteudoTexto.substring(0, 200), nao_lida: 0 },
-    });
+    await updateConversaAfterSend(pool, conversa_id, conteudoTexto);
+    broadcastNewMessage(conversa_id, mensagem, conversa.categoria);
 
     return NextResponse.json({ success: true, mensagem });
   } catch (err) {

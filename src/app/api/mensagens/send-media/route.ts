@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, normalizePhone, extractUazapiMessageIds } from '@/lib/types';
+import { getUazapiToken } from '@/lib/types';
 import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
+import { sendMediaUAZAPI, sendMedia360Dialog } from '@/lib/whatsapp-provider';
+import {
+  type SendResult,
+  saveOutgoingMessage,
+  updateConversaAfterSend,
+  broadcastNewMessage,
+  formatRecipient,
+  generateMessageId,
+  buildSendMetadata,
+} from '@/lib/conversa-update';
 import { execFileSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -79,175 +88,6 @@ function getMediaType(mimetype: string): 'image' | 'audio' | 'video' | 'document
   return 'document';
 }
 
-// Envia midia via UAZAPI usando endpoint unificado /send/media
-// Campos conforme doc: number, type, file, text (caption), docName, replyid, mentions
-async function sendMediaViaUAZAPI(
-  number: string,
-  mediaType: string,
-  fileBuffer: Buffer,
-  filename: string,
-  mimetype: string,
-  instanceToken: string,
-  caption?: string,
-): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
-  const url = process.env.UAZAPI_URL;
-  if (!url || !instanceToken) return { success: false, error: 'UAZAPI nao configurado' };
-
-  try {
-    const base64Data = `data:${mimetype};base64,${fileBuffer.toString('base64')}`;
-
-    const body: Record<string, string> = {
-      number,
-      type: mediaType,
-      file: base64Data,
-    };
-
-    // text = caption/legenda
-    if (caption) {
-      body.text = caption;
-    }
-
-    // docName para documentos (aparece como titulo no WhatsApp)
-    if (mediaType === 'document') {
-      body.docName = filename;
-    }
-
-    const res = await fetch(`${url}/send/media`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        token: instanceToken,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const respBody = await res.text();
-      console.error(`[send-media/uazapi] Erro: ${res.status}`, respBody);
-      return { success: false, error: `UAZAPI retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    const ids = extractUazapiMessageIds(data);
-    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
-  } catch (err) {
-    console.error('[send-media/uazapi] Erro de rede:', err);
-    return { success: false, error: 'Erro de conexao com UAZAPI' };
-  }
-}
-
-// Envia midia via 360Dialog
-async function sendMediaVia360Dialog(
-  to: string,
-  mediaType: string,
-  fileBuffer: Buffer,
-  filename: string,
-  mimetype: string,
-  caption?: string,
-  isVoiceRecording?: boolean,
-): Promise<{ success: boolean; messageId?: string; mediaId?: string; error?: string }> {
-  const apiUrl = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!apiUrl || !apiKey) return { success: false, error: '360Dialog nao configurado' };
-
-  try {
-    // Primeiro, upload da midia
-    // 360Dialog (Meta Cloud API) aceita: audio/ogg, audio/aac, audio/mp4, audio/mpeg, audio/amr
-    // NAO aceita: audio/webm. audio/mp4 do MediaRecorder tambem nao entrega (aceita upload mas nao envia).
-    // Solucao: converter qualquer audio nao-ogg para ogg via ffmpeg (remux opus codec)
-    // Limpar MIME: remover parametros de codecs (ex: audio/ogg;codecs=opus → audio/ogg)
-    let uploadMimetype = mimetype.split(';')[0].trim();
-    let uploadFilename = filename;
-    let uploadBuffer = fileBuffer;
-    const isAudioUpload = mediaType === 'audio' || mediaType === 'ptt';
-    const isAlreadyOgg = uploadMimetype === 'audio/ogg';
-    if (isAudioUpload && !isAlreadyOgg) {
-      // Converter webm/mp4/qualquer formato para ogg via ffmpeg
-      try {
-        uploadBuffer = convertToOgg(fileBuffer);
-        uploadMimetype = 'audio/ogg';
-        uploadFilename = filename.replace(/\.\w+$/, '.ogg');
-        console.log(`[send-media/360dialog] Convertido ${mimetype}→ogg: ${fileBuffer.length}→${uploadBuffer.length} bytes`);
-      } catch (convErr) {
-        console.error('[send-media/360dialog] Erro na conversao para ogg:', convErr);
-        // Se falhar conversao, enviar como esta (melhor tentar do que nao enviar)
-      }
-    }
-
-    // Normalizar MIME type para formatos aceitos pela Meta Cloud API
-    // Imagens: image/jpeg, image/png (webp precisa converter para png)
-    if (uploadMimetype === 'image/webp' || uploadMimetype === 'image/bmp' || uploadMimetype === 'image/tiff') {
-      // Para formatos nao suportados, enviar como document em vez de rejeitar
-      console.log(`[send-media/360dialog] Formato ${uploadMimetype} nao suportado como imagem, convertendo tipo para document`);
-    }
-
-    const formData = new FormData();
-    const blob = new Blob([new Uint8Array(uploadBuffer)], { type: uploadMimetype });
-    formData.append('file', blob, uploadFilename);
-    formData.append('messaging_product', 'whatsapp');
-    formData.append('type', uploadMimetype);
-
-    const uploadRes = await fetch(`${apiUrl}/media`, {
-      method: 'POST',
-      headers: { 'D360-API-KEY': apiKey },
-      body: formData,
-    });
-
-    if (!uploadRes.ok) {
-      const body = await uploadRes.text();
-      console.error(`[send-media/360dialog] Upload falhou (${uploadRes.status}): mime=${uploadMimetype} file=${uploadFilename}`, body);
-      return { success: false, error: `Upload falhou: ${uploadRes.status}` };
-    }
-
-    const uploadData = await uploadRes.json();
-    const mediaId = uploadData.id;
-    console.log(`[send-media/360dialog] Upload OK: mediaId=${mediaId} mime=${uploadMimetype} voice=${isVoiceRecording}`);
-
-    // Enviar mensagem com a midia
-    // Meta Cloud API usa 'audio' como tipo (nao 'ptt')
-    const sendType = (mediaType === 'ptt') ? 'audio' : mediaType;
-    const mediaPayload: Record<string, unknown> = { id: mediaId };
-    if (caption && (sendType === 'image' || sendType === 'video' || sendType === 'document')) {
-      mediaPayload.caption = caption;
-    }
-    if (sendType === 'document') {
-      mediaPayload.filename = filename;
-    }
-    // Voice message (PTT): adicionar voice=true para reproduzir como mensagem de voz
-    if (isVoiceRecording) {
-      mediaPayload.voice = true;
-    }
-
-    const sendRes = await fetch(`${apiUrl}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'D360-API-KEY': apiKey,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: sendType,
-        [sendType]: mediaPayload,
-      }),
-    });
-
-    if (!sendRes.ok) {
-      const body = await sendRes.text();
-      console.error(`[send-media/360dialog] Send falhou (${sendRes.status}): type=${sendType} voice=${isVoiceRecording}`, body);
-      return { success: false, error: `Send falhou: ${sendRes.status}` };
-    }
-
-    const sendData = await sendRes.json();
-    console.log(`[send-media/360dialog] Send OK: msgId=${sendData.messages?.[0]?.id} type=${sendType} voice=${isVoiceRecording}`);
-    return { success: true, messageId: sendData.messages?.[0]?.id, mediaId };
-  } catch (err) {
-    console.error('[send-media/360dialog] Erro:', err);
-    return { success: false, error: 'Erro de conexao com 360Dialog' };
-  }
-}
-
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!isAuthed(auth)) return auth;
@@ -283,10 +123,7 @@ export async function POST(request: NextRequest) {
       return apiError('Sem permissao para esta conversa', 403);
     }
 
-    const isGroup = conversa.tipo === 'grupo';
-    const destinatario = isGroup
-      ? conversa.wa_chatid
-      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    const dest = formatRecipient(conversa.wa_chatid, conversa.tipo, conversa.provider);
 
     // Detectar MIME type: usar file.type do browser, com fallback por extensao
     let mimetype = file.type || '';
@@ -316,19 +153,42 @@ export async function POST(request: NextRequest) {
     console.log(`[send-media] provider=${conversa.provider} type=${mediaType} mime=${mimetype} file=${file.name} size=${fileBuffer.length} voice=${isVoiceRecording}`);
 
     // Enviar via provider correto
-    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; mediaId?: string; error?: string };
+    let sendResult: SendResult;
 
     if (conversa.provider === '360dialog') {
-      const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, file.name, mimetype, captionToSend, isVoiceRecording);
+      // Audio conversion para 360Dialog: converter formatos nao-ogg para ogg via ffmpeg
+      let finalBuffer: Buffer = fileBuffer;
+      let finalMimetype = mimetype.split(';')[0].trim();
+      let finalFilename = file.name;
+      const isAudioUpload = mediaType === 'audio' || mediaType === 'ptt';
+      const isAlreadyOgg = finalMimetype === 'audio/ogg';
+
+      if (isAudioUpload && !isAlreadyOgg) {
+        try {
+          finalBuffer = convertToOgg(fileBuffer);
+          finalMimetype = 'audio/ogg';
+          finalFilename = file.name.replace(/\.\w+$/, '.ogg');
+          console.log(`[send-media/360dialog] Convertido ${mimetype}→ogg: ${fileBuffer.length}→${finalBuffer.length} bytes`);
+        } catch (convErr) {
+          console.error('[send-media/360dialog] Erro na conversao para ogg:', convErr);
+          // Se falhar conversao, enviar como esta (melhor tentar do que nao enviar)
+        }
+      }
+
+      // Normalizar MIME type para formatos aceitos pela Meta Cloud API
+      if (finalMimetype === 'image/webp' || finalMimetype === 'image/bmp' || finalMimetype === 'image/tiff') {
+        console.log(`[send-media/360dialog] Formato ${finalMimetype} nao suportado como imagem, convertendo tipo para document`);
+      }
+
+      sendResult = await sendMedia360Dialog(dest, mediaType, finalBuffer, finalFilename, finalMimetype, captionToSend, isVoiceRecording);
     } else {
       const uazapiToken = getUazapiToken(conversa.categoria);
-      sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, file.name, mimetype, uazapiToken, captionToSend);
+      const base64 = fileBuffer.toString('base64');
+      sendResult = await sendMediaUAZAPI(dest, mediaType, base64, mimetype, file.name, uazapiToken, captionToSend);
     }
 
     // Salvar mensagem no banco mesmo em caso de falha (permite reenvio)
-    const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `sent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const waMessageId = sendResult.messageId || generateMessageId('sent_media');
     const dbMediaType = mediaType === 'ptt' ? 'audio' : mediaType;
     const conteudo = caption || `[${dbMediaType === 'image' ? 'Imagem' : dbMediaType === 'audio' ? 'Audio' : dbMediaType === 'video' ? 'Video' : 'Documento'}]`;
     const msgStatus = sendResult.success ? 'sent' : 'failed';
@@ -337,73 +197,36 @@ export async function POST(request: NextRequest) {
       console.error(`[send-media] Falha: ${sendResult.error} provider=${conversa.provider} conversa=${conversaId}`);
     }
 
-    // Metadata: incluir provider e media_id da 360Dialog para o media proxy
-    const metadata: Record<string, unknown> = {
-      sent_by: auth.session.user.id,
-      sent_by_name: auth.session.user.nome,
-      provider: conversa.provider,
-      ...(sendResult.error ? { send_error: sendResult.error } : {}),
-    };
-    if (sendResult.mediaId) {
-      metadata.dialog360_media_id = sendResult.mediaId;
-    }
-    if (sendResult.fullMessageId) {
-      metadata.message_id_full = sendResult.fullMessageId;
-    }
-
-    const msgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, media_mimetype, media_filename, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, $5, $6, $7, $8, $9, $10)
-      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        conversaId,
-        waMessageId,
-        owner,
-        auth.session.user.nome,
-        dbMediaType,
-        conteudo,
-        mimetype,
-        file.name,
-        msgStatus,
-        JSON.stringify(metadata),
-      ],
+    const metadata = buildSendMetadata(
+      auth.session.user.id,
+      auth.session.user.nome,
+      sendResult,
+      { provider: conversa.provider },
     );
 
-    if (msgResult.rows.length === 0) {
+    const mensagem = await saveOutgoingMessage(pool, {
+      conversa_id: conversaId,
+      wa_message_id: waMessageId,
+      tipo_mensagem: dbMediaType,
+      conteudo,
+      sender_name: auth.session.user.nome,
+      categoria: conversa.categoria,
+      status: msgStatus,
+      metadata,
+      media_mimetype: mimetype,
+      media_filename: file.name,
+    });
+
+    if (!mensagem) {
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
-    const mensagem = msgResult.rows[0];
-
     // Emitir SSE (nova_mensagem sempre — para mostrar no painel, inclusive com status failed)
-    sseManager.broadcast({
-      type: 'nova_mensagem',
-      data: { conversa_id: conversaId, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
-    });
+    broadcastNewMessage(conversaId, mensagem, conversa.categoria, conversa.tipo);
 
     if (sendResult.success) {
       // Atualizar conversa apenas quando envio foi bem-sucedido
-      await pool.query(
-        `UPDATE atd.conversas SET
-          ultima_mensagem = LEFT($1, 200),
-          ultima_msg_at = NOW(),
-          nao_lida = 0,
-          updated_at = NOW()
-         WHERE id = $2`,
-        [conteudo, conversaId],
-      );
-
-      sseManager.broadcast({
-        type: 'conversa_atualizada',
-        data: {
-          conversa_id: conversaId,
-          ultima_msg: conteudo.substring(0, 200),
-          nao_lida: 0,
-        },
-      });
+      await updateConversaAfterSend(pool, conversaId, conteudo);
 
       return NextResponse.json({ success: true, mensagem });
     } else {

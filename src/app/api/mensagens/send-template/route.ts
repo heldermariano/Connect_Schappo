@@ -1,60 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { sseManager } from '@/lib/sse-manager';
 import { requireAuth, isAuthed } from '@/lib/api-auth';
-
-const TEMPLATE_NAME = 'confirmacao_agendamento';
-const TEMPLATE_LANG = 'pt_BR';
-
-async function sendTemplate360(
-  to: string,
-  params: { nome_paciente: string; data: string; hora: string; nome_medico: string; procedimento: string },
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!url || !apiKey) return { success: false, error: '360Dialog nao configurado' };
-
-  try {
-    const res = await fetch(`${url}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'template',
-        template: {
-          name: TEMPLATE_NAME,
-          language: { code: TEMPLATE_LANG },
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                { type: 'text', text: params.nome_paciente },
-                { type: 'text', text: params.data },
-                { type: 'text', text: params.hora },
-                { type: 'text', text: params.nome_medico },
-                { type: 'text', text: params.procedimento },
-              ],
-            },
-          ],
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send-template/360dialog] Erro:', res.status, body);
-      return { success: false, error: `360Dialog ${res.status}: ${body.substring(0, 200)}` };
-    }
-
-    const data = await res.json();
-    const messageId = data.messages?.[0]?.id;
-    return { success: true, messageId };
-  } catch (err) {
-    console.error('[send-template/360dialog] Erro de rede:', err);
-    return { success: false, error: 'Erro de conexao com 360Dialog' };
-  }
-}
+import { sendTemplate360Dialog } from '@/lib/whatsapp-provider';
+import {
+  saveOutgoingMessage,
+  updateConversaAfterSend,
+  broadcastNewMessage,
+  generateMessageId,
+  buildSendMetadata,
+} from '@/lib/conversa-update';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -86,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     const to = conversa.wa_chatid.replace('@s.whatsapp.net', '').replace('@g.us', '');
 
-    const sendResult = await sendTemplate360(to, {
+    const sendResult = await sendTemplate360Dialog(to, {
       nome_paciente,
       data,
       hora,
@@ -99,69 +53,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: sendResult.error }, { status: 502 });
     }
 
-    const waMessageId = sendResult.messageId || `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const waMessageId = sendResult.messageId || generateMessageId('sent_tpl');
     console.log(`[send-template] OK: messageId=${waMessageId} conversa=${conversa_id}`);
 
     // Texto espelho do template para exibicao no painel
     const textoLocal = `Clínica Schappo - Confirmação de Agendamento\n\nOlá, ${nome_paciente}!\n\n• Data: ${data}\n• Horário: ${hora}\n• Médico(a): ${nome_medico}\n• Procedimento: ${procedimento}\n\nPor favor, selecione uma opção abaixo:\n[Confirmar] [Desmarcar] [Reagendar]`;
 
-    const meta = JSON.stringify({
+    const meta = buildSendMetadata(auth.session.user.id, auth.session.user.nome, sendResult, {
       source: 'template_manual',
-      template_name: TEMPLATE_NAME,
-      provider: '360dialog',
-      sent_by: auth.session.user.id,
-      sent_by_name: auth.session.user.nome,
+      template_name: 'confirmacao_agendamento',
+      nome_paciente,
+      data,
+      hora,
+      nome_medico,
+      procedimento,
     });
 
-    const msgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, 'sent', $6)
-      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        conversa_id,
-        waMessageId,
-        '556133455701',
-        auth.session.user.nome,
-        textoLocal,
-        meta,
-      ],
-    );
+    const mensagem = await saveOutgoingMessage(pool, {
+      conversa_id,
+      wa_message_id: waMessageId,
+      tipo_mensagem: 'template',
+      conteudo: textoLocal,
+      sender_name: auth.session.user.nome,
+      categoria: conversa.categoria,
+      metadata: meta,
+    });
 
-    if (msgResult.rows.length === 0) {
+    if (!mensagem) {
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
-    const mensagem = msgResult.rows[0];
-
-    // Atualizar conversa
-    await pool.query(
-      `UPDATE atd.conversas SET
-        ultima_mensagem = LEFT($1, 200),
-        ultima_msg_at = NOW(),
-        ultima_msg_from_me = TRUE,
-        nao_lida = 0,
-        updated_at = NOW()
-       WHERE id = $2`,
-      [textoLocal, conversa_id],
-    );
-
-    // SSE
-    sseManager.broadcast({
-      type: 'nova_mensagem',
-      data: { conversa_id, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
-    });
-    sseManager.broadcast({
-      type: 'conversa_atualizada',
-      data: {
-        conversa_id,
-        ultima_msg: textoLocal.substring(0, 200),
-        nao_lida: 0,
-        ultima_msg_from_me: true,
-      },
-    });
+    await updateConversaAfterSend(pool, conversa_id, textoLocal);
+    broadcastNewMessage(conversa_id, mensagem, conversa.categoria, conversa.tipo);
 
     return NextResponse.json({ success: true, mensagem });
   } catch (err) {

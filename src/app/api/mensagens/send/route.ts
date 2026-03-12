@@ -1,90 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { getUazapiToken } from '@/lib/types';
 import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
-
-// Envia mensagem via UAZAPI
-// Campos conforme docs: number, text, replyid, mentions (string csv)
-async function sendViaUAZAPI(number: string, text: string, instanceToken: string, mentions?: string[], replyId?: string): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
-  const url = process.env.UAZAPI_URL;
-
-  if (!url || !instanceToken) {
-    return { success: false, error: 'UAZAPI nao configurado' };
-  }
-
-  try {
-    const payload: Record<string, unknown> = { number, text };
-    if (mentions && mentions.length > 0) {
-      // UAZAPI espera mentions como string separada por virgula (numeros sem @)
-      payload.mentions = mentions.map(m => m.replace('@s.whatsapp.net', '').replace('@lid', '')).join(',');
-    }
-    if (replyId) {
-      payload.replyid = replyId;
-    }
-
-    const res = await fetch(`${url}/send/text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        token: instanceToken,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send/uazapi] Erro:', res.status, body, { number, replyid: replyId });
-      return { success: false, error: `UAZAPI retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    const ids = extractUazapiMessageIds(data);
-    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
-  } catch (err) {
-    console.error('[send/uazapi] Erro de rede:', err);
-    return { success: false, error: 'Erro de conexao com UAZAPI' };
-  }
-}
-
-// Envia mensagem via 360Dialog (Meta Cloud API format)
-async function sendVia360Dialog(to: string, text: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-
-  if (!url || !apiKey) {
-    return { success: false, error: '360Dialog nao configurado' };
-  }
-
-  try {
-    const res = await fetch(`${url}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'D360-API-KEY': apiKey,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: text },
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send/360dialog] Erro:', res.status, body);
-      return { success: false, error: `360Dialog retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    const messageId = data.messages?.[0]?.id;
-    return { success: true, messageId };
-  } catch (err) {
-    console.error('[send/360dialog] Erro de rede:', err);
-    return { success: false, error: 'Erro de conexao com 360Dialog' };
-  }
-}
+import { sendTextUAZAPI, sendText360Dialog } from '@/lib/whatsapp-provider';
+import {
+  type SendResult,
+  saveOutgoingMessage,
+  updateConversaAfterSend,
+  broadcastNewMessage,
+  formatRecipient,
+  generateMessageId,
+  buildSendMetadata,
+} from '@/lib/conversa-update';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -121,13 +48,10 @@ export async function POST(request: NextRequest) {
 
     // Determinar destinatario — usar wa_chatid (JID real do WhatsApp) para garantir
     // que o numero nao sofra normalizacao incorreta (ex: 12 vs 13 digitos BR)
-    const isGroup = conversa.tipo === 'grupo';
-    const destinatario = isGroup
-      ? conversa.wa_chatid
-      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    const dest = formatRecipient(conversa.wa_chatid, conversa.tipo, conversa.provider);
 
     // Enviar via provider correto
-    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
+    let sendResult: SendResult;
 
     // Prefixar nome do operador em negrito (visivel no WhatsApp)
     const nomeOperador = auth.session.user.nome;
@@ -146,23 +70,20 @@ export async function POST(request: NextRequest) {
         })
       : undefined;
 
-    console.log(`[send] Provider=${conversa.provider} categoria=${conversa.categoria} dest=${destinatario}`);
+    console.log(`[send] Provider=${conversa.provider} categoria=${conversa.categoria} dest=${dest}`);
 
     if (conversa.provider === '360dialog') {
-      // 360Dialog: numero sem @s.whatsapp.net
-      const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      console.log(`[send] 360Dialog: to=${to}`);
-      sendResult = await sendVia360Dialog(to, textToSend);
+      console.log(`[send] 360Dialog: to=${dest}`);
+      sendResult = await sendText360Dialog(dest, textToSend);
     } else {
       // UAZAPI: aceita numero ou chatid — usar token da instancia correta
       // replyid usa wa_message_id curto (sem prefixo owner) conforme doc UAZAPI
       const uazapiToken = getUazapiToken(conversa.categoria);
-      sendResult = await sendViaUAZAPI(destinatario, textToSend, uazapiToken, mentionedJid, quoted_msg_id || undefined);
+      sendResult = await sendTextUAZAPI(dest, textToSend, uazapiToken, mentionedJid, quoted_msg_id || undefined);
     }
 
     // Salvar mensagem no banco (mesmo em caso de falha, para permitir reenvio)
-    const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `sent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const waMessageId = sendResult.messageId || generateMessageId('sent');
     const msgStatus = sendResult.success ? 'sent' : 'failed';
 
     if (!sendResult.success) {
@@ -171,65 +92,30 @@ export async function POST(request: NextRequest) {
       console.log(`[send] OK: messageId=${sendResult.messageId} provider=${conversa.provider}`);
     }
 
-    const msgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata, mencoes, quoted_msg_id
-      ) VALUES ($1, $2, true, $3, $4, 'text', $5, $6, $7, $8, $9)
-      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        conversa_id,
-        waMessageId,
-        owner,
-        auth.session.user.nome,
-        conteudo.trim(),
-        msgStatus,
-        JSON.stringify({
-          sent_by: auth.session.user.id,
-          sent_by_name: auth.session.user.nome,
-          message_id_full: sendResult.fullMessageId || waMessageId,
-          ...(sendResult.error ? { send_error: sendResult.error } : {}),
-        }),
-        mencoesArray.length > 0 ? mencoesArray : '{}',
-        quoted_msg_id || null,
-      ],
-    );
+    const metadata = buildSendMetadata(auth.session.user.id, auth.session.user.nome, sendResult);
+    const mensagem = await saveOutgoingMessage(pool, {
+      conversa_id,
+      wa_message_id: waMessageId,
+      tipo_mensagem: 'text',
+      conteudo: conteudo.trim(),
+      sender_name: auth.session.user.nome,
+      categoria: conversa.categoria,
+      status: msgStatus,
+      metadata,
+      mencoes: mencoesArray,
+      quoted_msg_id: quoted_msg_id || null,
+    });
 
-    if (msgResult.rows.length === 0) {
+    if (!mensagem) {
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
-    const mensagem = msgResult.rows[0];
-
     // Emitir SSE (nova_mensagem sempre — para mostrar no painel, inclusive com status failed)
-    sseManager.broadcast({
-      type: 'nova_mensagem',
-      data: { conversa_id, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
-    });
+    broadcastNewMessage(conversa_id, mensagem, conversa.categoria, conversa.tipo);
 
     if (sendResult.success) {
       // Atualizar conversa apenas quando envio foi bem-sucedido
-      await pool.query(
-        `UPDATE atd.conversas SET
-          ultima_mensagem = LEFT($1, 200),
-          ultima_msg_at = NOW(),
-          ultima_msg_from_me = TRUE,
-          nao_lida = 0,
-          updated_at = NOW()
-         WHERE id = $2`,
-        [conteudo.trim(), conversa_id],
-      );
-
-      sseManager.broadcast({
-        type: 'conversa_atualizada',
-        data: {
-          conversa_id,
-          ultima_msg: conteudo.trim().substring(0, 200),
-          nao_lida: 0,
-        },
-      });
-
+      await updateConversaAfterSend(pool, conversa_id, conteudo.trim());
       return NextResponse.json({ success: true, mensagem });
     } else {
       // Envio falhou mas mensagem foi salva com status 'failed' — retornar a mensagem para UI mostrar botao reenviar

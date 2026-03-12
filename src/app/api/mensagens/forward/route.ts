@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { getUazapiToken } from '@/lib/types';
 import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
+import { sendTextUAZAPI, sendMediaUAZAPI, sendText360Dialog, sendMedia360Dialog } from '@/lib/whatsapp-provider';
+import {
+  saveOutgoingMessage, updateConversaAfterSend, broadcastNewMessage,
+  formatRecipient, generateMessageId, buildSendMetadata,
+} from '@/lib/conversa-update';
+import type { SendResult } from '@/lib/conversa-update';
 
 const UAZAPI_URL = process.env.UAZAPI_URL || '';
 const DIALOG360_API_URL = process.env.DIALOG360_API_URL || '';
@@ -75,118 +80,6 @@ async function downloadFrom360Dialog(mediaId: string): Promise<Buffer | null> {
   }
 }
 
-// === Envio de midia para o destino ===
-
-async function sendMediaViaUAZAPI(
-  number: string, mediaType: string, fileBuffer: Buffer,
-  filename: string, mimetype: string, token: string, caption?: string,
-): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
-  if (!UAZAPI_URL || !token) return { success: false, error: 'UAZAPI nao configurado' };
-  try {
-    const base64Data = `data:${mimetype};base64,${fileBuffer.toString('base64')}`;
-    const body: Record<string, string> = { number, type: mediaType, file: base64Data };
-    if (caption) body.text = caption;
-    if (mediaType === 'document') body.docName = filename;
-
-    const res = await fetch(`${UAZAPI_URL}/send/media`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', token },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) return { success: false, error: `UAZAPI ${res.status}` };
-    const data = await res.json();
-    const ids = extractUazapiMessageIds(data);
-    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
-  } catch {
-    return { success: false, error: 'Erro de conexao UAZAPI' };
-  }
-}
-
-async function sendMediaVia360Dialog(
-  to: string, mediaType: string, fileBuffer: Buffer,
-  filename: string, mimetype: string, caption?: string,
-): Promise<{ success: boolean; messageId?: string; mediaId?: string; error?: string }> {
-  const apiUrl = DIALOG360_API_URL;
-  const apiKey = DIALOG360_API_KEY;
-  if (!apiUrl || !apiKey) return { success: false, error: '360Dialog nao configurado' };
-  try {
-    // Upload
-    const formData = new FormData();
-    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimetype });
-    formData.append('file', blob, filename);
-    formData.append('messaging_product', 'whatsapp');
-    formData.append('type', mimetype);
-
-    const uploadRes = await fetch(`${apiUrl}/media`, {
-      method: 'POST',
-      headers: { 'D360-API-KEY': apiKey },
-      body: formData,
-    });
-    if (!uploadRes.ok) return { success: false, error: `Upload 360Dialog ${uploadRes.status}` };
-    const uploadData = await uploadRes.json();
-    const mediaId = uploadData.id;
-
-    // Send
-    const sendType = mediaType === 'ptt' ? 'audio' : mediaType;
-    const mediaPayload: Record<string, unknown> = { id: mediaId };
-    if (caption && ['image', 'video', 'document'].includes(sendType)) mediaPayload.caption = caption;
-    if (sendType === 'document') mediaPayload.filename = filename;
-
-    const sendRes = await fetch(`${apiUrl}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp', recipient_type: 'individual',
-        to, type: sendType, [sendType]: mediaPayload,
-      }),
-    });
-    if (!sendRes.ok) return { success: false, error: `Send 360Dialog ${sendRes.status}` };
-    const sendData = await sendRes.json();
-    return { success: true, messageId: sendData.messages?.[0]?.id, mediaId };
-  } catch {
-    return { success: false, error: 'Erro de conexao 360Dialog' };
-  }
-}
-
-// === Envio de texto ===
-
-async function sendTextUAZAPI(number: string, text: string, token: string): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
-  if (!UAZAPI_URL || !token) return { success: false, error: 'UAZAPI nao configurado' };
-  try {
-    const res = await fetch(`${UAZAPI_URL}/send/text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', token },
-      body: JSON.stringify({ number, text }),
-    });
-    if (!res.ok) return { success: false, error: `UAZAPI ${res.status}` };
-    const data = await res.json();
-    const ids = extractUazapiMessageIds(data);
-    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
-  } catch {
-    return { success: false, error: 'Erro de conexao UAZAPI' };
-  }
-}
-
-async function sendText360(to: string, text: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const apiUrl = DIALOG360_API_URL;
-  const apiKey = DIALOG360_API_KEY;
-  if (!apiUrl || !apiKey) return { success: false, error: '360Dialog nao configurado' };
-  try {
-    const res = await fetch(`${apiUrl}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp', to, type: 'text', text: { body: text },
-      }),
-    });
-    if (!res.ok) return { success: false, error: `360Dialog ${res.status}` };
-    const data = await res.json();
-    return { success: true, messageId: data.messages?.[0]?.id };
-  } catch {
-    return { success: false, error: 'Erro de conexao 360Dialog' };
-  }
-}
-
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!isAuthed(auth)) return auth;
@@ -227,16 +120,13 @@ export async function POST(request: NextRequest) {
       return apiError('Sem permissao para esta conversa', 403);
     }
 
-    const isGroup = conversa.tipo === 'grupo';
-    const destinatario = isGroup
-      ? conversa.wa_chatid
-      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    const destinatario = formatRecipient(conversa.wa_chatid, conversa.tipo, conversa.provider);
 
     const senderLabel = originalMsg.sender_name || originalMsg.sender_phone || 'Desconhecido';
     const nomeOperador = auth.session.user.nome;
     const isMedia = MEDIA_TYPES.includes(originalMsg.tipo_mensagem);
 
-    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; mediaId?: string; error?: string };
+    let sendResult: SendResult;
     let dbTipoMensagem = 'text';
     let dbConteudo: string;
     let dbMediaMimetype: string | null = null;
@@ -265,8 +155,7 @@ export async function POST(request: NextRequest) {
         dbConteudo = conteudoOriginal;
 
         if (conversa.provider === '360dialog') {
-          const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-          sendResult = await sendText360(to, textToSend);
+          sendResult = await sendText360Dialog(destinatario, textToSend);
         } else {
           sendResult = await sendTextUAZAPI(destinatario, textToSend, getUazapiToken(conversa.categoria));
         }
@@ -285,10 +174,10 @@ export async function POST(request: NextRequest) {
         dbConteudo = originalMsg.conteudo || `[${mediaType === 'image' ? 'Imagem' : mediaType === 'audio' ? 'Audio' : mediaType === 'video' ? 'Video' : 'Documento'}]`;
 
         if (conversa.provider === '360dialog') {
-          const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-          sendResult = await sendMediaVia360Dialog(to, mediaType, fileBuffer, filename, mimetype, caption);
+          sendResult = await sendMedia360Dialog(destinatario, mediaType, fileBuffer, filename, mimetype, caption);
         } else {
-          sendResult = await sendMediaViaUAZAPI(destinatario, mediaType, fileBuffer, filename, mimetype, getUazapiToken(conversa.categoria), caption);
+          const base64Data = fileBuffer.toString('base64');
+          sendResult = await sendMediaUAZAPI(destinatario, mediaType, base64Data, mimetype, filename, getUazapiToken(conversa.categoria), caption);
         }
       }
     } else {
@@ -298,8 +187,7 @@ export async function POST(request: NextRequest) {
       dbConteudo = conteudoOriginal;
 
       if (conversa.provider === '360dialog') {
-        const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-        sendResult = await sendText360(to, textToSend);
+        sendResult = await sendText360Dialog(destinatario, textToSend);
       } else {
         sendResult = await sendTextUAZAPI(destinatario, textToSend, getUazapiToken(conversa.categoria));
       }
@@ -312,75 +200,45 @@ export async function POST(request: NextRequest) {
 
     console.log(`[forward] Envio OK: msg ${source_message_id} → conversa ${target_conversa_id}, messageId=${sendResult.messageId}`);
 
-    // Salvar no banco — usar crypto para fallback ID unico
-    const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `fwd_${Date.now()}_${Math.random().toString(36).slice(2, 10)}_${source_message_id}`;
+    // Salvar no banco via helper
+    const waMessageId = sendResult.messageId || generateMessageId('fwd');
 
-    const metadata: Record<string, unknown> = {
-      forwarded_from_msg_id: source_message_id,
-      forwarded_by: auth.session.user.id,
-      forwarded_by_name: auth.session.user.nome,
-      original_sender: senderLabel,
-      message_id_full: sendResult.fullMessageId || waMessageId,
-      provider: conversa.provider,
-    };
-    if (sendResult.mediaId) {
-      metadata.dialog360_media_id = sendResult.mediaId;
-    }
-
-    const newMsgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, media_mimetype, media_filename,
-        is_forwarded, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, $5, $6, $7, $8, true, 'sent', $9)
-      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        target_conversa_id,
-        waMessageId,
-        owner,
-        auth.session.user.nome,
-        dbTipoMensagem,
-        dbConteudo,
-        dbMediaMimetype,
-        dbMediaFilename,
-        JSON.stringify(metadata),
-      ],
+    const metadata = buildSendMetadata(
+      auth.session.user.id as string,
+      auth.session.user.nome,
+      sendResult,
+      {
+        forwarded_from_msg_id: source_message_id,
+        forwarded_by: auth.session.user.id,
+        forwarded_by_name: auth.session.user.nome,
+        original_sender: senderLabel,
+        provider: conversa.provider,
+      },
     );
 
-    if (newMsgResult.rows.length === 0) {
+    const mensagem = await saveOutgoingMessage(pool, {
+      conversa_id: target_conversa_id,
+      wa_message_id: waMessageId,
+      tipo_mensagem: dbTipoMensagem,
+      conteudo: dbConteudo,
+      sender_name: auth.session.user.nome,
+      categoria: conversa.categoria,
+      metadata,
+      media_mimetype: dbMediaMimetype,
+      media_filename: dbMediaFilename,
+      is_forwarded: true,
+    });
+
+    if (!mensagem) {
       console.error(`[forward] Duplicada: wa_message_id=${waMessageId} para msg ${source_message_id}`);
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
-    const mensagem = newMsgResult.rows[0];
+    // Atualizar conversa destino + broadcast SSE conversa_atualizada
+    await updateConversaAfterSend(pool, target_conversa_id, dbConteudo);
 
-    // Atualizar conversa destino
-    await pool.query(
-      `UPDATE atd.conversas SET
-        ultima_mensagem = LEFT($1, 200),
-        ultima_msg_at = NOW(),
-        nao_lida = 0,
-        updated_at = NOW()
-       WHERE id = $2`,
-      [dbConteudo, target_conversa_id],
-    );
-
-    // Emitir SSE
-    sseManager.broadcast({
-      type: 'nova_mensagem',
-      data: { conversa_id: target_conversa_id, mensagem, categoria: conversa.categoria, tipo: conversa.tipo },
-    });
-
-    sseManager.broadcast({
-      type: 'conversa_atualizada',
-      data: {
-        conversa_id: target_conversa_id,
-        ultima_msg: dbConteudo.substring(0, 200),
-        nao_lida: 0,
-      },
-    });
+    // Broadcast SSE nova_mensagem
+    broadcastNewMessage(target_conversa_id, mensagem, conversa.categoria, conversa.tipo);
 
     return NextResponse.json({ success: true, mensagem });
   } catch (err) {

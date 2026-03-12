@@ -1,87 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { sseManager } from '@/lib/sse-manager';
-import { CATEGORIA_OWNER, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
+import { getUazapiToken } from '@/lib/types';
 import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
-
-async function sendLocationViaUAZAPI(
-  number: string,
-  latitude: number,
-  longitude: number,
-  instanceToken: string,
-  name?: string,
-  address?: string,
-): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
-  const url = process.env.UAZAPI_URL;
-  const token = instanceToken;
-  if (!url || !token) return { success: false, error: 'UAZAPI nao configurado' };
-
-  try {
-    const payload: Record<string, unknown> = { number, latitude, longitude };
-    if (name) payload.name = name;
-    if (address) payload.address = address;
-
-    const res = await fetch(`${url}/send/location`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', token },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send-location/uazapi] Erro:', res.status, body);
-      return { success: false, error: `UAZAPI retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    const ids = extractUazapiMessageIds(data);
-    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
-  } catch (err) {
-    console.error('[send-location/uazapi] Erro:', err);
-    return { success: false, error: 'Erro de conexao com UAZAPI' };
-  }
-}
-
-async function sendLocationVia360Dialog(
-  to: string,
-  latitude: number,
-  longitude: number,
-  name?: string,
-  address?: string,
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!url || !apiKey) return { success: false, error: '360Dialog nao configurado' };
-
-  try {
-    const location: Record<string, unknown> = { latitude, longitude };
-    if (name) location.name = name;
-    if (address) location.address = address;
-
-    const res = await fetch(`${url}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'location',
-        location,
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[send-location/360dialog] Erro:', res.status, body);
-      return { success: false, error: `360Dialog retornou ${res.status}` };
-    }
-
-    const data = await res.json();
-    return { success: true, messageId: data.messages?.[0]?.id };
-  } catch (err) {
-    console.error('[send-location/360dialog] Erro:', err);
-    return { success: false, error: 'Erro de conexao com 360Dialog' };
-  }
-}
+import { sendLocationUAZAPI, sendLocation360Dialog } from '@/lib/whatsapp-provider';
+import {
+  saveOutgoingMessage,
+  updateConversaAfterSend,
+  broadcastNewMessage,
+  formatRecipient,
+  generateMessageId,
+  buildSendMetadata,
+} from '@/lib/conversa-update';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -114,63 +43,44 @@ export async function POST(request: NextRequest) {
       return apiError('Sem permissao', 403);
     }
 
-    const destinatario = conversa.tipo === 'grupo'
-      ? conversa.wa_chatid
-      : conversa.wa_chatid.replace('@s.whatsapp.net', '');
+    const dest = formatRecipient(conversa.wa_chatid, conversa.tipo, conversa.provider);
 
-    let sendResult: { success: boolean; messageId?: string; fullMessageId?: string; error?: string };
+    let sendResult;
     if (conversa.provider === '360dialog') {
-      const to = destinatario.replace('@s.whatsapp.net', '').replace('@g.us', '');
-      sendResult = await sendLocationVia360Dialog(to, lat, lng, name, address);
+      sendResult = await sendLocation360Dialog(dest, lat, lng, name, address);
     } else {
       const uazapiToken = getUazapiToken(conversa.categoria);
-      sendResult = await sendLocationViaUAZAPI(destinatario, lat, lng, uazapiToken, name, address);
+      sendResult = await sendLocationUAZAPI(dest, lat, lng, uazapiToken, name, address);
     }
 
     if (!sendResult.success) {
       return NextResponse.json({ error: sendResult.error || 'Falha ao enviar' }, { status: 502 });
     }
 
-    const owner = CATEGORIA_OWNER[conversa.categoria] || '';
-    const waMessageId = sendResult.messageId || `sent_loc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const waMessageId = sendResult.messageId || generateMessageId('sent_loc');
     const conteudoTexto = `📍 ${name || 'Localização'}\n${address || `${lat}, ${lng}`}`;
 
-    const msgResult = await pool.query(
-      `INSERT INTO atd.mensagens (
-        conversa_id, wa_message_id, from_me, sender_phone, sender_name,
-        tipo_mensagem, conteudo, status, metadata
-      ) VALUES ($1, $2, true, $3, $4, 'location', $5, 'sent', $6)
-      ON CONFLICT (conversa_id, wa_message_id) DO NOTHING
-      RETURNING *`,
-      [
-        conversa_id,
-        waMessageId,
-        owner,
-        auth.session.user.nome,
-        conteudoTexto,
-        JSON.stringify({ latitude: lat, longitude: lng, name, address, sent_by: auth.session.user.id, message_id_full: sendResult.fullMessageId || waMessageId }),
-      ],
-    );
+    const mensagem = await saveOutgoingMessage(pool, {
+      conversa_id,
+      wa_message_id: waMessageId,
+      tipo_mensagem: 'location',
+      conteudo: conteudoTexto,
+      sender_name: auth.session.user.nome,
+      categoria: conversa.categoria,
+      metadata: buildSendMetadata(auth.session.user.id, auth.session.user.nome, sendResult, {
+        latitude: lat,
+        longitude: lng,
+        name,
+        address,
+      }),
+    });
 
-    if (msgResult.rows.length === 0) {
+    if (!mensagem) {
       return NextResponse.json({ error: 'Mensagem duplicada' }, { status: 409 });
     }
 
-    const mensagem = msgResult.rows[0];
-
-    await pool.query(
-      `UPDATE atd.conversas SET
-        ultima_mensagem = LEFT($1, 200), ultima_msg_at = NOW(),
-        ultima_msg_from_me = TRUE, nao_lida = 0, updated_at = NOW()
-       WHERE id = $2`,
-      [conteudoTexto, conversa_id],
-    );
-
-    sseManager.broadcast({ type: 'nova_mensagem', data: { conversa_id, mensagem, categoria: conversa.categoria } });
-    sseManager.broadcast({
-      type: 'conversa_atualizada',
-      data: { conversa_id, ultima_msg: conteudoTexto.substring(0, 200), nao_lida: 0 },
-    });
+    await updateConversaAfterSend(pool, conversa_id, conteudoTexto);
+    broadcastNewMessage(conversa_id, mensagem, conversa.categoria);
 
     return NextResponse.json({ success: true, mensagem });
   } catch (err) {
