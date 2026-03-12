@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { RespostaPronta } from '@/lib/types';
+import { useFetchList } from './useFetchList';
 
 interface UseRespostasProntasResult {
   respostas: RespostaPronta[];
@@ -14,28 +15,10 @@ interface UseRespostasProntasResult {
 }
 
 export function useRespostasProntas(): UseRespostasProntasResult {
-  const [respostas, setRespostas] = useState<RespostaPronta[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchRespostas = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/respostas-prontas');
-      if (!res.ok) throw new Error('Erro ao carregar respostas');
-      const data = await res.json();
-      setRespostas(data.respostas);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRespostas();
-  }, [fetchRespostas]);
+  const { items, loading, error, refresh } = useFetchList<RespostaPronta>({
+    url: '/api/respostas-prontas',
+    dataKey: 'respostas',
+  });
 
   const addResposta = useCallback(async (atalho: string, conteudo: string) => {
     const res = await fetch('/api/respostas-prontas', {
@@ -47,8 +30,8 @@ export function useRespostasProntas(): UseRespostasProntasResult {
       const data = await res.json();
       throw new Error(data.error || 'Erro ao criar resposta');
     }
-    await fetchRespostas();
-  }, [fetchRespostas]);
+    await refresh();
+  }, [refresh]);
 
   const updateResposta = useCallback(async (id: number, atalho: string, conteudo: string) => {
     const res = await fetch(`/api/respostas-prontas/${id}`, {
@@ -60,8 +43,8 @@ export function useRespostasProntas(): UseRespostasProntasResult {
       const data = await res.json();
       throw new Error(data.error || 'Erro ao atualizar resposta');
     }
-    await fetchRespostas();
-  }, [fetchRespostas]);
+    await refresh();
+  }, [refresh]);
 
   const deleteResposta = useCallback(async (id: number) => {
     const res = await fetch(`/api/respostas-prontas/${id}`, {
@@ -71,14 +54,14 @@ export function useRespostasProntas(): UseRespostasProntasResult {
       const data = await res.json();
       throw new Error(data.error || 'Erro ao excluir resposta');
     }
-    await fetchRespostas();
-  }, [fetchRespostas]);
+    await refresh();
+  }, [refresh]);
 
   return {
-    respostas,
+    respostas: items,
     loading,
     error,
-    refresh: fetchRespostas,
+    refresh,
     addResposta,
     updateResposta,
     deleteResposta,

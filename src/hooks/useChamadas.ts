@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Chamada } from '@/lib/types';
+import { useFetchList } from './useFetchList';
 
 interface UseChamadasParams {
   origem?: string;
@@ -19,46 +20,22 @@ interface UseChamadasResult {
 }
 
 export function useChamadas(params: UseChamadasParams = {}): UseChamadasResult {
-  const [chamadas, setChamadas] = useState<Chamada[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchChamadas = useCallback(async () => {
-    try {
-      setLoading(true);
-      const query = new URLSearchParams();
-      if (params.origem) query.set('origem', params.origem);
-      if (params.status) query.set('status', params.status);
-
-      const res = await fetch(`/api/chamadas?${query.toString()}`);
-      if (!res.ok) throw new Error('Erro ao carregar chamadas');
-
-      const data = await res.json();
-      setChamadas(data.chamadas);
-      setTotal(data.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
-    } finally {
-      setLoading(false);
-    }
-  }, [params.origem, params.status]);
-
-  useEffect(() => {
-    fetchChamadas();
-  }, [fetchChamadas]);
+  const { items, total, loading, error, refresh, setItems } = useFetchList<Chamada>({
+    url: '/api/chamadas',
+    params: { origem: params.origem, status: params.status },
+    dataKey: 'chamadas',
+    totalKey: 'total',
+  });
 
   const addChamada = useCallback((chamada: Chamada) => {
-    setChamadas((prev) => [chamada, ...prev]);
-    setTotal((prev) => prev + 1);
-  }, []);
+    setItems((prev) => [chamada, ...prev]);
+  }, [setItems]);
 
   const updateChamada = useCallback((chamadaId: number, updates: Partial<Chamada>) => {
-    setChamadas((prev) =>
+    setItems((prev) =>
       prev.map((c) => (c.id === chamadaId ? { ...c, ...updates } : c)),
     );
-  }, []);
+  }, [setItems]);
 
-  return { chamadas, total, loading, error, refresh: fetchChamadas, addChamada, updateChamada };
+  return { chamadas: items, total, loading, error, refresh, addChamada, updateChamada };
 }

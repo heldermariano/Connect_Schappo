@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { HubUsuario } from '@/lib/types';
+import { useFetchList } from './useFetchList';
 
 interface UseHubUsuariosResult {
   usuarios: HubUsuario[];
@@ -14,28 +15,10 @@ interface UseHubUsuariosResult {
 }
 
 export function useHubUsuarios(): UseHubUsuariosResult {
-  const [usuarios, setUsuarios] = useState<HubUsuario[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchUsuarios = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/hub-usuarios');
-      if (!res.ok) throw new Error('Erro ao carregar tecnicos');
-      const data = await res.json();
-      setUsuarios(data.usuarios);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro desconhecido');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUsuarios();
-  }, [fetchUsuarios]);
+  const { items, loading, error, refresh } = useFetchList<HubUsuario>({
+    url: '/api/hub-usuarios',
+    dataKey: 'usuarios',
+  });
 
   const addUsuario = useCallback(async (nome: string, telefone: string, cargo: string, setor: string) => {
     const res = await fetch('/api/hub-usuarios', {
@@ -47,8 +30,8 @@ export function useHubUsuarios(): UseHubUsuariosResult {
       const data = await res.json();
       throw new Error(data.error || 'Erro ao criar tecnico');
     }
-    await fetchUsuarios();
-  }, [fetchUsuarios]);
+    await refresh();
+  }, [refresh]);
 
   const updateUsuario = useCallback(async (id: number, nome: string, telefone: string, cargo: string, setor: string) => {
     const res = await fetch(`/api/hub-usuarios/${id}`, {
@@ -60,8 +43,8 @@ export function useHubUsuarios(): UseHubUsuariosResult {
       const data = await res.json();
       throw new Error(data.error || 'Erro ao atualizar tecnico');
     }
-    await fetchUsuarios();
-  }, [fetchUsuarios]);
+    await refresh();
+  }, [refresh]);
 
   const deleteUsuario = useCallback(async (id: number) => {
     const res = await fetch(`/api/hub-usuarios/${id}`, {
@@ -71,14 +54,14 @@ export function useHubUsuarios(): UseHubUsuariosResult {
       const data = await res.json();
       throw new Error(data.error || 'Erro ao excluir tecnico');
     }
-    await fetchUsuarios();
-  }, [fetchUsuarios]);
+    await refresh();
+  }, [refresh]);
 
   return {
-    usuarios,
+    usuarios: items,
     loading,
     error,
-    refresh: fetchUsuarios,
+    refresh,
     addUsuario,
     updateUsuario,
     deleteUsuario,
