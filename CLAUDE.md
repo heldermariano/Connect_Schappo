@@ -115,6 +115,7 @@ connect-schappo/
 - **Source maps desabilitados** no browser (`productionBrowserSourceMaps: false`)
 - **console.log removido** em producao (mantém `console.error` e `console.warn`)
 - **Docker**: Redis como servico separado no `docker-compose.yml` (depends_on com healthcheck)
+- **Docker networking**: duas redes — `traefik_default` (Traefik) + `internal` (Redis). Label `traefik.docker.network=traefik_default` obrigatorio
 - **Teste**: `docker-compose.test.yml` sobe ambiente isolado na porta 3001
 
 ---

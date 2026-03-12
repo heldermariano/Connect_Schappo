@@ -95,9 +95,13 @@ Executar em ordem com psql. Arquivos em `sql/`:
 ssh treafik_proxy@10.150.77.105
 cd ~/connect-schappo
 git pull origin main
+# Atualizar .env se necessario (nao versionado)
 docker compose build
 docker compose up -d --force-recreate
+# Verificar: docker logs --tail 20 connect-schappo-connect-schappo-1
 ```
+
+**ATENCAO**: O `.env` na producao (`/home/treafik_proxy/connect-schappo/.env`) nao eh versionado. Se novas variaveis forem adicionadas, atualizar manualmente via SSH antes do build.
 
 ### Docker
 
@@ -105,6 +109,23 @@ docker compose up -d --force-recreate
 - `TZ=America/Sao_Paulo` + `apk add tzdata`
 - Standalone output
 - Traefik roteia via Docker provider (labels)
+- **Duas redes**: `traefik_default` (Traefik) + `internal` (Redis)
+- **OBRIGATORIO**: label `traefik.docker.network=traefik_default` — sem isso, Traefik pode resolver IP pela rede errada e dar 503
+- **REDIS_URL** override no `environment:` do docker-compose (`redis://redis:6379`) — hostname `redis` resolve via rede `internal`
+- `.env` eh copiado para dentro da imagem no build (`COPY . .`), nao via volume
+
+### pg_hba.conf (PostgreSQL)
+
+Arquivo em `/etc/postgresql/16/main/pg_hba.conf` no servidor `10.150.77.78`.
+Requer regras para cada user+IP. Apos editar: `sudo -u postgres psql -c "SELECT pg_reload_conf();"`.
+
+| User | IPs permitidos |
+|------|---------------|
+| `connect_dev` | `10.150.77.105/32`, `172.16.0.0/12` |
+| `connect_write` | `10.150.77.105/32`, `10.150.77.0/24`, `172.16.0.0/12` |
+| `connect_read` | `10.150.77.105/32`, `10.150.77.0/24`, `172.16.0.0/12` |
+
+**CUIDADO**: Cada linha deve estar numa unica linha — quebras de linha invalidam a regra e o PG ignora silenciosamente.
 
 ---
 
