@@ -5,6 +5,7 @@ import { getUazapiToken } from '@/lib/types';
 import { requireAuth, isAuthed, apiError } from '@/lib/api-auth';
 import { sendTextUAZAPI, sendText360Dialog } from '@/lib/whatsapp-provider';
 import { updateConversaAfterSend, broadcastNewMessage, formatRecipient, generateMessageId, saveOutgoingMessage } from '@/lib/conversa-update';
+import { normalizePhone } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -42,8 +43,21 @@ export async function POST(request: NextRequest) {
       return apiError('Sem permissao para esta conversa', 403);
     }
 
-    // Determinar destinatario
+    // Determinar destinatario (re-normaliza para corrigir numeros com 9o digito incorreto)
     const destinatario = formatRecipient(original.wa_chatid, original.tipo, original.provider);
+
+    // Auto-corrigir wa_chatid/telefone na conversa se normalizePhone mudou o numero
+    if (original.tipo !== 'grupo') {
+      const rawNum = original.wa_chatid.replace('@s.whatsapp.net', '');
+      const corrected = normalizePhone(rawNum);
+      if (corrected && corrected !== rawNum) {
+        await pool.query(
+          `UPDATE atd.conversas SET wa_chatid = $1, telefone = $2 WHERE id = $3`,
+          [corrected + '@s.whatsapp.net', corrected, original.conversa_id],
+        );
+        console.warn(`[resend] Auto-corrigido telefone: ${rawNum} → ${corrected} (conversa=${original.conversa_id})`);
+      }
+    }
 
     // Montar texto para reenvio
     const conteudoOriginal = original.conteudo || `[${original.tipo_mensagem}]`;

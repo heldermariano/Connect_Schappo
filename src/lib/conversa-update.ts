@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { sseManager } from './sse-manager';
-import { CATEGORIA_OWNER, type Mensagem } from './types';
+import { CATEGORIA_OWNER, type Mensagem, normalizePhone } from './types';
 
 export interface SendResult {
   success: boolean;
@@ -123,11 +123,15 @@ export function broadcastNewMessage(
  */
 export function formatRecipient(wa_chatid: string, tipo: string, provider: string): string {
   const isGroup = tipo === 'grupo';
-  const raw = isGroup ? wa_chatid : wa_chatid.replace('@s.whatsapp.net', '');
-  if (provider === '360dialog') {
-    return raw.replace('@s.whatsapp.net', '').replace('@g.us', '');
+  if (isGroup) {
+    if (provider === '360dialog') return wa_chatid.replace('@g.us', '');
+    return wa_chatid;
   }
-  return raw;
+  // Para individuais: re-normalizar para corrigir numeros com 9o digito incorreto em fixos
+  const rawNum = wa_chatid.replace('@s.whatsapp.net', '');
+  const normalized = normalizePhone(rawNum) || rawNum;
+  if (provider === '360dialog') return normalized;
+  return normalized;
 }
 
 /**
