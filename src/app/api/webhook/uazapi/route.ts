@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import pool from '@/lib/db';
 import { sseManager } from '@/lib/sse-manager';
-import { WebhookPayloadUAZAPI } from '@/lib/types';
+import { WebhookPayloadUAZAPI, getUazapiToken } from '@/lib/types';
 import {
   parseUAZAPIMessage,
   parseUAZAPICall,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/webhook-parser-uazapi';
 import { upsertParticipant } from '@/lib/participant-cache';
 import { atualizarStatusKonsyst } from '@/lib/db-agenda';
+import { sendTextUAZAPI } from '@/lib/whatsapp-provider';
 
 export async function POST(request: NextRequest) {
   // Responder rapido — processar async
@@ -24,8 +25,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // Debug: logar mensagens de midia de/para 92894339 para rastrear problema
+    // Debug temporario: logar TODOS os webhooks recebidos
+    console.error(`[webhook/uazapi] RECV: EventType=${payload.EventType} chatid=${payload.chat?.wa_chatid || '?'} msgType=${payload.message?.messageType || '?'}`);
+
     const chatId = payload.chat?.wa_chatid || '';
+    if (chatId.includes('981573841') || chatId.includes('81573841')) {
+      console.error(`[webhook/uazapi] DEBUG 981573841: raw=`, JSON.stringify(payload).substring(0, 1500));
+    }
+
+    // Debug: logar mensagens de midia de/para 92894339 para rastrear problema
     if (chatId.includes('92894339') && payload.EventType === 'messages') {
       const msgType = payload.message?.messageType || payload.message?.type || '?';
       const fromMe = payload.message?.fromMe;
@@ -208,14 +216,14 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
     );
 
     // Auto-atualizar confirmacao de agendamento quando paciente responde
-    // Detectar respostas "1" (confirmar) ou "2" (remarcar) pelo telefone do remetente
+    // Detectar cliques de botao (Confirmar/Desmarcar/Reagendar) ou respostas texto
     const textoResposta = (parsed.conteudo || '').trim().toLowerCase();
-    if (parsed.telefone && (textoResposta.startsWith('1') || textoResposta.startsWith('2') || textoResposta === 'confirmo' || textoResposta === 'confirmar' || textoResposta === 'remarcar' || textoResposta === 'reagendar' || textoResposta === 'desmarcar' || textoResposta === 'cancelar')) {
+    if (parsed.telefone && (textoResposta === 'confirmar' || textoResposta === 'desmarcar' || textoResposta === 'reagendar' || textoResposta.startsWith('1') || textoResposta.startsWith('2') || textoResposta === 'confirmo' || textoResposta === 'remarcar' || textoResposta === 'cancelar')) {
       try {
         let novoStatus: string | null = null;
-        if (textoResposta.startsWith('1') || textoResposta === 'confirmo' || textoResposta === 'confirmar') {
+        if (textoResposta === 'confirmar' || textoResposta.startsWith('1') || textoResposta === 'confirmo') {
           novoStatus = 'confirmado';
-        } else if (textoResposta.startsWith('2') || textoResposta === 'remarcar' || textoResposta === 'reagendar') {
+        } else if (textoResposta === 'reagendar' || textoResposta.startsWith('2') || textoResposta === 'remarcar') {
           novoStatus = 'reagendar';
         } else if (textoResposta === 'desmarcar' || textoResposta === 'cancelar') {
           novoStatus = 'desmarcou';
@@ -227,10 +235,8 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
           let tel = parsed.telefone.replace(/\D/g, '');
           let telAlt = tel;
           if (tel.length === 13 && tel.startsWith('55')) {
-            // Com 9o digito: 55 + DD + 9XXXX → remover o 9
             telAlt = tel.substring(0, 4) + tel.substring(5);
           } else if (tel.length === 12 && tel.startsWith('55')) {
-            // Sem 9o digito: 55 + DD + XXXX → adicionar 9
             telAlt = tel.substring(0, 4) + '9' + tel.substring(4);
           }
           const confirmResult = await pool.query(
@@ -260,6 +266,42 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
                 confirmacoes: confirmResult.rows.map(r => ({ id: r.id, chave_agenda: r.chave_agenda, status: novoStatus })),
               } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
             });
+
+            // Enviar resposta automatica ao paciente
+            const tokenRecepcao = getUazapiToken('recepcao');
+            const numeroPaciente = parsed.telefone;
+
+            if (novoStatus === 'confirmado') {
+              sendTextUAZAPI(
+                numeroPaciente,
+                'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo',
+                tokenRecepcao,
+              ).catch(err => console.error('[webhook/uazapi] Erro ao enviar resposta confirmacao:', err));
+            } else if (novoStatus === 'desmarcou') {
+              sendTextUAZAPI(
+                numeroPaciente,
+                'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo',
+                tokenRecepcao,
+              ).catch(err => console.error('[webhook/uazapi] Erro ao enviar resposta desmarcacao:', err));
+            } else if (novoStatus === 'reagendar') {
+              sendTextUAZAPI(
+                numeroPaciente,
+                'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo',
+                tokenRecepcao,
+              ).catch(err => console.error('[webhook/uazapi] Erro ao enviar resposta reagendamento:', err));
+
+              // Notificar recepcao via SSE sobre pedido de reagendamento
+              sseManager.broadcast({
+                type: 'nova_notificacao' as 'conversa_atualizada',
+                data: {
+                  tipo: 'reagendamento',
+                  mensagem: `Paciente ${parsed.nome_contato || parsed.telefone} solicitou reagendamento`,
+                  telefone: parsed.telefone,
+                  conversa_id: conversaId,
+                  chaves: confirmResult.rows.map(r => r.chave_agenda),
+                } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
+              });
+            }
           }
         }
       } catch (err) {

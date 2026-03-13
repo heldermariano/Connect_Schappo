@@ -40,16 +40,56 @@ export interface ParsedUAZAPICall {
  * NUNCA retornar JSON bruto — sempre extrair o texto limpo
  */
 function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
+  const rawType = (message.messageType || message.type || '').toLowerCase();
+  const isButtonReply = rawType.includes('templatebuttonreply') || rawType.includes('nativeflowresponse');
+
+  // Para respostas de botao: logar payload completo para debug e extrair texto
+  if (isButtonReply) {
+    // UAZAPI envia o texto do botao clicado em message.text ou message.content
+    // Tentar todas as fontes possiveis
+    const raw = message as unknown as Record<string, unknown>;
+
+    // message.text (string) — fonte mais confiavel
+    if (message.text && typeof message.text === 'string' && message.text.length > 0) {
+      return message.text;
+    }
+    // message.content como string
+    if (typeof message.content === 'string' && message.content.length > 0) {
+      if (message.content.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(message.content);
+          if (parsed.selectedDisplayText) return parsed.selectedDisplayText;
+          if (parsed.selectedId) return parsed.selectedId;
+          if (parsed.text) return parsed.text;
+        } catch { /* nao eh JSON */ }
+      }
+      return message.content;
+    }
+    // message.content como objeto
+    if (message.content && typeof message.content === 'object') {
+      const c = message.content as Record<string, unknown>;
+      if (c.selectedDisplayText) return String(c.selectedDisplayText);
+      if (c.selectedId) return String(c.selectedId);
+      if (c.text) return String(c.text);
+    }
+    // convertOptions
+    if (raw.convertOptions && typeof raw.convertOptions === 'string') {
+      return raw.convertOptions;
+    }
+    // Fallback: serializar message inteiro para debug (vai aparecer como conteudo)
+    return `[button_debug] ${JSON.stringify(raw).substring(0, 500)}`;
+  }
+
   // Prioridade 1: message.text (sempre string)
   if (message.text && typeof message.text === 'string') {
     return message.text;
   }
   // Prioridade 2: message.content como string
   if (typeof message.content === 'string') {
-    // Se parecer JSON, tentar parsear e extrair .text
     if (message.content.startsWith('{')) {
       try {
         const parsed = JSON.parse(message.content);
+        if (parsed.selectedDisplayText) return parsed.selectedDisplayText;
         if (parsed.text) return parsed.text;
       } catch { /* nao eh JSON valido, usar como string */ }
     }
@@ -57,10 +97,15 @@ function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
   }
   // Prioridade 3: message.content como objeto
   if (message.content && typeof message.content === 'object') {
+    if ('selectedDisplayText' in message.content && typeof message.content.selectedDisplayText === 'string') {
+      return message.content.selectedDisplayText;
+    }
+    if ('selectedId' in message.content && typeof message.content.selectedId === 'string') {
+      return message.content.selectedId;
+    }
     if ('text' in message.content && typeof message.content.text === 'string') {
       return message.content.text;
     }
-    // Para reacoes, extrair o emoji
     if ('text' in message.content) {
       return String(message.content.text || '');
     }
@@ -197,6 +242,10 @@ function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string 
 
   // Tipos de texto
   if (lower === 'conversation' || lower === 'extendedtextmessage') {
+    return 'text';
+  }
+  // Respostas de botao interativo (NativeFlow, TemplateButton) → tratar como texto
+  if (lower === 'templatebuttonreplymessage' || lower === 'nativeflowresponsemessage') {
     return 'text';
   }
   // Tipos de midia — extrair nome base

@@ -266,7 +266,7 @@ export interface WebhookPayloadUAZAPI {
     id: string;
     messageid?: string;
     fromMe?: boolean;
-    content?: string | { text: string; contextInfo?: Record<string, unknown> };
+    content?: string | { text: string; contextInfo?: Record<string, unknown>; selectedDisplayText?: string; selectedId?: string; [key: string]: unknown };
     text?: string;
     mentionedJid?: string[];
     type?: string;

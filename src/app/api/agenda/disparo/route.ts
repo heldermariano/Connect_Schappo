@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, isAuthed } from '@/lib/api-auth';
 import { queryLatin1 } from '@/lib/db-agenda';
 import pool from '@/lib/db';
-import { normalizePhone } from '@/lib/types';
+import { normalizePhone, getUazapiToken, extractUazapiMessageIds } from '@/lib/types';
 import { sseManager } from '@/lib/sse-manager';
 
 // Delay entre envios (rate limit)
@@ -10,58 +10,49 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Template aprovado pela Meta (360Dialog)
-const TEMPLATE_NAME = 'confirmacao_agendamento';
-const TEMPLATE_LANG = 'pt_BR';
+// Categoria usada para confirmacoes (numero da Recepcao)
+const CONFIRMACAO_CATEGORIA = 'recepcao';
 
-// Envia template de confirmacao via 360Dialog
-async function sendTemplate360(
+// Envia mensagem de confirmacao com botoes interativos via UAZAPI
+async function sendConfirmacaoUAZAPI(
   to: string,
   params: { nome_paciente: string; data: string; hora: string; nome_medico: string; procedimento: string },
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const url = process.env.DIALOG360_API_URL;
-  const apiKey = process.env.DIALOG360_API_KEY;
-  if (!url || !apiKey) return { success: false, error: '360Dialog nao configurado' };
+  instanceToken: string,
+): Promise<{ success: boolean; messageId?: string; fullMessageId?: string; error?: string }> {
+  const url = process.env.UAZAPI_URL;
+  if (!url || !instanceToken) return { success: false, error: 'UAZAPI nao configurado' };
+
+  const texto = `Clínica Schappo - Confirmação de Agendamento\n\nOlá, ${params.nome_paciente}!\n\n• Data: ${params.data}\n• Horário: ${params.hora}\n• Médico(a): ${params.nome_medico}\n• Procedimento: ${params.procedimento}\n\nPor favor, selecione uma opção abaixo:`;
 
   try {
-    const res = await fetch(`${url}/messages`, {
+    const res = await fetch(`${url}/send/menu`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'D360-API-KEY': apiKey },
+      headers: { 'Content-Type': 'application/json', token: instanceToken },
       body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'template',
-        template: {
-          name: TEMPLATE_NAME,
-          language: { code: TEMPLATE_LANG },
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                { type: 'text', text: params.nome_paciente },
-                { type: 'text', text: params.data },
-                { type: 'text', text: params.hora },
-                { type: 'text', text: params.nome_medico },
-                { type: 'text', text: params.procedimento },
-              ],
-            },
-          ],
-        },
+        number: to,
+        type: 'button',
+        text: texto,
+        choices: [
+          'Confirmar|CONFIRMAR',
+          'Desmarcar|DESMARCAR',
+          'Reagendar|REAGENDAR',
+        ],
+        footerText: 'Clínica Schappo',
       }),
     });
 
     if (!res.ok) {
       const body = await res.text();
-      console.error('[disparo/360dialog] Erro template:', res.status, body);
-      return { success: false, error: `360Dialog ${res.status}: ${body.substring(0, 200)}` };
+      console.error('[disparo/uazapi] Erro menu:', res.status, body);
+      return { success: false, error: `UAZAPI ${res.status}: ${body.substring(0, 200)}` };
     }
 
     const data = await res.json();
-    const messageId = data.messages?.[0]?.id;
-    return { success: true, messageId };
+    const ids = extractUazapiMessageIds(data);
+    return { success: true, messageId: ids.shortId, fullMessageId: ids.fullId };
   } catch (err) {
-    console.error('[disparo/360dialog] Erro de rede:', err);
-    return { success: false, error: 'Erro de conexao com 360Dialog' };
+    console.error('[disparo/uazapi] Erro de rede:', err);
+    return { success: false, error: 'Erro de conexao com UAZAPI' };
   }
 }
 
@@ -108,6 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     const atendenteId = auth.userId;
+    const instanceToken = getUazapiToken(CONFIRMACAO_CATEGORIA);
 
     const detalhes: Array<{
       chave: number;
@@ -161,34 +153,34 @@ export async function POST(request: NextRequest) {
       const procedimento = (agenda.des_procedimento as string) || '';
       const primeiroNome = pacienteNome.split(' ')[0];
 
-      // Texto local para exibicao no painel (espelho do template Meta)
+      // Texto local para exibicao no painel
       const textoLocal = `Clínica Schappo - Confirmação de Agendamento\n\nOlá, ${primeiroNome}!\n\n• Data: ${dataFormatada}\n• Horário: ${hora}\n• Médico(a): ${nomeMedico}\n• Procedimento: ${procedimento}\n\nPor favor, selecione uma opção abaixo:\n[Confirmar] [Desmarcar] [Reagendar]`;
 
-      // Enviar template via 360Dialog (numero geral: 556133455701)
+      // Enviar via UAZAPI com botoes interativos (numero da Recepcao)
       try {
-        const sendResult = await sendTemplate360(telefoneWhatsapp, {
+        const sendResult = await sendConfirmacaoUAZAPI(telefoneWhatsapp, {
           nome_paciente: primeiroNome,
           data: dataFormatada,
           hora,
           nome_medico: nomeMedico,
           procedimento,
-        });
+        }, instanceToken);
 
         if (!sendResult.success) {
-          console.error(`[disparo] Falha 360Dialog chave=${chave}:`, sendResult.error);
+          console.error(`[disparo] Falha UAZAPI chave=${chave}:`, sendResult.error);
           detalhes.push({ chave, paciente: pacienteNome, telefone: telefoneWhatsapp, status: 'falha', erro: sendResult.error });
           falhas++;
           continue;
         }
 
         const waMessageId = sendResult.messageId || `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        console.log(`[disparo] 360Dialog OK chave=${chave} to=${telefoneWhatsapp} msgId=${waMessageId}`);
+        console.log(`[disparo] UAZAPI OK chave=${chave} to=${telefoneWhatsapp} msgId=${waMessageId}`);
 
         // Registrar no banco local
         await pool.query(
           `INSERT INTO atd.confirmacao_agendamento
            (chave_agenda, cod_paciente, id_medico, dat_agenda, telefone_envio, wa_message_id, status, enviado_por, provider)
-           VALUES ($1, $2, $3, $4, $5, $6, 'enviado', $7, '360dialog')
+           VALUES ($1, $2, $3, $4, $5, $6, 'enviado', $7, 'uazapi')
            ON CONFLICT (chave_agenda) DO UPDATE SET
              telefone_envio = EXCLUDED.telefone_envio,
              wa_message_id = EXCLUDED.wa_message_id,
@@ -196,24 +188,23 @@ export async function POST(request: NextRequest) {
              enviado_por = EXCLUDED.enviado_por,
              enviado_at = NOW(),
              respondido_at = NULL,
-             provider = '360dialog'`,
+             provider = 'uazapi'`,
           [chave, agenda.cod_paciente, medico_id, data, telefoneWhatsapp, waMessageId, atendenteId]
         );
 
-        // Registrar mensagem no painel de conversas (canal geral / 360dialog)
+        // Registrar mensagem no painel de conversas (canal recepcao / uazapi)
         try {
           const waChatId = telefoneWhatsapp + '@s.whatsapp.net';
           const conversaRes = await pool.query(
             `SELECT atd.upsert_conversa($1, $2, $3, $4, $5, NULL, $6, NULL) AS id`,
-            [waChatId, 'individual', 'geral', '360dialog', pacienteNome, telefoneWhatsapp],
+            [waChatId, 'individual', CONFIRMACAO_CATEGORIA, 'uazapi', pacienteNome, telefoneWhatsapp],
           );
           const conversaId = conversaRes.rows[0].id;
 
           const meta = JSON.stringify({
             source: 'confirmacao_agendamento',
             chave_agenda: chave,
-            template_name: TEMPLATE_NAME,
-            provider: '360dialog',
+            provider: 'uazapi',
           });
           const msgRes = await pool.query(
             `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) AS id`,
