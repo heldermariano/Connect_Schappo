@@ -103,6 +103,18 @@
 | `chat.imagePreview` | `conversas.avatar_url` | URL direta (nao base64) |
 | `owner` | `conversas.categoria` | Via OWNER_CATEGORY_MAP |
 
+### Webhook ButtonsResponseMessage (resposta de botao interativo)
+
+Quando se envia botoes via `/send/menu` (tipo `button` com `choices`), a resposta do usuario chega como `ButtonsResponseMessage`. O parser trata 3 tipos de resposta de botao:
+
+| messageType raw | Origem | Tratamento |
+|----------------|--------|------------|
+| `TemplateButtonReplyMessage` | Resposta de template com botoes | → tipo `text` |
+| `NativeFlowResponseMessage` | Resposta de flow nativo | → tipo `text` |
+| `ButtonsResponseMessage` | Resposta de `/send/menu` (botoes interativos) | → tipo `text` |
+
+**Extracao de texto do botao**: `selectedDisplayText` > `selectedButtonId` > `message.text` > `message.content.selectedDisplayText` > `message.content.selectedId`
+
 ### Webhook messages_update (status)
 
 Payload diferente: `{ EventType: 'messages_update', event: { Type: 'Delivered'|'Read', MessageIDs: ['id1',...], Chat: '...' } }`. `event.Type` case-inconsistente — usar `.toLowerCase()`. `MessageIDs` eh ARRAY.
@@ -186,6 +198,9 @@ Insert mensagem + update conversa (ultima_msg, nao_lida, is_archived=FALSE).
 6. **Cross-provider forward** — Baixa midia do provider original e re-envia ao destino
 7. **Validar file.size > 0** antes de enviar midia
 8. **AudioRecorder.tsx** — Guard `mountedRef` contra dupla inicializacao React Strict Mode
+9. **ButtonsResponseMessage** — Tipo de resposta de `/send/menu`. Tratar como texto, extrair `selectedDisplayText` ou `selectedButtonId`
+10. **Auto-resposta confirmacao** — `enviarAutoResposta()` envia via UAZAPI E registra no banco + SSE (webhook nao captura msg enviada por API)
+11. **Janela 24h 360Dialog** — Mensagens fora da janela retornam `wamid` mas status vira `failed`. Usar template para reabrir
 
 ## SSE Events Relacionados
 

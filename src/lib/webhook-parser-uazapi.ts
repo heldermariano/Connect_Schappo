@@ -54,18 +54,28 @@ function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
     if (message.text && typeof message.text === 'string' && message.text.length > 0) {
       return message.text;
     }
-    // ButtonsResponseMessage: selectedButtonId e selectedDisplayText no nivel da mensagem
+    // ButtonsResponseMessage: buttonOrListid no nivel raiz da mensagem
+    if (raw.buttonOrListid && typeof raw.buttonOrListid === 'string') {
+      return raw.buttonOrListid;
+    }
+    // selectedDisplayText/selectedButtonId no nivel da mensagem (case-insensitive keys)
     if (raw.selectedDisplayText && typeof raw.selectedDisplayText === 'string') {
       return raw.selectedDisplayText;
     }
     if (raw.selectedButtonId && typeof raw.selectedButtonId === 'string') {
       return raw.selectedButtonId;
     }
+    if (raw.selectedButtonID && typeof raw.selectedButtonID === 'string') {
+      return String(raw.selectedButtonID);
+    }
     // message.content como string
     if (typeof message.content === 'string' && message.content.length > 0) {
       if (message.content.startsWith('{')) {
         try {
           const parsed = JSON.parse(message.content);
+          // Payload real: content.Response.SelectedDisplayText
+          if (parsed.Response?.SelectedDisplayText) return parsed.Response.SelectedDisplayText;
+          if (parsed.selectedButtonID) return parsed.selectedButtonID;
           if (parsed.selectedDisplayText) return parsed.selectedDisplayText;
           if (parsed.selectedButtonId) return parsed.selectedButtonId;
           if (parsed.selectedId) return parsed.selectedId;
@@ -77,6 +87,12 @@ function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
     // message.content como objeto
     if (message.content && typeof message.content === 'object') {
       const c = message.content as Record<string, unknown>;
+      // Payload real: content.Response.SelectedDisplayText (nested)
+      if (c.Response && typeof c.Response === 'object') {
+        const resp = c.Response as Record<string, unknown>;
+        if (resp.SelectedDisplayText) return String(resp.SelectedDisplayText);
+      }
+      if (c.selectedButtonID) return String(c.selectedButtonID);
       if (c.selectedDisplayText) return String(c.selectedDisplayText);
       if (c.selectedButtonId) return String(c.selectedButtonId);
       if (c.selectedId) return String(c.selectedId);

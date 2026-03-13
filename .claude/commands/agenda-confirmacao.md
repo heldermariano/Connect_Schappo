@@ -34,11 +34,14 @@
 5. Disparo em lote (POST /api/agenda/disparo)
    ├── Para cada paciente:
    │   ├── 360Dialog: POST /api/mensagens/send-template (template Meta)
-   │   └── UAZAPI: POST /api/mensagens/send (texto formatado)
+   │   └── UAZAPI: POST /send/menu (botoes interativos: Confirmar/Desmarcar/Reagendar)
    ├── Registrar em atd.confirmacao_agendamento
    └── Broadcast SSE (confirmacao_atualizada)
 6. Paciente responde → webhook detecta resposta
-   └── startsWith('1') = confirmado, startsWith('2') = desmarcou
+   ├── Botao UAZAPI: ButtonsResponseMessage → parser extrai selectedDisplayText
+   ├── Botao 360Dialog: button_reply_id via context_message_id
+   ├── Texto livre: 'confirmar'/'1...' = confirmado, 'desmarcar'/'cancelar' = desmarcou, 'reagendar'/'2...' = reagendar
+   └── Apos detectar: atualiza DB + Konsyst ERP + envia auto-resposta + broadcast SSE
 ```
 
 ---
@@ -97,11 +100,14 @@
 
 ## Regras
 
-1. **Deteccao de resposta flexivel** — `startsWith('1')` e `startsWith('2')` (nao match exato)
+1. **Deteccao de resposta flexivel** — `startsWith('1')` e `startsWith('2')` (nao match exato), 'confirmar', 'confirmo', 'desmarcar', 'cancelar', 'reagendar', 'remarcar'
 2. **queryLatin1()** — Obrigatorio para queries ao banco schappo ERP
-3. **Disparo UAZAPI** — Apos enviar, registrar em `atd.conversas`/`atd.mensagens` + broadcast SSE
-4. **Template Meta 5 params** — nome, data, hora, medico, procedimento
+3. **Disparo UAZAPI** — Usa `/send/menu` com botoes interativos (Confirmar/Desmarcar/Reagendar). Registrar em `atd.conversas`/`atd.mensagens` + broadcast SSE
+4. **Template Meta 5 params** — nome, data, hora, medico, procedimento (apenas 360Dialog)
 5. **Templates por operador** — `atendente_id NULL` = sistema, senao pertence ao operador
+6. **Auto-resposta** — `enviarAutoResposta()` nos webhooks envia msg via UAZAPI E registra no banco + SSE (necessario porque `wasSentByApi` filtra msgs da API no webhook)
+7. **Atualizacao Konsyst** — `atualizarStatusKonsyst()` atualiza banco ERP externo apos confirmacao
+8. **Comparacao telefone** — Sempre comparar com e sem 9o digito (UAZAPI pode normalizar diferente do 360Dialog)
 
 ## SSE Events Relacionados
 
