@@ -488,11 +488,16 @@ export function normalizePhone(phone: string | null | undefined): string | null 
   }
 
   // Celular BR sem 9o digito: 55 + DD(2) + 8 digitos = 12 → adicionar 9
+  // APENAS se o numero local comecar com digito de celular (6-9)
+  // Fixos (2-5) tem 8 digitos e NAO devem receber o 9
   if (cleaned.startsWith('55') && cleaned.length === 12) {
-    const countryCode = cleaned.substring(0, 2);
-    const ddd = cleaned.substring(2, 4);
-    const number = cleaned.substring(4);
-    cleaned = countryCode + ddd + '9' + number;
+    const firstLocalDigit = cleaned.charAt(4);
+    if (firstLocalDigit >= '6' && firstLocalDigit <= '9') {
+      const countryCode = cleaned.substring(0, 2);
+      const ddd = cleaned.substring(2, 4);
+      const number = cleaned.substring(4);
+      cleaned = countryCode + ddd + '9' + number;
+    }
   }
 
   if (cleaned.length < 10 || cleaned.length > 15) return null;
