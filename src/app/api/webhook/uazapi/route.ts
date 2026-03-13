@@ -12,6 +12,33 @@ import { upsertParticipant } from '@/lib/participant-cache';
 import { atualizarStatusKonsyst } from '@/lib/db-agenda';
 import { sendTextUAZAPI } from '@/lib/whatsapp-provider';
 
+/** Envia auto-resposta e registra na conversa do Connect */
+async function enviarAutoResposta(conversaId: number, telefone: string, texto: string, token: string) {
+  try {
+    const result = await sendTextUAZAPI(telefone, texto, token);
+    if (!result.success) {
+      console.error(`[webhook/uazapi] Erro auto-resposta: ${result.error}`);
+      return;
+    }
+    const waMessageId = result.messageId || `auto_${Date.now()}`;
+    // Registrar na conversa
+    const msgRes = await pool.query(
+      `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) AS id`,
+      [conversaId, waMessageId, true, null, null, 'text', texto, null, null, null, JSON.stringify({ source: 'auto_resposta_confirmacao' }), null],
+    );
+    const msgId = msgRes.rows[0]?.id;
+    if (msgId && msgId > 0) {
+      await pool.query(`UPDATE atd.conversas SET ultima_msg_from_me = TRUE WHERE id = $1`, [conversaId]);
+      const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);
+      if (fullMsg.rows[0]) {
+        sseManager.broadcast({ type: 'nova_mensagem', data: { conversa_id: conversaId, mensagem: fullMsg.rows[0] } });
+      }
+    }
+  } catch (err) {
+    console.error('[webhook/uazapi] Erro ao enviar/registrar auto-resposta:', err);
+  }
+}
+
 export async function POST(request: NextRequest) {
   // Responder rapido — processar async
   try {
@@ -23,22 +50,6 @@ export async function POST(request: NextRequest) {
       console.warn('[webhook/uazapi] Token invalido recebido');
       // Retornar 200 mesmo assim para nao causar retry
       return NextResponse.json({ status: 'ok' });
-    }
-
-    // Debug temporario: logar TODOS os webhooks recebidos
-    console.error(`[webhook/uazapi] RECV: EventType=${payload.EventType} chatid=${payload.chat?.wa_chatid || '?'} msgType=${payload.message?.messageType || '?'}`);
-
-    const chatId = payload.chat?.wa_chatid || '';
-    if (chatId.includes('981573841') || chatId.includes('81573841')) {
-      console.error(`[webhook/uazapi] DEBUG 981573841: raw=`, JSON.stringify(payload).substring(0, 1500));
-    }
-
-    // Debug: logar mensagens de midia de/para 92894339 para rastrear problema
-    if (chatId.includes('92894339') && payload.EventType === 'messages') {
-      const msgType = payload.message?.messageType || payload.message?.type || '?';
-      const fromMe = payload.message?.fromMe;
-      const wasSent = payload.message?.wasSentByApi;
-      console.log(`[webhook/uazapi] DEBUG 92894339: type=${msgType} fromMe=${fromMe} wasSentByApi=${wasSent} owner=${payload.owner} chatid=${chatId}`);
     }
 
     // Processar em background (nao bloquear resposta)
@@ -267,28 +278,15 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
               } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
             });
 
-            // Enviar resposta automatica ao paciente
+            // Enviar resposta automatica ao paciente e registrar na conversa
             const tokenRecepcao = getUazapiToken('recepcao');
-            const numeroPaciente = parsed.telefone;
 
             if (novoStatus === 'confirmado') {
-              sendTextUAZAPI(
-                numeroPaciente,
-                'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo',
-                tokenRecepcao,
-              ).catch(err => console.error('[webhook/uazapi] Erro ao enviar resposta confirmacao:', err));
+              enviarAutoResposta(conversaId, parsed.telefone!, 'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo', tokenRecepcao);
             } else if (novoStatus === 'desmarcou') {
-              sendTextUAZAPI(
-                numeroPaciente,
-                'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo',
-                tokenRecepcao,
-              ).catch(err => console.error('[webhook/uazapi] Erro ao enviar resposta desmarcacao:', err));
+              enviarAutoResposta(conversaId, parsed.telefone!, 'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo', tokenRecepcao);
             } else if (novoStatus === 'reagendar') {
-              sendTextUAZAPI(
-                numeroPaciente,
-                'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo',
-                tokenRecepcao,
-              ).catch(err => console.error('[webhook/uazapi] Erro ao enviar resposta reagendamento:', err));
+              enviarAutoResposta(conversaId, parsed.telefone!, 'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo', tokenRecepcao);
 
               // Notificar recepcao via SSE sobre pedido de reagendamento
               sseManager.broadcast({

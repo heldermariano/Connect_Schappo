@@ -6,6 +6,32 @@ import { parse360DialogPayload } from '@/lib/webhook-parser-360';
 import { atualizarStatusKonsyst } from '@/lib/db-agenda';
 import { sendTextUAZAPI } from '@/lib/whatsapp-provider';
 
+/** Envia auto-resposta e registra na conversa do Connect */
+async function enviarAutoResposta(conversaId: number, telefone: string, texto: string, token: string) {
+  try {
+    const result = await sendTextUAZAPI(telefone, texto, token);
+    if (!result.success) {
+      console.error(`[webhook/360dialog] Erro auto-resposta: ${result.error}`);
+      return;
+    }
+    const waMessageId = result.messageId || `auto_${Date.now()}`;
+    const msgRes = await pool.query(
+      `SELECT atd.registrar_mensagem($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) AS id`,
+      [conversaId, waMessageId, true, null, null, 'text', texto, null, null, null, JSON.stringify({ source: 'auto_resposta_confirmacao' })],
+    );
+    const msgId = msgRes.rows[0]?.id;
+    if (msgId && msgId > 0) {
+      await pool.query(`UPDATE atd.conversas SET ultima_msg_from_me = TRUE WHERE id = $1`, [conversaId]);
+      const fullMsg = await pool.query(`SELECT * FROM atd.mensagens WHERE id = $1`, [msgId]);
+      if (fullMsg.rows[0]) {
+        sseManager.broadcast({ type: 'nova_mensagem', data: { conversa_id: conversaId, mensagem: fullMsg.rows[0] } });
+      }
+    }
+  } catch (err) {
+    console.error('[webhook/360dialog] Erro ao enviar/registrar auto-resposta:', err);
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const payload: WebhookPayload360Dialog = await request.json();
@@ -120,19 +146,15 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
             );
           }
 
-          // Enviar resposta automatica ao paciente via UAZAPI (recepcao)
+          // Enviar resposta automatica ao paciente e registrar na conversa
           if (btnResult.rowCount && btnResult.rowCount > 0 && parsed.telefone) {
             const tokenRecepcao = getUazapiToken('recepcao');
             if (novoStatus === 'confirmado') {
-              sendTextUAZAPI(parsed.telefone, 'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo', tokenRecepcao)
-                .catch(err => console.error('[webhook/360dialog] Erro resposta confirmacao:', err));
+              enviarAutoResposta(conversaId, parsed.telefone, 'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo', tokenRecepcao);
             } else if (novoStatus === 'desmarcou') {
-              sendTextUAZAPI(parsed.telefone, 'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo', tokenRecepcao)
-                .catch(err => console.error('[webhook/360dialog] Erro resposta desmarcacao:', err));
+              enviarAutoResposta(conversaId, parsed.telefone, 'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo', tokenRecepcao);
             } else if (novoStatus === 'reagendar') {
-              sendTextUAZAPI(parsed.telefone, 'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo', tokenRecepcao)
-                .catch(err => console.error('[webhook/360dialog] Erro resposta reagendamento:', err));
-              // Notificar recepcao
+              enviarAutoResposta(conversaId, parsed.telefone, 'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo', tokenRecepcao);
               sseManager.broadcast({
                 type: 'nova_notificacao' as 'conversa_atualizada',
                 data: {
@@ -195,17 +217,14 @@ async function process360Webhook(payload: WebhookPayload360Dialog) {
                 } as unknown as { conversa_id: number; ultima_msg: string; nao_lida: number },
               });
 
-              // Enviar resposta automatica ao paciente via UAZAPI (recepcao)
+              // Enviar resposta automatica e registrar na conversa
               const tokenRecepcao = getUazapiToken('recepcao');
               if (novoStatus === 'confirmado') {
-                sendTextUAZAPI(parsed.telefone!, 'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo', tokenRecepcao)
-                  .catch(err => console.error('[webhook/360dialog] Erro resposta confirmacao:', err));
+                enviarAutoResposta(conversaId, parsed.telefone!, 'Agradecemos a sua confirmação! Até breve. 😊\n\nClínica Schappo', tokenRecepcao);
               } else if (novoStatus === 'desmarcou') {
-                sendTextUAZAPI(parsed.telefone!, 'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo', tokenRecepcao)
-                  .catch(err => console.error('[webhook/360dialog] Erro resposta desmarcacao:', err));
+                enviarAutoResposta(conversaId, parsed.telefone!, 'Agendamento desmarcado. Estamos à disposição caso precise remarcar.\n\nClínica Schappo', tokenRecepcao);
               } else if (novoStatus === 'reagendar') {
-                sendTextUAZAPI(parsed.telefone!, 'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo', tokenRecepcao)
-                  .catch(err => console.error('[webhook/360dialog] Erro resposta reagendamento:', err));
+                enviarAutoResposta(conversaId, parsed.telefone!, 'Recebemos sua solicitação de reagendamento. Nossa recepção entrará em contato em breve para agendar uma nova data.\n\nClínica Schappo', tokenRecepcao);
                 sseManager.broadcast({
                   type: 'nova_notificacao' as 'conversa_atualizada',
                   data: {
