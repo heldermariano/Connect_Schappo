@@ -17,6 +17,7 @@ export interface Atendente {
   sip_username: string | null;
   sip_transport: 'wss' | 'ws';
   sip_enabled: boolean;
+  status_presenca?: 'online' | 'offline' | 'pausado' | null;
   created_at: string;
   updated_at: string;
 }

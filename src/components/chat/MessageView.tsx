@@ -354,7 +354,7 @@ export default function MessageView({
   return (
     <div className="flex-1 flex flex-col w-full min-w-0 min-h-0 overflow-hidden bg-gray-50 dark:bg-black relative">
       {/* Header da conversa */}
-      <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0 min-w-0 overflow-hidden">
+      <div className="h-14 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 flex items-center px-3 md:px-4 gap-2 md:gap-3 shrink-0 min-w-0 overflow-visible relative z-10">
         {/* Botao voltar (mobile) */}
         {onBack && (
           <button onClick={onBack} className="p-1 -ml-1 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">

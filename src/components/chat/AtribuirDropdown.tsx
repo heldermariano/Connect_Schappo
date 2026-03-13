@@ -19,6 +19,7 @@ export default function AtribuirDropdown({
   const [open, setOpen] = useState(false);
   const [atendentes, setAtendentes] = useState<Atendente[]>([]);
   const [loading, setLoading] = useState(false);
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fechar ao clicar fora
@@ -77,7 +78,23 @@ export default function AtribuirDropdown({
     [conversaId, onAtribuir],
   );
 
-  const displayName = atendenteNome || (atendenteId ? `Atendente #${atendenteId}` : null);
+  // Resolver nome do atendente se nao veio como prop
+  useEffect(() => {
+    if (atendenteId && !atendenteNome && !resolvedName) {
+      fetch('/api/atendentes/status')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.atendentes) {
+            setAtendentes(data.atendentes);
+            const found = data.atendentes.find((a: Atendente) => a.id === atendenteId);
+            if (found) setResolvedName(found.nome);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [atendenteId, atendenteNome, resolvedName]);
+
+  const displayName = atendenteNome || resolvedName || (atendenteId ? `Atendente #${atendenteId}` : null);
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -119,11 +136,12 @@ export default function AtribuirDropdown({
                   <button
                     key={a.id}
                     onClick={() => handleSelect(a.id)}
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5
                       ${a.id === atendenteId ? 'text-schappo-600 font-medium bg-schappo-50' : 'text-gray-700 dark:text-gray-300'}`}
                   >
-                    {a.nome}
-                    {a.ramal && <span className="text-gray-400 ml-1">({a.ramal})</span>}
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${a.status_presenca === 'online' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                    <span className="truncate">{a.nome}</span>
+                    {a.ramal && <span className="text-gray-400 ml-auto shrink-0">({a.ramal})</span>}
                   </button>
                 ))}
               {atendentes.filter((a) => a.ativo).length === 0 && !loading && (
