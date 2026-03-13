@@ -41,17 +41,25 @@ export interface ParsedUAZAPICall {
  */
 function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
   const rawType = (message.messageType || message.type || '').toLowerCase();
-  const isButtonReply = rawType.includes('templatebuttonreply') || rawType.includes('nativeflowresponse');
+  const isButtonReply = rawType.includes('templatebuttonreply') || rawType.includes('nativeflowresponse') || rawType.includes('buttonsresponse');
 
   // Para respostas de botao: logar payload completo para debug e extrair texto
   if (isButtonReply) {
     // UAZAPI envia o texto do botao clicado em message.text ou message.content
     // Tentar todas as fontes possiveis
     const raw = message as unknown as Record<string, unknown>;
+    console.error(`[webhook-parser] ButtonReply type=${rawType} keys=${Object.keys(raw).join(',')} text=${message.text} content=${JSON.stringify(message.content).substring(0, 300)}`);
 
     // message.text (string) — fonte mais confiavel
     if (message.text && typeof message.text === 'string' && message.text.length > 0) {
       return message.text;
+    }
+    // ButtonsResponseMessage: selectedButtonId e selectedDisplayText no nivel da mensagem
+    if (raw.selectedDisplayText && typeof raw.selectedDisplayText === 'string') {
+      return raw.selectedDisplayText;
+    }
+    if (raw.selectedButtonId && typeof raw.selectedButtonId === 'string') {
+      return raw.selectedButtonId;
     }
     // message.content como string
     if (typeof message.content === 'string' && message.content.length > 0) {
@@ -59,6 +67,7 @@ function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
         try {
           const parsed = JSON.parse(message.content);
           if (parsed.selectedDisplayText) return parsed.selectedDisplayText;
+          if (parsed.selectedButtonId) return parsed.selectedButtonId;
           if (parsed.selectedId) return parsed.selectedId;
           if (parsed.text) return parsed.text;
         } catch { /* nao eh JSON */ }
@@ -69,6 +78,7 @@ function extractMessageText(message: WebhookPayloadUAZAPI['message']): string {
     if (message.content && typeof message.content === 'object') {
       const c = message.content as Record<string, unknown>;
       if (c.selectedDisplayText) return String(c.selectedDisplayText);
+      if (c.selectedButtonId) return String(c.selectedButtonId);
       if (c.selectedId) return String(c.selectedId);
       if (c.text) return String(c.text);
     }
@@ -244,8 +254,8 @@ function normalizeMessageType(message: WebhookPayloadUAZAPI['message']): string 
   if (lower === 'conversation' || lower === 'extendedtextmessage') {
     return 'text';
   }
-  // Respostas de botao interativo (NativeFlow, TemplateButton) → tratar como texto
-  if (lower === 'templatebuttonreplymessage' || lower === 'nativeflowresponsemessage') {
+  // Respostas de botao interativo (NativeFlow, TemplateButton, ButtonsResponse) → tratar como texto
+  if (lower === 'templatebuttonreplymessage' || lower === 'nativeflowresponsemessage' || lower === 'buttonsresponsemessage' || lower === 'buttonsresponse') {
     return 'text';
   }
   // Tipos de midia — extrair nome base

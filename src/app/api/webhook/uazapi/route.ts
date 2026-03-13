@@ -261,7 +261,7 @@ async function processUAZAPIWebhook(payload: WebhookPayloadUAZAPI) {
           );
 
           if (confirmResult.rowCount && confirmResult.rowCount > 0) {
-            console.log(`[webhook/uazapi] Confirmacao auto-atualizada: telefone=${parsed.telefone} status=${novoStatus} chaves=${confirmResult.rows.map(r => r.chave_agenda).join(',')}`);
+            console.warn(`[webhook/uazapi] Confirmacao auto-atualizada: telefone=${parsed.telefone} status=${novoStatus} chaves=${confirmResult.rows.map(r => r.chave_agenda).join(',')}`);
 
             // Atualizar status no Konsyst (banco ERP externo)
             for (const row of confirmResult.rows) {
